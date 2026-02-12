@@ -452,7 +452,8 @@ function render() {
 function formatAge(isoStr) {
   if (!isoStr) return '';
   try {
-    const d = new Date(isoStr);
+    // POTA API returns UTC times without a Z suffix — append it
+    const d = new Date(isoStr.endsWith('Z') ? isoStr : isoStr + 'Z');
     const secs = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
     if (secs < 60) return secs + 's';
     const mins = Math.floor(secs / 60);
