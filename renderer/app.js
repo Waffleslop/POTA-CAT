@@ -8,6 +8,7 @@ let currentView = 'table'; // 'table' or 'map'
 
 // User preferences (loaded from settings)
 let distUnit = 'mi';    // 'mi' or 'km'
+let watchlist = new Set(); // uppercase callsigns
 
 const MI_TO_KM = 1.60934;
 
@@ -26,6 +27,7 @@ const settingsSave = document.getElementById('settings-save');
 const settingsCancel = document.getElementById('settings-cancel');
 const setGrid = document.getElementById('set-grid');
 const setDistUnit = document.getElementById('set-dist-unit');
+const setWatchlist = document.getElementById('set-watchlist');
 const spotsTable = document.getElementById('spots-table');
 const mapDiv = document.getElementById('map');
 const viewTableBtn = document.getElementById('view-table-btn');
@@ -42,9 +44,15 @@ updateUtcClock();
 setInterval(updateUtcClock, 1000);
 
 // --- Load preferences from settings ---
+function parseWatchlist(str) {
+  if (!str) return new Set();
+  return new Set(str.split(',').map((c) => c.trim().toUpperCase()).filter(Boolean));
+}
+
 async function loadPrefs() {
   const settings = await window.api.getSettings();
   distUnit = settings.distUnit || 'mi';
+  watchlist = parseWatchlist(settings.watchlist);
   updateHeaders();
 }
 
@@ -301,9 +309,10 @@ function updateMapMarkers(filtered) {
     if (s.lat == null || s.lon == null) continue;
 
     const distStr = s.distance != null ? formatDistance(s.distance) + ' ' + unit : '';
+    const watched = watchlist.has(s.callsign.toUpperCase());
 
     const popupContent = `
-      <b><a href="#" class="popup-qrz" data-call="${s.callsign}">${s.callsign}</a></b><br>
+      <b>${watched ? '\u2B50 ' : ''}<a href="#" class="popup-qrz" data-call="${s.callsign}">${s.callsign}</a></b><br>
       ${parseFloat(s.frequency).toFixed(1)} kHz &middot; ${s.mode}<br>
       <b>${s.reference}</b> ${s.parkName}<br>
       ${distStr}<br>
@@ -383,7 +392,14 @@ function render() {
       });
 
       // Callsign cell — clickable link to QRZ
+      const isWatched = watchlist.has(s.callsign.toUpperCase());
       const callTd = document.createElement('td');
+      if (isWatched) {
+        const star = document.createElement('span');
+        star.textContent = '\u2B50 ';
+        star.className = 'watchlist-star';
+        callTd.appendChild(star);
+      }
       const callLink = document.createElement('a');
       callLink.textContent = s.callsign;
       callLink.href = '#';
@@ -473,17 +489,21 @@ settingsBtn.addEventListener('click', async () => {
   const s = await window.api.getSettings();
   setGrid.value = s.grid || '';
   setDistUnit.value = s.distUnit || 'mi';
+  setWatchlist.value = s.watchlist || '';
   settingsDialog.showModal();
 });
 
 settingsCancel.addEventListener('click', () => settingsDialog.close());
 
 settingsSave.addEventListener('click', async () => {
+  const watchlistRaw = setWatchlist.value.trim();
   await window.api.saveSettings({
     grid: setGrid.value.trim() || 'FN20jb',
     distUnit: setDistUnit.value,
+    watchlist: watchlistRaw,
   });
   distUnit = setDistUnit.value;
+  watchlist = parseWatchlist(watchlistRaw);
   updateHeaders();
   settingsDialog.close();
   render();
