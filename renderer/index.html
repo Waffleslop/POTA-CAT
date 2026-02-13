@@ -18,32 +18,34 @@
   </div>
   <header>
     <div class="filters">
-      <label>Band:
-        <select id="band-filter">
-          <option value="all">All</option>
-          <option value="160m">160m</option>
-          <option value="80m">80m</option>
-          <option value="60m">60m</option>
-          <option value="40m">40m</option>
-          <option value="30m">30m</option>
-          <option value="20m" selected>20m</option>
-          <option value="17m">17m</option>
-          <option value="15m">15m</option>
-          <option value="12m">12m</option>
-          <option value="10m">10m</option>
-          <option value="6m">6m</option>
-        </select>
-      </label>
-      <label>Mode:
-        <select id="mode-filter">
-          <option value="all">All</option>
-          <option value="CW" selected>CW</option>
-          <option value="SSB">SSB</option>
-          <option value="FT8">FT8</option>
-          <option value="FT4">FT4</option>
-          <option value="FM">FM</option>
-        </select>
-      </label>
+      <div class="multi-dropdown" id="band-filter">
+        <button class="multi-dropdown-btn" type="button">Band: <span class="multi-dropdown-text">20m</span></button>
+        <div class="multi-dropdown-menu">
+          <label class="multi-dropdown-item"><input type="checkbox" value="all"> All</label>
+          <label class="multi-dropdown-item"><input type="checkbox" value="160m"> 160m</label>
+          <label class="multi-dropdown-item"><input type="checkbox" value="80m"> 80m</label>
+          <label class="multi-dropdown-item"><input type="checkbox" value="60m"> 60m</label>
+          <label class="multi-dropdown-item"><input type="checkbox" value="40m"> 40m</label>
+          <label class="multi-dropdown-item"><input type="checkbox" value="30m"> 30m</label>
+          <label class="multi-dropdown-item"><input type="checkbox" value="20m" checked> 20m</label>
+          <label class="multi-dropdown-item"><input type="checkbox" value="17m"> 17m</label>
+          <label class="multi-dropdown-item"><input type="checkbox" value="15m"> 15m</label>
+          <label class="multi-dropdown-item"><input type="checkbox" value="12m"> 12m</label>
+          <label class="multi-dropdown-item"><input type="checkbox" value="10m"> 10m</label>
+          <label class="multi-dropdown-item"><input type="checkbox" value="6m"> 6m</label>
+        </div>
+      </div>
+      <div class="multi-dropdown" id="mode-filter">
+        <button class="multi-dropdown-btn" type="button">Mode: <span class="multi-dropdown-text">CW</span></button>
+        <div class="multi-dropdown-menu">
+          <label class="multi-dropdown-item"><input type="checkbox" value="all"> All</label>
+          <label class="multi-dropdown-item"><input type="checkbox" value="CW" checked> CW</label>
+          <label class="multi-dropdown-item"><input type="checkbox" value="SSB"> SSB</label>
+          <label class="multi-dropdown-item"><input type="checkbox" value="FT8"> FT8</label>
+          <label class="multi-dropdown-item"><input type="checkbox" value="FT4"> FT4</label>
+          <label class="multi-dropdown-item"><input type="checkbox" value="FM"> FM</label>
+        </div>
+      </div>
       <button id="refresh-btn" title="Refresh spots now">Refresh</button>
       <button id="scan-btn" title="Scan through spots">Scan</button>
       <button id="settings-btn" title="Settings">Settings</button>
@@ -91,6 +93,9 @@
         <option value="km">Kilometers</option>
       </select>
     </label>
+    <label>Max Spot Age (minutes):
+      <input type="number" id="set-max-age" min="1" max="120" value="5">
+    </label>
     <label>Scan Dwell Time (seconds):
       <input type="number" id="set-scan-dwell" min="2" max="30" value="7">
     </label>
@@ -102,10 +107,9 @@
       <label class="checkbox-label"><input type="checkbox" id="set-enable-pota" checked> Enable POTA</label>
       <label class="checkbox-label"><input type="checkbox" id="set-enable-sota"> Enable SOTA</label>
     </fieldset>
-    <fieldset class="source-toggles">
-      <legend>CAT Connection</legend>
-      <div id="cat-options"></div>
-    </fieldset>
+    <label>CAT Connection:
+      <select id="cat-options"></select>
+    </label>
     <div class="dialog-buttons">
       <button id="settings-save">Save</button>
       <button id="settings-cancel">Cancel</button>

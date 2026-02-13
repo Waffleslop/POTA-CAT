@@ -9,6 +9,7 @@ let currentView = 'table'; // 'table' or 'map'
 // User preferences (loaded from settings)
 let distUnit = 'mi';    // 'mi' or 'km'
 let watchlist = new Set(); // uppercase callsigns
+let maxAgeMin = 5;       // max spot age in minutes
 let scanDwell = 7;       // seconds per frequency during scan
 let enablePota = true;
 let enableSota = false;
@@ -24,8 +25,8 @@ let scanSkipped = new Set(); // frequencies to skip (as strings)
 
 const MI_TO_KM = 1.60934;
 
-const bandFilter = document.getElementById('band-filter');
-const modeFilter = document.getElementById('mode-filter');
+const bandFilterEl = document.getElementById('band-filter');
+const modeFilterEl = document.getElementById('mode-filter');
 const catOptions = document.getElementById('cat-options');
 const tbody = document.getElementById('spots-body');
 const noSpots = document.getElementById('no-spots');
@@ -39,6 +40,7 @@ const settingsSave = document.getElementById('settings-save');
 const settingsCancel = document.getElementById('settings-cancel');
 const setGrid = document.getElementById('set-grid');
 const setDistUnit = document.getElementById('set-dist-unit');
+const setMaxAge = document.getElementById('set-max-age');
 const setScanDwell = document.getElementById('set-scan-dwell');
 const setWatchlist = document.getElementById('set-watchlist');
 const setEnablePota = document.getElementById('set-enable-pota');
@@ -68,6 +70,7 @@ function parseWatchlist(str) {
 async function loadPrefs() {
   const settings = await window.api.getSettings();
   distUnit = settings.distUnit || 'mi';
+  maxAgeMin = parseInt(settings.maxAgeMin, 10) || 5;
   scanDwell = parseInt(settings.scanDwell, 10) || 7;
   watchlist = parseWatchlist(settings.watchlist);
   enablePota = settings.enablePota !== false; // default true
@@ -87,70 +90,144 @@ const TCP_PORTS = [
   { label: 'Slice D', detail: 'TCP 127.0.0.1:5005', type: 'tcp', host: '127.0.0.1', port: 5005 },
 ];
 
-let selectedCatValue = ''; // tracks selection within the open dialog
-
 async function populateCatOptions(currentTarget) {
   const ports = await window.api.listPorts();
   const currentStr = currentTarget ? JSON.stringify(currentTarget) : '';
-  selectedCatValue = currentStr;
 
   catOptions.innerHTML = '';
 
-  // "None" option
-  catOptions.appendChild(buildCatOption('None', 'Disconnect CAT', '', currentStr));
+  // None
+  const noneOpt = document.createElement('option');
+  noneOpt.value = '';
+  noneOpt.textContent = 'None';
+  if (!currentStr) noneOpt.selected = true;
+  catOptions.appendChild(noneOpt);
 
-  // TCP section
-  const tcpLabel = document.createElement('div');
-  tcpLabel.className = 'cat-section-label';
-  tcpLabel.textContent = 'SmartSDR TCP';
-  catOptions.appendChild(tcpLabel);
-
+  // TCP group
+  const tcpGroup = document.createElement('optgroup');
+  tcpGroup.label = 'SmartSDR TCP';
   for (const tcp of TCP_PORTS) {
     const val = JSON.stringify({ type: tcp.type, host: tcp.host, port: tcp.port });
-    catOptions.appendChild(buildCatOption(tcp.label, tcp.detail, val, currentStr));
+    const opt = document.createElement('option');
+    opt.value = val;
+    opt.textContent = `${tcp.label} (${tcp.detail})`;
+    if (val === currentStr) opt.selected = true;
+    tcpGroup.appendChild(opt);
   }
+  catOptions.appendChild(tcpGroup);
 
-  // Serial section (only if ports detected)
+  // Serial group (only if ports detected)
   if (ports.length > 0) {
-    const serialLabel = document.createElement('div');
-    serialLabel.className = 'cat-section-label';
-    serialLabel.textContent = 'Serial Ports';
-    catOptions.appendChild(serialLabel);
-
+    const serialGroup = document.createElement('optgroup');
+    serialGroup.label = 'Serial Ports';
     for (const p of ports) {
       const val = JSON.stringify({ type: 'serial', path: p.path });
-      catOptions.appendChild(buildCatOption(p.path, p.friendlyName, val, currentStr));
+      const opt = document.createElement('option');
+      opt.value = val;
+      opt.textContent = `${p.path} — ${p.friendlyName}`;
+      if (val === currentStr) opt.selected = true;
+      serialGroup.appendChild(opt);
     }
+    catOptions.appendChild(serialGroup);
   }
 }
 
-function buildCatOption(label, detail, value, currentStr) {
-  const div = document.createElement('div');
-  div.className = 'cat-option' + (value === currentStr ? ' selected' : '');
-  div.innerHTML = `<div class="cat-option-label">${label}</div><div class="cat-option-detail">${detail}</div>`;
-  div.addEventListener('click', () => {
-    selectedCatValue = value;
-    catOptions.querySelectorAll('.cat-option').forEach((el) => el.classList.remove('selected'));
-    div.classList.add('selected');
+// --- Multi-select dropdowns ---
+function initMultiDropdown(container, label) {
+  const btn = container.querySelector('.multi-dropdown-btn');
+  const menu = container.querySelector('.multi-dropdown-menu');
+  const textEl = container.querySelector('.multi-dropdown-text');
+  const allCb = menu.querySelector('input[value="all"]');
+  const itemCbs = [...menu.querySelectorAll('input:not([value="all"])')];
+
+  function updateText() {
+    const checked = itemCbs.filter((cb) => cb.checked);
+    if (allCb.checked || checked.length === 0) {
+      textEl.textContent = 'All';
+    } else if (checked.length <= 3) {
+      textEl.textContent = checked.map((cb) => cb.value).join(', ');
+    } else {
+      textEl.textContent = checked.length + ' selected';
+    }
+  }
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    // Close any other open dropdowns
+    document.querySelectorAll('.multi-dropdown.open').forEach((d) => {
+      if (d !== container) d.classList.remove('open');
+    });
+    container.classList.toggle('open');
   });
-  return div;
+
+  menu.addEventListener('click', (e) => e.stopPropagation());
+
+  menu.addEventListener('change', (e) => {
+    if (scanning) stopScan();
+    const cb = e.target;
+    if (cb.value === 'all') {
+      const nowChecked = cb.checked;
+      itemCbs.forEach((c) => { c.checked = nowChecked; });
+    } else {
+      // Uncheck "All" when toggling individual items
+      allCb.checked = false;
+      // If nothing checked, check "All"
+      if (itemCbs.every((c) => !c.checked)) allCb.checked = true;
+      // If everything checked, switch to "All"
+      if (itemCbs.every((c) => c.checked)) {
+        allCb.checked = true;
+        itemCbs.forEach((c) => { c.checked = false; });
+      }
+    }
+    updateText();
+    render();
+  });
+
+  updateText();
 }
 
+function getDropdownValues(container) {
+  const allCb = container.querySelector('input[value="all"]');
+  if (allCb.checked) return null;
+  const checked = [...container.querySelectorAll('input:not([value="all"]):checked')];
+  if (checked.length === 0) return null;
+  return new Set(checked.map((cb) => cb.value));
+}
+
+initMultiDropdown(bandFilterEl, 'Band');
+initMultiDropdown(modeFilterEl, 'Mode');
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', () => {
+  document.querySelectorAll('.multi-dropdown.open').forEach((d) => d.classList.remove('open'));
+});
+
 // --- Filtering ---
-function modeMatches(spotMode, filter) {
-  if (filter === 'all') return true;
-  if (filter === 'SSB') return spotMode === 'USB' || spotMode === 'LSB' || spotMode === 'SSB';
-  return spotMode === filter;
+function modeMatches(spotMode, selectedModes) {
+  if (!selectedModes) return true;
+  if (selectedModes.has(spotMode)) return true;
+  if (selectedModes.has('SSB') && (spotMode === 'USB' || spotMode === 'LSB')) return true;
+  return false;
+}
+
+function spotAgeSecs(spotTime) {
+  if (!spotTime) return Infinity;
+  try {
+    const d = new Date(spotTime.endsWith('Z') ? spotTime : spotTime + 'Z');
+    return Math.max(0, (Date.now() - d.getTime()) / 1000);
+  } catch { return Infinity; }
 }
 
 function getFiltered() {
-  const band = bandFilter.value;
-  const mode = modeFilter.value;
+  const bands = getDropdownValues(bandFilterEl);
+  const modes = getDropdownValues(modeFilterEl);
+  const maxAgeSecs = maxAgeMin * 60;
   return allSpots.filter((s) => {
     if (s.source === 'pota' && !enablePota) return false;
     if (s.source === 'sota' && !enableSota) return false;
-    if (band !== 'all' && s.band !== band) return false;
-    if (!modeMatches(s.mode, mode)) return false;
+    if (bands && !bands.has(s.band)) return false;
+    if (!modeMatches(s.mode, modes)) return false;
+    if (spotAgeSecs(s.spotTime) > maxAgeSecs) return false;
     return true;
   });
 }
@@ -599,8 +676,7 @@ function formatAge(isoStr) {
 }
 
 // --- Events ---
-bandFilter.addEventListener('change', () => { if (scanning) stopScan(); render(); });
-modeFilter.addEventListener('change', () => { if (scanning) stopScan(); render(); });
+// Band/mode dropdowns already wired via initMultiDropdown()
 refreshBtn.addEventListener('click', () => window.api.refresh());
 
 // Column sorting
@@ -622,6 +698,7 @@ settingsBtn.addEventListener('click', async () => {
   const s = await window.api.getSettings();
   setGrid.value = s.grid || '';
   setDistUnit.value = s.distUnit || 'mi';
+  setMaxAge.value = s.maxAgeMin || 5;
   setScanDwell.value = s.scanDwell || 7;
   setWatchlist.value = s.watchlist || '';
   setEnablePota.checked = s.enablePota !== false;
@@ -634,24 +711,27 @@ settingsCancel.addEventListener('click', () => settingsDialog.close());
 
 settingsSave.addEventListener('click', async () => {
   const watchlistRaw = setWatchlist.value.trim();
+  const maxAgeVal = parseInt(setMaxAge.value, 10) || 5;
   const dwellVal = parseInt(setScanDwell.value, 10) || 7;
   const potaEnabled = setEnablePota.checked;
   const sotaEnabled = setEnableSota.checked;
 
   // Apply CAT selection
-  if (selectedCatValue) {
-    window.api.connectCat(JSON.parse(selectedCatValue));
+  if (catOptions.value) {
+    window.api.connectCat(JSON.parse(catOptions.value));
   }
 
   await window.api.saveSettings({
     grid: setGrid.value.trim() || 'FN20jb',
     distUnit: setDistUnit.value,
+    maxAgeMin: maxAgeVal,
     scanDwell: dwellVal,
     watchlist: watchlistRaw,
     enablePota: potaEnabled,
     enableSota: sotaEnabled,
   });
   distUnit = setDistUnit.value;
+  maxAgeMin = maxAgeVal;
   scanDwell = dwellVal;
   watchlist = parseWatchlist(watchlistRaw);
   enablePota = potaEnabled;
@@ -681,8 +761,10 @@ window.api.onCatStatus(({ connected }) => {
 
 // --- Radio frequency tracking ---
 window.api.onCatFrequency((hz) => {
-  radioFreqKhz = Math.round(hz / 1000);
-  render();
+  const newKhz = Math.round(hz / 1000);
+  if (newKhz === radioFreqKhz) return;
+  radioFreqKhz = newKhz;
+  if (currentView === 'table') render();
 });
 
 // --- Settings footer links ---

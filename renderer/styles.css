@@ -78,6 +78,73 @@ header {
   align-items: center;
 }
 
+/* Multi-select dropdowns */
+.multi-dropdown {
+  position: relative;
+}
+
+.multi-dropdown-btn {
+  background: #0f3460;
+  color: #e0e0e0;
+  border: 1px solid #1a4080;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.multi-dropdown-btn:hover {
+  background: #1a4080;
+}
+
+.multi-dropdown-text {
+  color: #4fc3f7;
+}
+
+.multi-dropdown-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10000;
+  background: #16213e;
+  border: 1px solid #1a4080;
+  border-radius: 4px;
+  padding: 4px 0;
+  margin-top: 2px;
+  min-width: 120px;
+  max-height: 260px;
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+
+.multi-dropdown.open .multi-dropdown-menu {
+  display: block;
+}
+
+.multi-dropdown-item {
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 13px;
+  color: #e0e0e0;
+  cursor: pointer;
+  white-space: nowrap;
+  margin-bottom: 0 !important;
+}
+
+.multi-dropdown-item:hover {
+  background: #1a4080;
+}
+
+.multi-dropdown-item input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  accent-color: #e94560;
+}
+
 .filters label {
   display: flex;
   align-items: center;
