@@ -1,6 +1,6 @@
 {
   "name": "pota-cat",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "POTA activator lookup with FlexRadio CAT control",
   "main": "main.js",
   "scripts": {
@@ -20,6 +20,7 @@
       "lib/**/*",
       "renderer/**/*",
       "assets/icon.png",
+      "assets/cty.dat",
       "node_modules/leaflet/**/*"
     ],
     "win": {
