@@ -4,7 +4,7 @@
 let allSpots = [];
 let sortCol = 'distance';
 let sortAsc = true;
-let currentView = 'table'; // 'table', 'map', or 'dxcc'
+let currentView = 'table'; // 'table', 'map', 'dxcc', or 'rbn'
 
 // User preferences (loaded from settings)
 let distUnit = 'mi';    // 'mi' or 'km'
@@ -15,6 +15,7 @@ let enablePota = true;
 let enableSota = false;
 let enableDxcc = false;
 let enableCluster = false;
+let enableRbn = false;
 let enableSolar = false;
 let enableBandActivity = false;
 let licenseClass = 'none';
@@ -75,11 +76,27 @@ const dxccCountEl = document.getElementById('dxcc-count');
 const dxccPlaceholder = document.getElementById('dxcc-placeholder');
 const dxccModeFilterEl = document.getElementById('dxcc-mode-filter');
 const setEnableCluster = document.getElementById('set-enable-cluster');
+const setEnableRbn = document.getElementById('set-enable-rbn');
 const setMyCallsign = document.getElementById('set-my-callsign');
 const setClusterHost = document.getElementById('set-cluster-host');
 const setClusterPort = document.getElementById('set-cluster-port');
 const clusterConfig = document.getElementById('cluster-config');
+const rbnConfig = document.getElementById('rbn-config');
 const clusterStatusEl = document.getElementById('cluster-status');
+const rbnStatusEl = document.getElementById('rbn-status');
+const viewRbnBtn = document.getElementById('view-rbn-btn');
+const rbnView = document.getElementById('rbn-view');
+const rbnCountEl = document.getElementById('rbn-count');
+const rbnClearBtn = document.getElementById('rbn-clear-btn');
+const rbnLegendEl = document.getElementById('rbn-legend');
+const rbnSplitter = document.getElementById('rbn-splitter');
+const rbnMapContainer = document.getElementById('rbn-map-container');
+const rbnTableContainer = document.getElementById('rbn-table-container');
+const rbnTableBody = document.getElementById('rbn-table-body');
+const rbnDistHeader = document.getElementById('rbn-dist-header');
+const rbnBandFilterEl = document.getElementById('rbn-band-filter');
+const rbnMaxAgeInput = document.getElementById('rbn-max-age');
+const rbnAgeUnitSelect = document.getElementById('rbn-age-unit');
 const setEnableDxcc = document.getElementById('set-enable-dxcc');
 const setAdifPath = document.getElementById('set-adif-path');
 const adifBrowseBtn = document.getElementById('adif-browse-btn');
@@ -115,12 +132,15 @@ async function loadPrefs() {
   enableSota = settings.enableSota === true;  // default false
   enableDxcc = settings.enableDxcc === true;  // default false
   enableCluster = settings.enableCluster === true; // default false
+  enableRbn = settings.enableRbn === true; // default false
   enableSolar = settings.enableSolar === true;   // default false
   enableBandActivity = settings.enableBandActivity === true; // default false
   updateSolarVisibility();
   licenseClass = settings.licenseClass || 'none';
   hideOutOfBand = settings.hideOutOfBand === true;
   updateClusterStatusVisibility();
+  updateRbnStatusVisibility();
+  updateRbnButton();
   updateDxccButton();
   // maxAgeMin: prefer localStorage (last-used filter) over settings.json
   try {
@@ -213,7 +233,7 @@ async function populateHamlibFields(savedTarget) {
 }
 
 // --- Multi-select dropdowns ---
-function initMultiDropdown(container, label) {
+function initMultiDropdown(container, label, onChange) {
   const btn = container.querySelector('.multi-dropdown-btn');
   const menu = container.querySelector('.multi-dropdown-menu');
   const textEl = container.querySelector('.multi-dropdown-text');
@@ -260,7 +280,7 @@ function initMultiDropdown(container, label) {
       }
     }
     updateText();
-    render();
+    if (onChange) { onChange(); } else { render(); }
     if (typeof saveFilters === 'function') saveFilters();
   });
 
@@ -277,6 +297,11 @@ function getDropdownValues(container) {
 
 initMultiDropdown(bandFilterEl, 'Band');
 initMultiDropdown(modeFilterEl, 'Mode');
+initMultiDropdown(rbnBandFilterEl, 'Band', rerenderRbn);
+
+// RBN age filter — re-render on change
+rbnMaxAgeInput.addEventListener('change', rerenderRbn);
+rbnAgeUnitSelect.addEventListener('change', rerenderRbn);
 
 // DXCC mode filter — re-render matrix on change instead of spot table
 function initDxccModeFilter() {
@@ -349,6 +374,24 @@ function updateClusterStatusVisibility() {
     clusterStatusEl.classList.add('hidden');
   }
 }
+
+function updateRbnStatusVisibility() {
+  if (enableRbn) {
+    rbnStatusEl.classList.remove('hidden');
+  } else {
+    rbnStatusEl.classList.add('hidden');
+  }
+}
+
+function updateRbnButton() {
+  if (enableRbn) {
+    viewRbnBtn.classList.remove('hidden');
+  } else {
+    viewRbnBtn.classList.add('hidden');
+    if (currentView === 'rbn') setView('table');
+  }
+}
+
 
 // --- Persist filters to localStorage ---
 const FILTERS_KEY = 'pota-cat-filters';
@@ -423,6 +466,11 @@ radioTypeBtns.forEach((btn) => {
 // Cluster checkbox toggles cluster config visibility
 setEnableCluster.addEventListener('change', () => {
   clusterConfig.classList.toggle('hidden', !setEnableCluster.checked);
+});
+
+// RBN checkbox toggles RBN config visibility
+setEnableRbn.addEventListener('change', () => {
+  rbnConfig.classList.toggle('hidden', !setEnableRbn.checked);
 });
 
 // DXCC checkbox toggles ADIF picker visibility
@@ -596,6 +644,59 @@ let map = null;
 let markerLayer = null;
 let homeMarker = null;
 let nightLayer = null;
+
+// RBN state
+let rbnSpots = [];
+let rbnMap = null;
+let rbnMarkerLayer = null;
+let rbnHomeMarker = null;
+let rbnNightLayer = null;
+let rbnHomePos = null; // { lat, lon } for arc drawing
+
+const RBN_BAND_COLORS = {
+  '160m': '#ff4444',
+  '80m':  '#ff8c00',
+  '60m':  '#ffd700',
+  '40m':  '#4ecca3',
+  '30m':  '#00cccc',
+  '20m':  '#4488ff',
+  '17m':  '#8844ff',
+  '15m':  '#cc44ff',
+  '12m':  '#ff44cc',
+  '10m':  '#ff4488',
+  '6m':   '#e0e0e0',
+};
+
+// Compute intermediate points along a great circle arc (geodesic)
+function greatCircleArc(lat1, lon1, lat2, lon2, numPoints) {
+  const toRad = Math.PI / 180;
+  const toDeg = 180 / Math.PI;
+  const p1 = lat1 * toRad, l1 = lon1 * toRad;
+  const p2 = lat2 * toRad, l2 = lon2 * toRad;
+
+  const d = Math.acos(
+    Math.min(1, Math.max(-1,
+      Math.sin(p1) * Math.sin(p2) + Math.cos(p1) * Math.cos(p2) * Math.cos(l2 - l1)
+    ))
+  );
+
+  if (d < 1e-10) return [[lat1, lon1], [lat2, lon2]];
+
+  const points = [];
+  for (let i = 0; i <= numPoints; i++) {
+    const f = i / numPoints;
+    const a = Math.sin((1 - f) * d) / Math.sin(d);
+    const b = Math.sin(f * d) / Math.sin(d);
+    const x = a * Math.cos(p1) * Math.cos(l1) + b * Math.cos(p2) * Math.cos(l2);
+    const y = a * Math.cos(p1) * Math.sin(l1) + b * Math.cos(p2) * Math.sin(l2);
+    const z = a * Math.sin(p1) + b * Math.sin(p2);
+    points.push([
+      Math.atan2(z, Math.sqrt(x * x + y * y)) * toDeg,
+      Math.atan2(y, x) * toDeg,
+    ]);
+  }
+  return points;
+}
 
 // Default center: FN20jb (eastern PA) ≈ 40.35°N, 75.58°W
 const DEFAULT_CENTER = [40.35, -75.58];
@@ -904,11 +1005,13 @@ function setView(view) {
   noSpots.classList.add('hidden');
   mapContainer.classList.add('hidden');
   dxccView.classList.add('hidden');
+  rbnView.classList.add('hidden');
 
   // Deactivate all view buttons
   viewTableBtn.classList.remove('active');
   viewMapBtn.classList.remove('active');
   viewDxccBtn.classList.remove('active');
+  viewRbnBtn.classList.remove('active');
 
   if (view === 'table') {
     spotsTable.classList.remove('hidden');
@@ -927,11 +1030,21 @@ function setView(view) {
     dxccView.classList.remove('hidden');
     viewDxccBtn.classList.add('active');
     renderDxccMatrix();
+  } else if (view === 'rbn') {
+    rbnView.classList.remove('hidden');
+    viewRbnBtn.classList.add('active');
+    if (!rbnMap) {
+      initRbnMap();
+    }
+    setTimeout(() => rbnMap.invalidateSize(), 0);
+    renderRbnMarkers();
+    renderRbnTable();
   }
 }
 
 viewTableBtn.addEventListener('click', () => setView('table'));
 viewMapBtn.addEventListener('click', () => setView('map'));
+viewRbnBtn.addEventListener('click', () => setView('rbn'));
 viewDxccBtn.addEventListener('click', () => setView('dxcc'));
 
 // --- DXCC Matrix Rendering ---
@@ -1187,10 +1300,12 @@ settingsBtn.addEventListener('click', async () => {
   setEnablePota.checked = s.enablePota !== false;
   setEnableSota.checked = s.enableSota === true;
   setEnableCluster.checked = s.enableCluster === true;
+  setEnableRbn.checked = s.enableRbn === true;
   setMyCallsign.value = s.myCallsign || '';
   setClusterHost.value = s.clusterHost || 'w3lpl.net';
   setClusterPort.value = s.clusterPort || 7373;
   clusterConfig.classList.toggle('hidden', !s.enableCluster);
+  rbnConfig.classList.toggle('hidden', !s.enableRbn);
   setEnableSolar.checked = s.enableSolar === true;
   setEnableBandActivity.checked = s.enableBandActivity === true;
   setEnableDxcc.checked = s.enableDxcc === true;
@@ -1210,6 +1325,7 @@ settingsSave.addEventListener('click', async () => {
   const potaEnabled = setEnablePota.checked;
   const sotaEnabled = setEnableSota.checked;
   const clusterEnabled = setEnableCluster.checked;
+  const rbnEnabled = setEnableRbn.checked;
   const myCallsign = setMyCallsign.value.trim().toUpperCase();
   const clusterHost = setClusterHost.value.trim() || 'w3lpl.net';
   const clusterPort = parseInt(setClusterPort.value, 10) || 7373;
@@ -1245,6 +1361,7 @@ settingsSave.addEventListener('click', async () => {
     enablePota: potaEnabled,
     enableSota: sotaEnabled,
     enableCluster: clusterEnabled,
+    enableRbn: rbnEnabled,
     myCallsign: myCallsign,
     clusterHost: clusterHost,
     clusterPort: clusterPort,
@@ -1262,7 +1379,10 @@ settingsSave.addEventListener('click', async () => {
   enablePota = potaEnabled;
   enableSota = sotaEnabled;
   enableCluster = clusterEnabled;
+  enableRbn = rbnEnabled;
   updateClusterStatusVisibility();
+  updateRbnStatusVisibility();
+  updateRbnButton();
   enableSolar = solarEnabled;
   updateSolarVisibility();
   enableBandActivity = bandActivityEnabled;
@@ -1277,6 +1397,7 @@ settingsSave.addEventListener('click', async () => {
   render();
   // Update home marker if map is initialized
   if (map) updateHomeMarker();
+  if (rbnMap) updateRbnHomeMarker();
 });
 
 // --- IPC listeners ---
@@ -1423,6 +1544,298 @@ function renderBandActivity() {
 
   bandActivityBar.appendChild(grid);
 }
+
+// --- RBN Map ---
+function initRbnMap() {
+  rbnMap = L.map('rbn-map', { zoomControl: true, worldCopyJump: true }).setView(DEFAULT_CENTER, 3);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors',
+    maxZoom: 18,
+    className: 'dark-tiles',
+  }).addTo(rbnMap);
+
+  rbnMarkerLayer = L.layerGroup().addTo(rbnMap);
+
+  // Add home marker
+  updateRbnHomeMarker();
+
+  // Add day/night overlay
+  updateRbnNightOverlay();
+  setInterval(updateRbnNightOverlay, 60000);
+}
+
+async function updateRbnHomeMarker() {
+  if (!rbnMap) return;
+  const settings = await window.api.getSettings();
+  const grid = settings.grid || 'FN20jb';
+  const pos = gridToLatLonLocal(grid);
+  if (!pos) return;
+  rbnHomePos = pos;
+
+  if (rbnHomeMarker) {
+    for (const m of rbnHomeMarker) rbnMap.removeLayer(m);
+  }
+
+  const homeIcon = L.divIcon({
+    className: 'home-marker-icon',
+    html: '<div style="background:#e94560;width:14px;height:14px;border-radius:50%;border:2px solid #fff;"></div>',
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  });
+
+  rbnHomeMarker = [-360, 0, 360].map((offset) =>
+    L.marker([pos.lat, pos.lon + offset], { icon: homeIcon, zIndexOffset: 1000 })
+      .bindPopup(`<b>My QTH</b><br>${grid}`)
+      .addTo(rbnMap)
+  );
+
+  rbnMap.setView([pos.lat, pos.lon], rbnMap.getZoom());
+}
+
+function updateRbnNightOverlay() {
+  if (!rbnMap) return;
+  const rings = computeNightPolygon();
+  if (rbnNightLayer) {
+    rbnNightLayer.setLatLngs(rings);
+  } else {
+    rbnNightLayer = L.polygon(rings, {
+      fillColor: '#000',
+      fillOpacity: 0.25,
+      color: '#4fc3f7',
+      weight: 1,
+      opacity: 0.4,
+      interactive: false,
+    }).addTo(rbnMap);
+  }
+  if (rbnMarkerLayer) rbnMarkerLayer.bringToFront();
+}
+
+function getFilteredRbnSpots() {
+  const bands = getDropdownValues(rbnBandFilterEl);
+  const maxAge = parseInt(rbnMaxAgeInput.value, 10) || 30;
+  const ageUnit = rbnAgeUnitSelect.value; // 'm' or 'h'
+  const maxAgeSecs = maxAge * (ageUnit === 'h' ? 3600 : 60);
+
+  return rbnSpots.filter((s) => {
+    if (bands && !bands.has(s.band)) return false;
+    if (spotAgeSecs(s.spotTime) > maxAgeSecs) return false;
+    return true;
+  });
+}
+
+function rerenderRbn() {
+  if (currentView === 'rbn') {
+    renderRbnMarkers();
+    renderRbnTable();
+  }
+}
+
+function renderRbnMarkers() {
+  if (!rbnMarkerLayer) return;
+  rbnMarkerLayer.clearLayers();
+
+  const filtered = getFilteredRbnSpots();
+  const unit = distUnit === 'km' ? 'km' : 'mi';
+  const activeBands = new Set();
+
+  // Draw arcs first (underneath markers)
+  if (rbnHomePos) {
+    for (const s of filtered) {
+      if (s.lat == null || s.lon == null) continue;
+      const color = RBN_BAND_COLORS[s.band] || '#ffffff';
+      const arcPoints = greatCircleArc(rbnHomePos.lat, rbnHomePos.lon, s.lat, s.lon, 50);
+      for (const offset of [-360, 0, 360]) {
+        const offsetPoints = arcPoints.map(([lat, lon]) => [lat, lon + offset]);
+        L.polyline(offsetPoints, {
+          color: color,
+          weight: 1.5,
+          opacity: 0.45,
+          interactive: false,
+        }).addTo(rbnMarkerLayer);
+      }
+    }
+  }
+
+  // Draw circle markers on top
+  for (const s of filtered) {
+    if (s.lat == null || s.lon == null) continue;
+    if (s.band) activeBands.add(s.band);
+
+    const color = RBN_BAND_COLORS[s.band] || '#ffffff';
+    const distStr = s.distance != null ? formatDistance(s.distance) + ' ' + unit : '';
+    const snrStr = s.snr != null ? s.snr + ' dB' : '';
+    const wpmStr = s.wpm != null ? s.wpm + ' WPM' : '';
+    const details = [snrStr, wpmStr].filter(Boolean).join(' / ');
+
+    const popupContent = `
+      <b><a href="#" class="popup-qrz" data-call="${s.spotter}">${s.spotter}</a></b><br>
+      ${s.locationDesc}<br>
+      ${s.band || ''} ${s.mode || ''} &middot; ${details}<br>
+      ${distStr ? distStr + '<br>' : ''}
+      <span style="color:#808090;font-size:11px;">${formatAge(s.spotTime)}</span>
+    `;
+
+    for (const offset of [-360, 0, 360]) {
+      L.circleMarker([s.lat, s.lon + offset], {
+        radius: 7,
+        fillColor: color,
+        color: color,
+        weight: 1,
+        opacity: 0.9,
+        fillOpacity: 0.7,
+      }).bindPopup(popupContent).addTo(rbnMarkerLayer);
+    }
+  }
+
+  rbnCountEl.textContent = filtered.length;
+  renderRbnLegend(activeBands);
+}
+
+function renderRbnLegend(activeBands) {
+  rbnLegendEl.innerHTML = '';
+  const sortedBands = ['160m', '80m', '60m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '6m'];
+  for (const band of sortedBands) {
+    if (!activeBands.has(band)) continue;
+    const item = document.createElement('span');
+    item.className = 'rbn-legend-item';
+    const swatch = document.createElement('span');
+    swatch.className = 'rbn-legend-swatch';
+    swatch.style.background = RBN_BAND_COLORS[band] || '#fff';
+    item.appendChild(swatch);
+    item.appendChild(document.createTextNode(band));
+    rbnLegendEl.appendChild(item);
+  }
+}
+
+function renderRbnTable() {
+  rbnTableBody.innerHTML = '';
+  rbnDistHeader.textContent = distUnit === 'km' ? 'Dist (km)' : 'Dist (mi)';
+  const unit = distUnit === 'km' ? 'km' : 'mi';
+
+  // Show newest spots first
+  const sorted = [...getFilteredRbnSpots()].reverse();
+
+  for (const s of sorted) {
+    const tr = document.createElement('tr');
+
+    // Spotter (QRZ link)
+    const spotterTd = document.createElement('td');
+    const spotterLink = document.createElement('a');
+    spotterLink.textContent = s.spotter;
+    spotterLink.href = '#';
+    spotterLink.className = 'qrz-link';
+    spotterLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      window.api.openExternal(`https://www.qrz.com/db/${encodeURIComponent(s.spotter)}`);
+    });
+    spotterTd.appendChild(spotterLink);
+    tr.appendChild(spotterTd);
+
+    // Spotted (location description)
+    const spottedTd = document.createElement('td');
+    spottedTd.textContent = s.locationDesc || '';
+    tr.appendChild(spottedTd);
+
+    // Distance
+    const distTd = document.createElement('td');
+    distTd.textContent = s.distance != null ? formatDistance(s.distance) : '—';
+    tr.appendChild(distTd);
+
+    // Freq
+    const freqTd = document.createElement('td');
+    freqTd.textContent = parseFloat(s.frequency).toFixed(1);
+    tr.appendChild(freqTd);
+
+    // Mode
+    const modeTd = document.createElement('td');
+    modeTd.textContent = s.mode || '';
+    tr.appendChild(modeTd);
+
+    // Type
+    const typeTd = document.createElement('td');
+    typeTd.textContent = s.type || '';
+    tr.appendChild(typeTd);
+
+    // SNR
+    const snrTd = document.createElement('td');
+    snrTd.textContent = s.snr != null ? s.snr + ' dB' : '';
+    tr.appendChild(snrTd);
+
+    // Speed
+    const speedTd = document.createElement('td');
+    speedTd.textContent = s.wpm != null ? s.wpm + ' WPM' : '';
+    tr.appendChild(speedTd);
+
+    // Time (HHMM from spotTime)
+    const timeTd = document.createElement('td');
+    try {
+      const d = new Date(s.spotTime);
+      timeTd.textContent = d.toISOString().slice(11, 16) + 'z';
+    } catch { timeTd.textContent = ''; }
+    tr.appendChild(timeTd);
+
+    // Seen (relative age)
+    const seenTd = document.createElement('td');
+    seenTd.textContent = formatAge(s.spotTime);
+    tr.appendChild(seenTd);
+
+    rbnTableBody.appendChild(tr);
+  }
+}
+
+// --- RBN splitter drag ---
+rbnSplitter.addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  const rbnViewEl = document.getElementById('rbn-view');
+  const startY = e.clientY;
+  const startMapH = rbnMapContainer.offsetHeight;
+  const startTableH = rbnTableContainer.offsetHeight;
+
+  const onMove = (ev) => {
+    const delta = ev.clientY - startY;
+    const newMapH = Math.max(80, startMapH + delta);
+    const newTableH = Math.max(60, startTableH - delta);
+    rbnMapContainer.style.flex = 'none';
+    rbnTableContainer.style.flex = 'none';
+    rbnMapContainer.style.height = newMapH + 'px';
+    rbnTableContainer.style.height = newTableH + 'px';
+    if (rbnMap) rbnMap.invalidateSize();
+  };
+
+  const onUp = () => {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    document.body.style.cursor = '';
+  };
+
+  document.body.style.cursor = 'row-resize';
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+});
+
+// RBN clear button
+rbnClearBtn.addEventListener('click', () => {
+  window.api.clearRbn();
+  rbnSpots = [];
+  renderRbnMarkers();
+  renderRbnTable();
+});
+
+// --- RBN IPC listeners ---
+window.api.onRbnSpots((spots) => {
+  rbnSpots = spots;
+  if (currentView === 'rbn') {
+    renderRbnMarkers();
+    renderRbnTable();
+  }
+});
+
+window.api.onRbnStatus(({ connected }) => {
+  rbnStatusEl.textContent = 'RBN';
+  rbnStatusEl.className = 'status ' + (connected ? 'connected' : 'disconnected');
+  if (enableRbn) rbnStatusEl.classList.remove('hidden');
+});
 
 // --- Settings footer links ---
 document.getElementById('bio-link').addEventListener('click', (e) => {

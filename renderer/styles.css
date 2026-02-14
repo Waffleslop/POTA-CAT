@@ -379,6 +379,8 @@ thead th {
   font-weight: bold;
   color: #4fc3f7;
   letter-spacing: 0.5px;
+  padding-right: 8px;
+  flex-shrink: 0;
 }
 
 /* View toggle */
@@ -910,5 +912,155 @@ dialog input, dialog select {
   background: #4d1a24;
   color: #e94560;
   font-weight: bold;
+}
+
+/* RBN View */
+#rbn-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.rbn-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: #16213e;
+  border-bottom: 1px solid #0f3460;
+}
+
+.rbn-spot-count {
+  font-size: 13px;
+  color: #a0a0c0;
+}
+
+.rbn-age-filter {
+  display: flex !important;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: #a0a0c0;
+  margin-bottom: 0 !important;
+}
+
+.rbn-age-filter input,
+.rbn-age-filter select {
+  margin-top: 0;
+}
+
+#rbn-count {
+  font-weight: bold;
+  color: #4fc3f7;
+  font-family: Consolas, "Courier New", monospace;
+}
+
+#rbn-map-container {
+  flex: 3;
+  min-height: 80px;
+  overflow: hidden;
+}
+
+#rbn-map {
+  width: 100%;
+  height: 100%;
+  background: #1a1a2e;
+}
+
+#rbn-splitter {
+  height: 5px;
+  background: #0f3460;
+  cursor: row-resize;
+  flex-shrink: 0;
+}
+
+#rbn-splitter:hover {
+  background: #e94560;
+}
+
+#rbn-table-container {
+  flex: 2;
+  min-height: 60px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+#rbn-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+#rbn-table thead th {
+  background: #16213e;
+  position: sticky;
+  top: 0;
+  padding: 6px 8px;
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #a0a0c0;
+  border-bottom: 2px solid #0f3460;
+  cursor: default;
+  user-select: none;
+  z-index: 2;
+}
+
+#rbn-table tbody tr {
+  border-bottom: 1px solid #0f3460;
+}
+
+#rbn-table tbody tr:hover {
+  background: #1a4080;
+}
+
+#rbn-table tbody td {
+  padding: 4px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+
+#rbn-table tbody td:nth-child(4) {
+  font-family: Consolas, "Courier New", monospace;
+}
+
+#rbn-map .leaflet-popup-content-wrapper {
+  background: #16213e;
+  color: #e0e0e0;
+  border-radius: 6px;
+}
+
+#rbn-map .leaflet-popup-tip {
+  background: #16213e;
+}
+
+#rbn-map .leaflet-popup-content {
+  margin: 10px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.rbn-legend {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-left: auto;
+}
+
+.rbn-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #a0a0c0;
+}
+
+.rbn-legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
 }
 

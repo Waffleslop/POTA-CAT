@@ -10,6 +10,7 @@ const { freqToBand } = require('./lib/bands');
 const { loadCtyDat, resolveCallsign, getAllEntities } = require('./lib/cty');
 const { parseAdifFile } = require('./lib/adif');
 const { DxClusterClient } = require('./lib/dxcluster');
+const { RbnClient } = require('./lib/rbn');
 
 // --- cty.dat database (loaded once at startup) ---
 let ctyDb = null;
@@ -38,6 +39,9 @@ let rigctldProc = null;
 let cluster = null;
 let clusterSpots = []; // streaming DX cluster spots (FIFO, max 500)
 let clusterFlushTimer = null; // throttle timer for cluster → renderer updates
+let rbn = null;
+let rbnSpots = []; // streaming RBN spots (FIFO, max 500)
+let rbnFlushTimer = null; // throttle timer for RBN → renderer updates
 
 // --- Rigctld management ---
 function findRigctld() {
@@ -251,6 +255,171 @@ function disconnectCluster() {
   }
   clusterSpots = [];
   sendClusterStatus({ connected: false });
+}
+
+// --- Call area coordinate lookup for large countries ---
+// cty.dat gives one centroid per country — useless for plotting skimmers across the US/Canada/etc.
+// This maps call area digits to approximate regional centroids.
+const CALL_AREA_COORDS = {
+  'United States': {
+    '1': { lat: 42.5, lon: -72.0, region: 'New England' },
+    '2': { lat: 41.0, lon: -74.0, region: 'NY/NJ' },
+    '3': { lat: 40.0, lon: -76.5, region: 'PA/MD/DE' },
+    '4': { lat: 34.0, lon: -84.0, region: 'Southeast' },
+    '5': { lat: 32.0, lon: -97.0, region: 'South Central' },
+    '6': { lat: 37.0, lon: -120.0, region: 'California' },
+    '7': { lat: 43.0, lon: -114.0, region: 'Northwest' },
+    '8': { lat: 40.5, lon: -82.5, region: 'MI/OH/WV' },
+    '9': { lat: 41.5, lon: -88.0, region: 'IL/IN/WI' },
+    '0': { lat: 41.0, lon: -97.0, region: 'Central' },
+  },
+  'Canada': {
+    '1': { lat: 47.0, lon: -56.0, region: 'NL' },
+    '2': { lat: 47.0, lon: -71.0, region: 'QC' },
+    '3': { lat: 44.0, lon: -79.5, region: 'ON' },
+    '4': { lat: 50.0, lon: -97.0, region: 'MB' },
+    '5': { lat: 52.0, lon: -106.0, region: 'SK' },
+    '6': { lat: 51.0, lon: -114.0, region: 'AB' },
+    '7': { lat: 49.0, lon: -123.0, region: 'BC' },
+    '9': { lat: 46.0, lon: -66.0, region: 'Maritimes' },
+  },
+  'Japan': {
+    '1': { lat: 35.7, lon: 139.7, region: 'Kanto' },
+    '2': { lat: 35.0, lon: 137.0, region: 'Tokai' },
+    '3': { lat: 34.7, lon: 135.5, region: 'Kansai' },
+    '4': { lat: 34.4, lon: 132.5, region: 'Chugoku' },
+    '5': { lat: 33.8, lon: 133.5, region: 'Shikoku' },
+    '6': { lat: 33.0, lon: 131.0, region: 'Kyushu' },
+    '7': { lat: 39.0, lon: 140.0, region: 'Tohoku' },
+    '8': { lat: 43.0, lon: 141.3, region: 'Hokkaido' },
+    '9': { lat: 36.6, lon: 136.6, region: 'Hokuriku' },
+    '0': { lat: 37.0, lon: 138.5, region: 'Shinetsu' },
+  },
+  'Australia': {
+    '1': { lat: -35.3, lon: 149.1, region: 'ACT' },
+    '2': { lat: -33.9, lon: 151.0, region: 'NSW' },
+    '3': { lat: -37.8, lon: 145.0, region: 'VIC' },
+    '4': { lat: -27.5, lon: 153.0, region: 'QLD' },
+    '5': { lat: -34.9, lon: 138.6, region: 'SA' },
+    '6': { lat: -31.9, lon: 115.9, region: 'WA' },
+    '7': { lat: -42.9, lon: 147.3, region: 'TAS' },
+    '8': { lat: -12.5, lon: 130.8, region: 'NT' },
+  },
+};
+
+// Extract the call area digit from a callsign (first digit found)
+function getCallAreaCoords(callsign, entityName) {
+  const areaMap = CALL_AREA_COORDS[entityName];
+  if (!areaMap) return null;
+  const m = callsign.match(/(\d)/);
+  if (!m) return null;
+  return areaMap[m[1]] || null;
+}
+
+// --- Reverse Beacon Network ---
+function sendRbnStatus(s) {
+  if (win && !win.isDestroyed()) win.webContents.send('rbn-status', s);
+}
+
+function sendRbnSpots() {
+  if (win && !win.isDestroyed()) win.webContents.send('rbn-spots', rbnSpots);
+}
+
+function connectRbn() {
+  if (rbn) {
+    rbn.disconnect();
+    rbn.removeAllListeners();
+    rbn = null;
+  }
+  rbnSpots = [];
+
+  if (!settings.enableRbn || !settings.myCallsign) {
+    sendRbnStatus({ connected: false });
+    return;
+  }
+
+  rbn = new RbnClient();
+  const myPos = gridToLatLon(settings.grid);
+
+  rbn.on('spot', (raw) => {
+    // Strip skimmer suffix (e.g. KM3T-# → KM3T)
+    const spotter = raw.spotter.replace(/-[#\d]+$/, '');
+
+    const spot = {
+      spotter,
+      callsign: raw.callsign,
+      frequency: raw.frequency,
+      freqMHz: raw.freqMHz,
+      mode: raw.mode,
+      band: raw.band,
+      snr: raw.snr,
+      wpm: raw.wpm,
+      type: raw.type,
+      spotTime: raw.spotTime,
+      lat: null,
+      lon: null,
+      distance: null,
+      locationDesc: '',
+    };
+
+    // Resolve spotter's location via call area lookup, then cty.dat fallback
+    if (ctyDb) {
+      const entity = resolveCallsign(spotter, ctyDb);
+      if (entity) {
+        // Try call area coordinates first (much more precise for large countries)
+        const areaCoords = getCallAreaCoords(spotter, entity.name);
+        if (areaCoords) {
+          spot.lat = areaCoords.lat;
+          spot.lon = areaCoords.lon;
+          spot.locationDesc = `${entity.name} — ${areaCoords.region}`;
+        } else if (entity.lat != null && entity.lon != null) {
+          spot.lat = entity.lat;
+          spot.lon = entity.lon;
+          spot.locationDesc = entity.name;
+        }
+        if (spot.lat != null && myPos) {
+          spot.distance = Math.round(haversineDistanceMiles(myPos.lat, myPos.lon, spot.lat, spot.lon));
+        }
+      }
+    }
+
+    rbnSpots.push(spot);
+    if (rbnSpots.length > 500) {
+      rbnSpots = rbnSpots.slice(-500);
+    }
+
+    // Throttle: flush to renderer at most once every 2s
+    if (!rbnFlushTimer) {
+      rbnFlushTimer = setTimeout(() => {
+        rbnFlushTimer = null;
+        sendRbnSpots();
+      }, 2000);
+    }
+  });
+
+  rbn.on('status', (s) => {
+    sendRbnStatus(s);
+  });
+
+  rbn.connect({
+    host: 'telnet.reversebeacon.net',
+    port: 7000,
+    callsign: settings.myCallsign,
+  });
+}
+
+function disconnectRbn() {
+  if (rbnFlushTimer) {
+    clearTimeout(rbnFlushTimer);
+    rbnFlushTimer = null;
+  }
+  if (rbn) {
+    rbn.disconnect();
+    rbn.removeAllListeners();
+    rbn = null;
+  }
+  rbnSpots = [];
+  sendRbnStatus({ connected: false });
 }
 
 // --- Solar data ---
@@ -505,6 +674,10 @@ function createWindow() {
     if (cluster) {
       sendClusterStatus({ connected: cluster.connected, host: settings.clusterHost, port: settings.clusterPort });
     }
+    if (rbn) {
+      sendRbnStatus({ connected: rbn.connected, host: 'telnet.reversebeacon.net', port: 7000 });
+      if (rbnSpots.length > 0) sendRbnSpots();
+    }
     refreshSpots();
     fetchSolarData();
     // Auto-send DXCC data if enabled and ADIF path is set
@@ -528,6 +701,7 @@ app.whenReady().then(() => {
   createWindow();
   connectCat();
   if (settings.enableCluster) connectCluster();
+  if (settings.enableRbn) connectRbn();
 
   // Window control IPC
   ipcMain.on('win-minimize', () => { if (win) win.minimize(); });
@@ -586,6 +760,9 @@ app.whenReady().then(() => {
       newSettings.clusterHost !== settings.clusterHost ||
       newSettings.clusterPort !== settings.clusterPort;
 
+    const rbnChanged = newSettings.enableRbn !== settings.enableRbn ||
+      newSettings.myCallsign !== settings.myCallsign;
+
     settings = { ...settings, ...newSettings };
     saveSettings(settings);
     connectCat();
@@ -597,6 +774,15 @@ app.whenReady().then(() => {
         connectCluster();
       } else {
         disconnectCluster();
+      }
+    }
+
+    // Reconnect RBN if settings changed
+    if (rbnChanged) {
+      if (settings.enableRbn) {
+        connectRbn();
+      } else {
+        disconnectRbn();
       }
     }
 
@@ -630,6 +816,12 @@ app.whenReady().then(() => {
     saveSettings(settings);
     connectCat();
   });
+
+  // --- RBN IPC ---
+  ipcMain.on('rbn-clear', () => {
+    rbnSpots = [];
+    sendRbnSpots();
+  });
 });
 
 app.on('window-all-closed', () => {
@@ -637,6 +829,7 @@ app.on('window-all-closed', () => {
   if (solarTimer) clearInterval(solarTimer);
   if (cat) cat.disconnect();
   if (cluster) cluster.disconnect();
+  if (rbn) rbn.disconnect();
   killRigctld();
   app.quit();
 });
