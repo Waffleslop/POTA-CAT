@@ -258,7 +258,8 @@
       <label class="radio-label"><input type="radio" name="radio-type" value="hamlib"> Other Rig (Hamlib)</label>
       <div id="hamlib-config" class="radio-sub hidden">
         <label>Rig Model:
-          <select id="set-rig-model">
+          <input type="text" id="set-rig-search" placeholder="Search rigs..." style="margin-bottom:4px;">
+          <select id="set-rig-model" size="6">
             <option value="">Select a rig...</option>
           </select>
         </label>
@@ -275,6 +276,10 @@
             <option value="115200">115200</option>
           </select>
         </label>
+        <div style="margin-top:6px;display:flex;align-items:center;gap:8px;">
+          <button type="button" id="hamlib-test-btn">Test Connection</button>
+          <span id="hamlib-test-result" style="font-size:12px;"></span>
+        </div>
       </div>
     </fieldset>
     <label>License Class:
@@ -301,7 +306,7 @@
       <div class="settings-bio">Built by <a href="#" id="bio-link">Casey Stanton, K3SBP</a></div>
       <div class="settings-discord">Join the <a href="#" id="discord-link">POTA CAT Discord</a> to help test and share feedback!</div>
       <div class="settings-issues">Free &amp; open source. Found a bug? <a href="#" id="issues-link">Submit a ticket</a></div>
-      <div class="settings-attribution">Radio control powered by <a href="https://hamlib.github.io/" onclick="return false;" id="hamlib-link">Hamlib</a> (LGPL v2.1)</div>
+      <div class="settings-attribution">Radio control powered by <a href="https://hamlib.github.io/" onclick="return false;" id="hamlib-link">Hamlib</a> (GPL v2 &mdash; <a href="#" onclick="return false;" id="hamlib-source-link">source code</a>)</div>
     </div>
   </dialog>
 

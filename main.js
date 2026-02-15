@@ -97,6 +97,8 @@ function notifyWatchlistSpot({ callsign, frequency, mode, source, reference, loc
 }
 
 // --- Rigctld management ---
+let rigctldStderr = ''; // accumulated stderr from rigctld process (capped at 4KB)
+
 function findRigctld() {
   // Check user-configured path first
   if (settings && settings.rigctldPath) {
@@ -105,6 +107,15 @@ function findRigctld() {
       return settings.rigctldPath;
     } catch { /* fall through */ }
   }
+
+  // Check bundled path (packaged app vs dev)
+  const bundledPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'hamlib', 'rigctld.exe')
+    : path.join(__dirname, 'assets', 'hamlib', 'rigctld.exe');
+  try {
+    fs.accessSync(bundledPath, fs.constants.X_OK);
+    return bundledPath;
+  } catch { /* fall through */ }
 
   // Check common install directories (Windows)
   const candidates = [
@@ -129,12 +140,23 @@ function listRigs(rigctldPath) {
       if (err) return reject(err);
       const lines = stdout.split('\n');
       const rigs = [];
+      const SKIP_IDS = new Set([1, 2, 6]);
+      const SKIP_MFG = new Set(['Dummy', 'NET']);
       for (const line of lines) {
         const m = line.match(/^\s*(\d+)\s+(\S+(?:\s+\S+)*?)\s{2,}(\S+(?:\s+\S+)*?)\s{2,}(\S+)\s+(\S+)/);
         if (m) {
-          rigs.push({ id: parseInt(m[1], 10), mfg: m[2].trim(), model: m[3].trim(), version: m[4], status: m[5] });
+          const id = parseInt(m[1], 10);
+          const mfg = m[2].trim();
+          if (SKIP_IDS.has(id) || SKIP_MFG.has(mfg)) continue;
+          rigs.push({ id, mfg, model: m[3].trim(), version: m[4], status: m[5] });
         }
       }
+      // Sort alphabetically by manufacturer, then model
+      rigs.sort((a, b) => {
+        const cmp = a.mfg.localeCompare(b.mfg, undefined, { sensitivity: 'base' });
+        if (cmp !== 0) return cmp;
+        return a.model.localeCompare(b.model, undefined, { sensitivity: 'base' });
+      });
       resolve(rigs);
     });
   });
@@ -147,32 +169,56 @@ function killRigctld() {
   }
 }
 
-function spawnRigctld(target) {
+function spawnRigctld(target, portOverride) {
   return new Promise((resolve, reject) => {
     const rigctldPath = findRigctld();
+    const port = portOverride || '4532';
     const args = [
       '-m', String(target.rigId),
       '-r', target.serialPort,
       '-s', String(target.baudRate),
-      '-t', '4532',
+      '-t', port,
     ];
 
-    killRigctld();
+    if (!portOverride) killRigctld();
+    rigctldStderr = '';
 
-    const proc = spawn(rigctldPath, args, { stdio: 'ignore' });
-    rigctldProc = proc;
+    const proc = spawn(rigctldPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    if (!portOverride) rigctldProc = proc;
 
-    proc.on('error', (err) => {
-      rigctldProc = null;
-      reject(err);
+    // Capture stderr (capped at 4KB)
+    proc.stderr.on('data', (chunk) => {
+      rigctldStderr += chunk.toString();
+      if (rigctldStderr.length > 4096) rigctldStderr = rigctldStderr.slice(-4096);
     });
 
-    proc.on('exit', () => {
-      if (rigctldProc === proc) rigctldProc = null;
+    let settled = false;
+
+    proc.on('error', (err) => {
+      if (!portOverride && rigctldProc === proc) rigctldProc = null;
+      if (!settled) { settled = true; reject(err); }
+    });
+
+    proc.on('exit', (code) => {
+      if (!portOverride && rigctldProc === proc) rigctldProc = null;
+      // Early exit (before the 500ms init window) means something went wrong
+      if (!settled) {
+        settled = true;
+        const lastLine = rigctldStderr.trim().split('\n').pop() || `rigctld exited with code ${code}`;
+        reject(new Error(lastLine));
+      } else {
+        // Late exit — send error to renderer
+        if (!portOverride) {
+          const lastLine = rigctldStderr.trim().split('\n').pop() || `rigctld exited with code ${code}`;
+          sendCatStatus({ connected: false, error: lastLine });
+        }
+      }
     });
 
     // Give rigctld time to start listening
-    setTimeout(() => resolve(), 500);
+    setTimeout(() => {
+      if (!settled) { settled = true; resolve(proc); }
+    }, 500);
   });
 }
 
@@ -199,7 +245,14 @@ async function connectCat() {
       return;
     }
     cat = new RigctldClient();
-    cat.on('status', sendCatStatus);
+    cat.on('status', (s) => {
+      // Enrich disconnect events with last rigctld stderr
+      if (!s.connected && rigctldStderr) {
+        const lastLine = rigctldStderr.trim().split('\n').pop();
+        if (lastLine) s.error = lastLine;
+      }
+      sendCatStatus(s);
+    });
     cat.on('frequency', sendCatFrequency);
     cat.connect({ type: 'rigctld', host: '127.0.0.1', port: 4532 });
   } else {
@@ -824,7 +877,7 @@ app.whenReady().then(() => {
   ipcMain.on('open-external', (_e, url) => {
     const { shell } = require('electron');
     // Only allow known URLs
-    if (url.startsWith('https://www.qrz.com/') || url.startsWith('https://caseystanton.com/') || url.startsWith('https://github.com/Waffleslop/POTA-CAT/') || url.startsWith('https://hamlib.github.io/') || url.startsWith('https://discord.gg/')) {
+    if (url.startsWith('https://www.qrz.com/') || url.startsWith('https://caseystanton.com/') || url.startsWith('https://github.com/Waffleslop/POTA-CAT/') || url.startsWith('https://hamlib.github.io/') || url.startsWith('https://github.com/Hamlib/') || url.startsWith('https://discord.gg/')) {
       shell.openExternal(url);
     }
   });
@@ -911,6 +964,60 @@ app.whenReady().then(() => {
 
   ipcMain.handle('parse-adif', () => {
     return buildDxccData();
+  });
+
+  ipcMain.handle('test-hamlib', async (_e, config) => {
+    const { rigId, serialPort, baudRate } = config;
+    let testProc = null;
+    const net = require('net');
+
+    try {
+      // Spawn rigctld on port 4533 to avoid conflict with live instance on 4532
+      testProc = await spawnRigctld({ rigId, serialPort, baudRate }, '4533');
+
+      // Give a bit more time for init, then try to read frequency
+      await new Promise((r) => setTimeout(r, 300));
+
+      const freq = await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          sock.destroy();
+          reject(new Error('Timed out waiting for rigctld response'));
+        }, 5000);
+
+        const sock = net.createConnection({ host: '127.0.0.1', port: 4533 }, () => {
+          sock.write('f\n');
+        });
+
+        let data = '';
+        sock.on('data', (chunk) => {
+          data += chunk.toString();
+          if (data.includes('\n')) {
+            clearTimeout(timeout);
+            sock.destroy();
+            const line = data.trim().split('\n')[0];
+            // rigctld returns frequency in Hz as a number, or RPRT -N on error
+            if (line.startsWith('RPRT')) {
+              reject(new Error(`rigctld error: ${line}`));
+            } else {
+              resolve(line);
+            }
+          }
+        });
+
+        sock.on('error', (err) => {
+          clearTimeout(timeout);
+          reject(new Error(`TCP connection failed: ${err.message}`));
+        });
+      });
+
+      return { success: true, frequency: freq };
+    } catch (err) {
+      return { success: false, error: err.message };
+    } finally {
+      if (testProc) {
+        try { testProc.kill(); } catch { /* ignore */ }
+      }
+    }
   });
 
   ipcMain.on('connect-cat', (_e, target) => {

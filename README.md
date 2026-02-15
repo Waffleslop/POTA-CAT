@@ -70,4 +70,4 @@ MIT
 
 ### Third-Party Software
 
-This application uses [Hamlib](https://hamlib.github.io/) for radio control via rigctld. Hamlib is licensed under the [GNU Lesser General Public License v2.1](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html). Hamlib is invoked as a separate process and is not bundled with or linked into this application.
+This application bundles [Hamlib](https://hamlib.github.io/) rigctld for radio control. Hamlib is licensed under the [GNU General Public License v2](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html). Source code is available at [github.com/Hamlib/Hamlib](https://github.com/Hamlib/Hamlib).

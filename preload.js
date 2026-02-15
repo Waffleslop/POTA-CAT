@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('api', {
   saveSettings: (s) => ipcRenderer.invoke('save-settings', s),
   listPorts: () => ipcRenderer.invoke('list-ports'),
   listRigs: () => ipcRenderer.invoke('list-rigs'),
+  testHamlib: (config) => ipcRenderer.invoke('test-hamlib', config),
   connectCat: (target) => ipcRenderer.send('connect-cat', target),
   onCatFrequency: (cb) => ipcRenderer.on('cat-frequency', (_e, hz) => cb(hz)),
   chooseAdifFile: () => ipcRenderer.invoke('choose-adif-file'),

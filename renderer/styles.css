@@ -663,6 +663,29 @@ dialog input, dialog select {
   color: #606080;
 }
 
+/* Hamlib rig list box */
+#set-rig-model {
+  height: auto;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+#set-rig-search {
+  width: 100%;
+}
+
+#hamlib-test-btn {
+  white-space: nowrap;
+}
+
+.hamlib-test-success {
+  color: #4ecca3;
+}
+
+.hamlib-test-fail {
+  color: #e94560;
+}
+
 /* Welcome dialog */
 .welcome-text {
   font-size: 13px;

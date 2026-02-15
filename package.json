@@ -34,7 +34,10 @@
     "mac": {
       "target": "dmg",
       "category": "public.app-category.utilities"
-    }
+    },
+    "extraResources": [
+      { "from": "assets/hamlib", "to": "hamlib", "filter": ["**/*"] }
+    ]
   },
   "devDependencies": {
     "electron": "^33.0.0",

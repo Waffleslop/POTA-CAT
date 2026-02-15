@@ -66,6 +66,9 @@ const radioTypeBtns = document.querySelectorAll('input[name="radio-type"]');
 const setRigModel = document.getElementById('set-rig-model');
 const setRigPort = document.getElementById('set-rig-port');
 const setRigBaud = document.getElementById('set-rig-baud');
+const setRigSearch = document.getElementById('set-rig-search');
+const hamlibTestBtn = document.getElementById('hamlib-test-btn');
+const hamlibTestResult = document.getElementById('hamlib-test-result');
 const spotsTable = document.getElementById('spots-table');
 const mapContainer = document.getElementById('map-container');
 const mapDiv = document.getElementById('map');
@@ -160,6 +163,7 @@ function updateHeaders() {
 
 // --- Radio config (inside Settings) ---
 let hamlibFieldsLoaded = false;
+let allRigOptions = []; // cached rig list from listRigs()
 
 function getSelectedRadioType() {
   const checked = document.querySelector('input[name="radio-type"]:checked');
@@ -198,25 +202,32 @@ async function populateRadioSection(currentTarget) {
   updateRadioSubPanels();
 }
 
-async function populateHamlibFields(savedTarget) {
-  // Populate rig model dropdown
-  setRigModel.innerHTML = '<option value="">Loading rigs...</option>';
-  const rigs = await window.api.listRigs();
+function renderRigOptions(filteredList, selectedId) {
   setRigModel.innerHTML = '';
-  if (rigs.length === 0) {
+  if (filteredList.length === 0) {
     const opt = document.createElement('option');
     opt.value = '';
-    opt.textContent = 'No rigs found — is Hamlib installed?';
+    opt.textContent = allRigOptions.length === 0 ? 'No rigs found — is Hamlib installed?' : 'No matches';
     setRigModel.appendChild(opt);
   } else {
-    for (const rig of rigs) {
+    for (const rig of filteredList) {
       const opt = document.createElement('option');
       opt.value = rig.id;
       opt.textContent = `${rig.mfg} ${rig.model}`;
-      if (savedTarget && savedTarget.rigId === rig.id) opt.selected = true;
+      if (selectedId && rig.id === selectedId) opt.selected = true;
       setRigModel.appendChild(opt);
     }
   }
+}
+
+async function populateHamlibFields(savedTarget) {
+  // Populate rig model list box
+  setRigModel.innerHTML = '<option value="">Loading rigs...</option>';
+  setRigSearch.value = '';
+  const rigs = await window.api.listRigs();
+  allRigOptions = rigs;
+  const selectedId = savedTarget ? savedTarget.rigId : null;
+  renderRigOptions(allRigOptions, selectedId);
 
   // Populate serial port dropdown
   const ports = await window.api.listPorts();
@@ -486,6 +497,59 @@ adifBrowseBtn.addEventListener('click', async () => {
   const filePath = await window.api.chooseAdifFile();
   if (filePath) {
     setAdifPath.value = filePath;
+  }
+});
+
+// Rig search filtering
+setRigSearch.addEventListener('input', () => {
+  const query = setRigSearch.value.toLowerCase();
+  const selectedId = parseInt(setRigModel.value, 10) || null;
+  if (!query) {
+    renderRigOptions(allRigOptions, selectedId);
+  } else {
+    const filtered = allRigOptions.filter((r) =>
+      `${r.mfg} ${r.model}`.toLowerCase().includes(query)
+    );
+    renderRigOptions(filtered, selectedId);
+  }
+});
+
+// Hamlib test button
+hamlibTestBtn.addEventListener('click', async () => {
+  const rigId = parseInt(setRigModel.value, 10);
+  const serialPort = setRigPort.value;
+  const baudRate = parseInt(setRigBaud.value, 10);
+
+  if (!rigId) {
+    hamlibTestResult.textContent = 'Select a rig model first';
+    hamlibTestResult.className = 'hamlib-test-fail';
+    return;
+  }
+  if (!serialPort) {
+    hamlibTestResult.textContent = 'Select a serial port first';
+    hamlibTestResult.className = 'hamlib-test-fail';
+    return;
+  }
+
+  hamlibTestBtn.disabled = true;
+  hamlibTestResult.textContent = 'Testing...';
+  hamlibTestResult.className = '';
+
+  try {
+    const result = await window.api.testHamlib({ rigId, serialPort, baudRate });
+    if (result.success) {
+      const freqMHz = (parseInt(result.frequency, 10) / 1e6).toFixed(6);
+      hamlibTestResult.textContent = `Connected! Freq: ${freqMHz} MHz`;
+      hamlibTestResult.className = 'hamlib-test-success';
+    } else {
+      hamlibTestResult.textContent = `Failed: ${result.error}`;
+      hamlibTestResult.className = 'hamlib-test-fail';
+    }
+  } catch (err) {
+    hamlibTestResult.textContent = `Error: ${err.message}`;
+    hamlibTestResult.className = 'hamlib-test-fail';
+  } finally {
+    hamlibTestBtn.disabled = false;
   }
 });
 
@@ -1317,6 +1381,8 @@ settingsBtn.addEventListener('click', async () => {
   setEnableDxcc.checked = s.enableDxcc === true;
   setAdifPath.value = s.adifPath || '';
   adifPicker.classList.toggle('hidden', !s.enableDxcc);
+  hamlibTestResult.textContent = '';
+  hamlibTestResult.className = '';
   await populateRadioSection(s.catTarget);
   settingsDialog.showModal();
 });
@@ -1423,9 +1489,10 @@ window.api.onSpotsError((msg) => {
   lastRefreshEl.textContent = `Error: ${msg}`;
 });
 
-window.api.onCatStatus(({ connected }) => {
+window.api.onCatStatus(({ connected, error }) => {
   catStatusEl.textContent = 'CAT';
   catStatusEl.className = 'status ' + (connected ? 'connected' : 'disconnected');
+  catStatusEl.title = connected ? 'Connected' : (error || 'Disconnected');
 });
 
 // --- DXCC data listener ---
@@ -1865,6 +1932,10 @@ document.getElementById('issues-link').addEventListener('click', (e) => {
 document.getElementById('hamlib-link').addEventListener('click', (e) => {
   e.preventDefault();
   window.api.openExternal('https://hamlib.github.io/');
+});
+document.getElementById('hamlib-source-link').addEventListener('click', (e) => {
+  e.preventDefault();
+  window.api.openExternal('https://github.com/Hamlib/Hamlib');
 });
 
 // --- Titlebar controls ---
