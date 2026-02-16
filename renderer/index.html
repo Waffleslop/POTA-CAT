@@ -255,6 +255,16 @@
           <option value="5005">Slice D (TCP :5005)</option>
         </select></label>
       </div>
+      <label class="radio-label"><input type="radio" name="radio-type" value="tcpcat"> IP Radio (TCP CAT)</label>
+      <div id="tcpcat-config" class="radio-sub hidden">
+        <span style="font-size:12px;color:#808090;">Connect to any radio with TCP CAT (Flex on custom port, Elecraft K4, etc.)</span>
+        <label>Host:
+          <input type="text" id="set-tcpcat-host" placeholder="127.0.0.1" value="127.0.0.1">
+        </label>
+        <label>Port:
+          <input type="number" id="set-tcpcat-port" placeholder="5002" min="1" max="65535" value="5002">
+        </label>
+      </div>
       <label class="radio-label"><input type="radio" name="radio-type" value="hamlib"> Other Rig (Hamlib)</label>
       <div id="hamlib-config" class="radio-sub hidden">
         <label>Rig Model:

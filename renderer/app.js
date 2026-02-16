@@ -61,6 +61,9 @@ const setHideOutOfBand = document.getElementById('set-hide-out-of-band');
 const scanBtn = document.getElementById('scan-btn');
 const hamlibConfig = document.getElementById('hamlib-config');
 const flexConfig = document.getElementById('flex-config');
+const tcpcatConfig = document.getElementById('tcpcat-config');
+const setTcpcatHost = document.getElementById('set-tcpcat-host');
+const setTcpcatPort = document.getElementById('set-tcpcat-port');
 const setFlexSlice = document.getElementById('set-flex-slice');
 const radioTypeBtns = document.querySelectorAll('input[name="radio-type"]');
 const setRigModel = document.getElementById('set-rig-model');
@@ -184,6 +187,7 @@ function setRadioType(value) {
 function updateRadioSubPanels() {
   const type = getSelectedRadioType();
   flexConfig.classList.toggle('hidden', type !== 'flex');
+  tcpcatConfig.classList.toggle('hidden', type !== 'tcpcat');
   hamlibConfig.classList.toggle('hidden', type !== 'hamlib');
   if (type === 'hamlib' && !hamlibFieldsLoaded) {
     hamlibFieldsLoaded = true;
@@ -196,8 +200,17 @@ async function populateRadioSection(currentTarget) {
   if (!currentTarget) {
     setRadioType('none');
   } else if (currentTarget.type === 'tcp') {
-    setRadioType('flex');
-    setFlexSlice.value = String(currentTarget.port);
+    // Check if it matches a standard Flex slice (localhost + 5002-5005)
+    const isFlexSlice = (currentTarget.host === '127.0.0.1' || !currentTarget.host) &&
+      [5002, 5003, 5004, 5005].includes(currentTarget.port);
+    if (isFlexSlice) {
+      setRadioType('flex');
+      setFlexSlice.value = String(currentTarget.port);
+    } else {
+      setRadioType('tcpcat');
+      setTcpcatHost.value = currentTarget.host || '127.0.0.1';
+      setTcpcatPort.value = currentTarget.port || 5002;
+    }
   } else if (currentTarget.type === 'rigctld') {
     setRadioType('hamlib');
     hamlibFieldsLoaded = true;
@@ -1445,6 +1458,8 @@ settingsSave.addEventListener('click', async () => {
   const radioType = getSelectedRadioType();
   if (radioType === 'flex') {
     window.api.connectCat({ type: 'tcp', host: '127.0.0.1', port: parseInt(setFlexSlice.value, 10) });
+  } else if (radioType === 'tcpcat') {
+    window.api.connectCat({ type: 'tcp', host: setTcpcatHost.value.trim() || '127.0.0.1', port: parseInt(setTcpcatPort.value, 10) || 5002 });
   } else if (radioType === 'hamlib') {
     window.api.connectCat({
       type: 'rigctld',
