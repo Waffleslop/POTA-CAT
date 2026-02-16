@@ -1090,8 +1090,14 @@ app.whenReady().then(() => {
       // Spawn rigctld on port 4533 to avoid conflict with live instance on 4532
       testProc = await spawnRigctld({ rigId, serialPort, baudRate }, '4533');
 
-      // Give a bit more time for init, then try to read frequency
-      await new Promise((r) => setTimeout(r, 300));
+      // Give rigctld time to initialize and open the serial port
+      await new Promise((r) => setTimeout(r, 1000));
+
+      // Check if rigctld already exited (bad config, serial port issue, etc.)
+      if (testProc.exitCode !== null) {
+        const lastLine = rigctldStderr.trim().split('\n').pop() || `rigctld exited with code ${testProc.exitCode}`;
+        return { success: false, error: lastLine };
+      }
 
       const freq = await new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -1121,7 +1127,9 @@ app.whenReady().then(() => {
 
         sock.on('error', (err) => {
           clearTimeout(timeout);
-          reject(new Error(`TCP connection failed: ${err.message}`));
+          // Surface rigctld's stderr if available — it has the real error
+          const lastLine = rigctldStderr.trim().split('\n').pop();
+          reject(new Error(lastLine || `Connection failed: ${err.message}`));
         });
       });
 
