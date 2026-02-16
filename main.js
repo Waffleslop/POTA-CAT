@@ -815,8 +815,60 @@ function forwardToLogbook(qsoData) {
     // Log4OM watches the ADIF file directly — no network forwarding needed
     return Promise.resolve();
   }
-  // Future: n1mm, n3fjp, hrd
+  if (type === 'hrd') {
+    return sendHrdUdp(qsoData, host, port || 2333);
+  }
+  if (type === 'n3fjp') {
+    return sendN3fjpTcp(qsoData, host, port || 1100);
+  }
   return Promise.resolve();
+}
+
+/**
+ * Send a QSO to HRD Logbook via plain UDP ADIF on port 2333.
+ */
+function sendHrdUdp(qsoData, host, port) {
+  return new Promise((resolve, reject) => {
+    const dgram = require('dgram');
+    const record = buildAdifRecord(qsoData);
+    const adifText = `<adif_ver:5>3.1.4\n<programid:8>POTA CAT\n<EOH>\n${record}\n`;
+    const message = Buffer.from(adifText, 'utf-8');
+
+    const client = dgram.createSocket('udp4');
+    client.send(message, 0, message.length, port, host, (err) => {
+      client.close();
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+}
+
+/**
+ * Send a QSO to N3FJP via TCP ADDADIFRECORD command.
+ * Format: <CMD><ADDADIFRECORD><VALUE>...adif fields...<EOR></VALUE></CMD>\r\n
+ */
+function sendN3fjpTcp(qsoData, host, port) {
+  return new Promise((resolve, reject) => {
+    const net = require('net');
+    const record = buildAdifRecord(qsoData);
+    const cmd = `<CMD><ADDADIFRECORD><VALUE>${record}</VALUE></CMD>\r\n`;
+
+    const sock = net.createConnection({ host, port }, () => {
+      sock.write(cmd, 'utf-8', () => {
+        sock.end();
+        resolve();
+      });
+    });
+
+    sock.setTimeout(5000);
+    sock.on('timeout', () => {
+      sock.destroy();
+      reject(new Error('N3FJP connection timed out'));
+    });
+    sock.on('error', (err) => {
+      reject(new Error(`N3FJP: ${err.message}`));
+    });
+  });
 }
 
 // --- App lifecycle ---
@@ -898,6 +950,45 @@ function isNewerVersion(current, latest) {
   return false;
 }
 
+// --- Anonymous telemetry (opt-in only) ---
+const TELEMETRY_URL = 'https://pota-cat-telemetry.casey-3dc.workers.dev/ping';
+let sessionStartTime = Date.now();
+
+function generateTelemetryId() {
+  // Random UUID v4 — not tied to any user identity
+  const bytes = require('crypto').randomBytes(16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString('hex');
+  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-');
+}
+
+function sendTelemetry(sessionSeconds) {
+  if (!settings || !settings.enableTelemetry) return;
+  if (!settings.telemetryId) {
+    settings.telemetryId = generateTelemetryId();
+    saveSettings(settings);
+  }
+  const https = require('https');
+  const payload = JSON.stringify({
+    id: settings.telemetryId,
+    version: require('./package.json').version,
+    os: process.platform,
+    sessionSeconds: sessionSeconds || 0,
+  });
+  const url = new URL(TELEMETRY_URL);
+  const req = https.request({
+    hostname: url.hostname,
+    path: url.pathname,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    timeout: 5000,
+  });
+  req.on('error', () => { /* silently ignore */ });
+  req.write(payload);
+  req.end();
+}
+
 // --- Rig profile migration ---
 function describeTargetForMigration(target) {
   if (!target) return 'No Radio';
@@ -968,6 +1059,9 @@ app.whenReady().then(() => {
 
   // Check for updates (after a short delay so the window is ready)
   setTimeout(checkForUpdates, 5000);
+
+  // Send telemetry ping on launch (opt-in only, after short delay)
+  setTimeout(() => sendTelemetry(0), 8000);
 
   // IPC handlers
   ipcMain.on('open-external', (_e, url) => {
@@ -1178,6 +1272,10 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  // Send session duration telemetry before quitting
+  const sessionSeconds = Math.round((Date.now() - sessionStartTime) / 1000);
+  sendTelemetry(sessionSeconds);
+
   if (spotTimer) clearInterval(spotTimer);
   if (solarTimer) clearInterval(solarTimer);
   if (cat) cat.disconnect();

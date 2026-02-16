@@ -23,6 +23,7 @@ let hideOutOfBand = false;
 let enableLogging = false;
 let defaultPower = 100;
 let tuneClick = false;
+let activeRigName = ''; // name of the currently active rig profile
 let dxccData = null;  // { entities: [...] } from main process
 
 // --- Scan state ---
@@ -142,6 +143,7 @@ const logbookPortConfig = document.getElementById('logbook-port-config');
 const setLogbookHost = document.getElementById('set-logbook-host');
 const setLogbookPort = document.getElementById('set-logbook-port');
 const logbookHelp = document.getElementById('logbook-help');
+const setEnableTelemetry = document.getElementById('set-enable-telemetry');
 const logDialog = document.getElementById('log-dialog');
 const logCallsign = document.getElementById('log-callsign');
 const logFrequency = document.getElementById('log-frequency');
@@ -190,6 +192,10 @@ async function loadPrefs() {
   licenseClass = settings.licenseClass || 'none';
   hideOutOfBand = settings.hideOutOfBand === true;
   tuneClick = settings.tuneClick === true;
+  // Resolve active rig name
+  const rigs = settings.rigs || [];
+  const activeRig = rigs.find(r => r.id === settings.activeRigId);
+  activeRigName = activeRig ? activeRig.name : '';
   updateClusterStatusVisibility();
   updateRbnStatusVisibility();
   updateRbnButton();
@@ -795,9 +801,8 @@ const LOGBOOK_DEFAULTS = {
     fileWatch: true,
     instructions: 'In Log4OM 2: Settings > Program Configuration > Software Integration > ADIF Functions. In the ADIF Monitor tab, check "Enable ADIF monitor". Click the folder icon next to "ADIF file" and select the same ADIF log file used in POTA CAT. Press the green + button to add it to the list, then press "Save and apply". Log4OM will automatically import new QSOs as they are saved.',
   },
-  n1mm: { port: 2333, help: 'In N1MM+: Configurer > WSJT/JTDX Setup > set UDP port.' },
-  n3fjp: { port: 1100, help: 'In N3FJP: Settings > Application Program Interface > enable TCP API.' },
-  hrd: { port: 7826, help: 'HRD Logbook TCP API is always available when Logbook is running.' },
+  n3fjp: { port: 1100, help: 'In N3FJP: Settings > Application Program Interface > check "TCP API Enabled". Set the port to 1100 (default). N3FJP must be running to receive QSOs.' },
+  hrd: { port: 2333, help: 'In HRD Logbook: Tools > Configure > QSO Forwarding. Under UDP Receive, check "Receive QSO notifications using UDP9/ADIF from other logging programs (eg. WSJT-X)". Set the receive port to 2333 and select your target database. POTA CAT and WSJT-X can both send to this port simultaneously.' },
 };
 
 function updateLogbookPortConfig() {
@@ -1868,28 +1873,32 @@ logSaveBtn.addEventListener('click', async () => {
     if (result.success) {
       logDialog.close();
       if (result.logbookError) {
-        showLogToast(`Logged ${callsign} (logbook error: ${result.logbookError})`);
+        const friendly = result.logbookError.includes('ECONNREFUSED')
+          ? 'Could not reach logbook — is it running and configured correctly?'
+          : result.logbookError;
+        showLogToast(`Logged ${callsign} to ADIF, but logbook forwarding failed: ${friendly}`, { warn: true, duration: 8000 });
       } else {
         showLogToast(`Logged ${callsign}`);
       }
     } else {
-      showLogToast(`Error: ${result.error}`, true);
+      showLogToast(`Error: ${result.error}`, { warn: true, duration: 5000 });
     }
   } catch (err) {
-    showLogToast(`Error: ${err.message}`, true);
+    showLogToast(`Error: ${err.message}`, { warn: true, duration: 5000 });
   } finally {
     logSaveBtn.disabled = false;
   }
 });
 
-function showLogToast(message) {
+function showLogToast(message, opts) {
   const existing = document.querySelector('.log-toast');
   if (existing) existing.remove();
   const toast = document.createElement('div');
-  toast.className = 'log-toast';
+  toast.className = 'log-toast' + (opts && opts.warn ? ' warn' : '');
   toast.textContent = message;
   document.body.appendChild(toast);
-  setTimeout(() => { if (toast.parentNode) toast.remove(); }, 2200);
+  const duration = (opts && opts.duration) || 2200;
+  setTimeout(() => { if (toast.parentNode) toast.remove(); }, duration);
 }
 
 // --- Events ---
@@ -1953,6 +1962,7 @@ settingsBtn.addEventListener('click', async () => {
   setEnableDxcc.checked = s.enableDxcc === true;
   setAdifPath.value = s.adifPath || '';
   adifPicker.classList.toggle('hidden', !s.enableDxcc);
+  setEnableTelemetry.checked = s.enableTelemetry === true;
   hamlibTestResult.textContent = '';
   hamlibTestResult.className = '';
   renderRigList(s.rigs || [], s.activeRigId || null);
@@ -1983,6 +1993,7 @@ settingsSave.addEventListener('click', async () => {
   const licenseClassVal = setLicenseClass.value;
   const hideOob = setHideOutOfBand.checked;
   const tuneClickEnabled = setTuneClick.checked;
+  const telemetryEnabled = setEnableTelemetry.checked;
   const adifPath = setAdifPath.value.trim() || '';
   const loggingEnabled = setEnableLogging.checked;
   const adifLogPath = setAdifLogPath.value.trim() || '';
@@ -2032,6 +2043,7 @@ settingsSave.addEventListener('click', async () => {
     logbookType: logbookTypeVal,
     logbookHost: logbookHostVal,
     logbookPort: logbookPortVal,
+    enableTelemetry: telemetryEnabled,
   });
   distUnit = setDistUnit.value;
   maxAgeMin = maxAgeVal;
@@ -2055,6 +2067,7 @@ settingsSave.addEventListener('click', async () => {
   licenseClass = licenseClassVal;
   hideOutOfBand = hideOob;
   tuneClick = tuneClickEnabled;
+  activeRigName = selectedRig ? selectedRig.name : '';
   updateDxccButton();
   updateHeaders();
   saveFilters();
@@ -2079,7 +2092,9 @@ window.api.onSpotsError((msg) => {
 window.api.onCatStatus(({ connected, error }) => {
   catStatusEl.textContent = 'CAT';
   catStatusEl.className = 'status ' + (connected ? 'connected' : 'disconnected');
-  catStatusEl.title = connected ? 'Connected' : (error || 'Disconnected');
+  catStatusEl.title = connected
+    ? (activeRigName ? `Connected to ${activeRigName}` : 'Connected')
+    : (error || 'Disconnected');
 });
 
 // --- Update available listener ---
@@ -2576,6 +2591,7 @@ welcomeChoices.forEach((btn) => {
 
 async function finishWelcome() {
   const grid = welcomeGridInput.value.trim() || 'FN20jb';
+  const telemetryOptIn = document.getElementById('welcome-telemetry').checked;
   let catTarget = null;
   let rigs = [];
   let activeRigId = null;
@@ -2600,6 +2616,7 @@ async function finishWelcome() {
     scanDwell: 7,
     enablePota: true,
     enableSota: false,
+    enableTelemetry: telemetryOptIn,
   });
 
   welcomeDialog.close();

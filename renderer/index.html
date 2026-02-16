@@ -264,6 +264,7 @@
             <input type="text" id="set-adif-log-path" readonly style="flex:1;">
             <button type="button" id="adif-log-browse-btn">Browse</button>
           </div>
+          <span style="font-size:11px;color:#808090;display:block;margin-top:4px;">Local backup of all QSOs logged from POTA CAT</span>
         </label>
         <label>Default TX Power (W):
           <input type="number" id="set-default-power" min="1" max="5000" value="100">
@@ -273,10 +274,9 @@
           <label>Logbook:
             <select id="set-logbook-type">
               <option value="">Select...</option>
+              <option value="hrd">Ham Radio Deluxe</option>
               <option value="log4om">Log4OM 2</option>
-              <option value="n1mm" disabled>N1MM+ (coming soon)</option>
-              <option value="hrd" disabled>Ham Radio Deluxe (coming soon)</option>
-              <option value="n3fjp" disabled>N3FJP (coming soon)</option>
+              <option value="n3fjp">N3FJP</option>
             </select>
           </label>
           <div id="logbook-instructions" class="hidden" style="margin-top:6px;font-size:11px;color:#808090;line-height:1.5;"></div>
@@ -324,6 +324,11 @@
           </div>
         </label>
       </div>
+    </fieldset>
+    <fieldset class="source-toggles">
+      <legend>Privacy</legend>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-telemetry"> Share anonymous usage statistics</label>
+      <span style="font-size:11px;color:#808090;margin-left:12px;display:block;">Helps improve POTA CAT. Only sends: a random ID, app version, OS, and session duration. No callsign, grid, settings, or frequencies are ever collected. You can opt out at any time.</span>
     </fieldset>
     <fieldset class="radio-config">
       <legend>Radio</legend>
@@ -488,6 +493,8 @@
       </button>
     </div>
     <label class="welcome-grid">QTH Grid Square: <input type="text" id="welcome-grid" maxlength="6" placeholder="FN20jb"></label>
+    <label class="checkbox-label welcome-telemetry"><input type="checkbox" id="welcome-telemetry" checked> Share anonymous usage statistics</label>
+    <span style="font-size:11px;color:#808090;margin-left:12px;margin-top:-4px;display:block;">No callsign, grid, or personal data is collected. You can opt out any time in Settings.</span>
   </dialog>
 
   <script src="../node_modules/leaflet/dist/leaflet.js"></script>

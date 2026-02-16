@@ -948,7 +948,12 @@ dialog input, dialog select {
 
 .welcome-grid {
   display: block;
-  margin-bottom: 0;
+  margin-bottom: 8px;
+}
+
+.welcome-telemetry {
+  margin-top: 4px;
+  font-size: 12px;
 }
 
 /* DXCC Tracker */
@@ -1429,14 +1434,29 @@ dialog input, dialog select {
   border-radius: 4px;
   border: 1px solid #4ecca3;
   font-size: 13px;
+  max-width: 420px;
   z-index: 10001;
   animation: log-toast-fade 2s ease-in-out forwards;
+}
+
+.log-toast.warn {
+  background: #3d2a0a;
+  color: #f0a500;
+  border-color: #f0a500;
+  animation: log-toast-fade-long 8s ease-in-out forwards;
 }
 
 @keyframes log-toast-fade {
   0% { opacity: 0; transform: translateY(10px); }
   15% { opacity: 1; transform: translateY(0); }
   85% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-10px); }
+}
+
+@keyframes log-toast-fade-long {
+  0% { opacity: 0; transform: translateY(10px); }
+  5% { opacity: 1; transform: translateY(0); }
+  90% { opacity: 1; transform: translateY(0); }
   100% { opacity: 0; transform: translateY(-10px); }
 }
 

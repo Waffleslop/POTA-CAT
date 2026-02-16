@@ -1,0 +1,13 @@
+name = "pota-cat-telemetry"
+main = "telemetry-worker.js"
+compatibility_date = "2024-01-01"
+account_id = "3dc9c47e0ae659e8eeed97bc7f6eeaf4"
+workers_dev = true
+
+routes = [
+  { pattern = "telemetry.potacat.com/*", zone_name = "potacat.com" }
+]
+
+[[kv_namespaces]]
+binding = "TELEMETRY"
+id = "f63629549e5349b790628f469999c64b"
