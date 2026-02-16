@@ -382,6 +382,10 @@
               <option value="115200">115200</option>
             </select>
           </label>
+          <label class="checkbox-label" style="margin-top:6px;display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" id="set-rig-dtr-off"> Disable DTR/RTS on connect
+          </label>
+          <span style="font-size:11px;color:#808090;margin-top:2px;display:block;">Prevents PTT keying on Digirig, SignaLink, and similar interfaces</span>
           <div style="margin-top:6px;display:flex;align-items:center;gap:8px;">
             <button type="button" id="hamlib-test-btn">Test Connection</button>
             <span id="hamlib-test-result" style="font-size:12px;"></span>

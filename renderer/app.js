@@ -82,6 +82,7 @@ const setRigModel = document.getElementById('set-rig-model');
 const setRigPort = document.getElementById('set-rig-port');
 const setRigPortManual = document.getElementById('set-rig-port-manual');
 const setRigBaud = document.getElementById('set-rig-baud');
+const setRigDtrOff = document.getElementById('set-rig-dtr-off');
 const setRigSearch = document.getElementById('set-rig-search');
 const hamlibTestBtn = document.getElementById('hamlib-test-btn');
 const hamlibTestResult = document.getElementById('hamlib-test-result');
@@ -319,6 +320,9 @@ async function populateHamlibFields(savedTarget) {
   if (savedTarget && savedTarget.baudRate) {
     setRigBaud.value = String(savedTarget.baudRate);
   }
+
+  // Restore DTR/RTS checkbox
+  setRigDtrOff.checked = !!(savedTarget && savedTarget.dtrOff);
 }
 
 // --- Rig profile management ---
@@ -437,6 +441,7 @@ function buildCatTargetFromForm() {
       rigId: parseInt(setRigModel.value, 10),
       serialPort: getEffectivePort(),
       baudRate: parseInt(setRigBaud.value, 10),
+      dtrOff: setRigDtrOff.checked,
     };
   }
   return null;
@@ -2114,7 +2119,7 @@ window.api.onUpdateAvailable(({ version, url, headline }) => {
   });
   supportLink.addEventListener('click', (e) => {
     e.preventDefault();
-    window.api.openExternal('https://potacat.com/support');
+    window.api.openExternal('https://buymeacoffee.com/potacat');
   });
   dismissBtn.addEventListener('click', () => {
     banner.classList.add('hidden');
