@@ -26,6 +26,9 @@ let tuneClick = false;
 let activeRigName = ''; // name of the currently active rig profile
 let workedCallsigns = new Set(); // uppercase callsigns from QSO log
 let hideWorked = false;
+let respotDefault = true; // default: re-spot on POTA after logging
+let respotTemplate = 'Thanks for {rst}. 73s {mycallsign} via POTA CAT'; // re-spot comment template
+let myCallsign = '';
 let dxccData = null;  // { entities: [...] } from main process
 
 // --- Scan state ---
@@ -219,6 +222,9 @@ async function loadPrefs() {
   licenseClass = settings.licenseClass || 'none';
   hideOutOfBand = settings.hideOutOfBand === true;
   hideWorked = settings.hideWorked === true;
+  respotDefault = settings.respotDefault !== false; // default true
+  if (settings.respotTemplate != null) respotTemplate = settings.respotTemplate;
+  myCallsign = settings.myCallsign || '';
   tuneClick = settings.tuneClick === true;
   catLogToggleBtn.classList.toggle('hidden', settings.verboseLog !== true);
   // Resolve active rig name
@@ -1978,6 +1984,24 @@ function openLogPopup(spot) {
   }
 
   logComment.value = '';
+
+  // Re-spot section: only show for POTA spots when myCallsign is set
+  const respotSection = document.getElementById('log-respot-section');
+  const respotCheckbox = document.getElementById('log-respot');
+  const respotComment = document.getElementById('log-respot-comment');
+  const respotCommentLabel = document.getElementById('log-respot-comment-label');
+  if (spot.source === 'pota' && spot.reference) {
+    respotSection.classList.remove('hidden');
+    respotCheckbox.checked = respotDefault;
+    respotComment.value = respotTemplate;
+    respotCommentLabel.style.display = respotCheckbox.checked ? '' : 'none';
+    respotCheckbox.onchange = () => {
+      respotCommentLabel.style.display = respotCheckbox.checked ? '' : 'none';
+    };
+  } else {
+    respotSection.classList.add('hidden');
+  }
+
   logDialog.showModal();
 }
 
@@ -2038,6 +2062,19 @@ logSaveBtn.addEventListener('click', async () => {
     sigInfo = currentLogSpot.reference;
   }
 
+  // Re-spot checkbox state
+  const respotCheckbox = document.getElementById('log-respot');
+  const respotComment = document.getElementById('log-respot-comment');
+  const respotSection = document.getElementById('log-respot-section');
+  const wantsRespot = !respotSection.classList.contains('hidden') && respotCheckbox.checked;
+
+  // Persist re-spot preference and template
+  if (!respotSection.classList.contains('hidden')) {
+    respotDefault = respotCheckbox.checked;
+    respotTemplate = respotComment.value.trim() || respotTemplate;
+    window.api.saveSettings({ respotDefault: respotCheckbox.checked, respotTemplate });
+  }
+
   const qsoData = {
     callsign,
     frequency,
@@ -2051,6 +2088,8 @@ logSaveBtn.addEventListener('click', async () => {
     sig,
     sigInfo,
     comment: logComment.value.trim(),
+    respot: wantsRespot,
+    respotComment: wantsRespot ? respotComment.value.trim().replace(/\{rst\}/gi, logRstSent.value.trim() || '59').replace(/\{mycallsign\}/gi, myCallsign) : '',
   };
 
   logSaveBtn.disabled = true;
@@ -2063,6 +2102,10 @@ logSaveBtn.addEventListener('click', async () => {
           ? 'Could not reach logbook — is it running and configured correctly?'
           : result.logbookError;
         showLogToast(`Logged ${callsign} to ADIF, but logbook forwarding failed: ${friendly}`, { warn: true, duration: 8000 });
+      } else if (result.respotError) {
+        showLogToast(`Logged ${callsign} to ADIF, but POTA re-spot failed: ${result.respotError}`, { warn: true, duration: 8000 });
+      } else if (result.resposted) {
+        showLogToast(`Logged ${callsign} — re-spotted on POTA`);
       } else {
         showLogToast(`Logged ${callsign}`);
       }

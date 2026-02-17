@@ -1084,6 +1084,47 @@ function generateTelemetryId() {
   return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-');
 }
 
+function postPotaRespot(spotData) {
+  const https = require('https');
+  const payload = JSON.stringify({
+    activator: spotData.activator,
+    spotter: spotData.spotter,
+    frequency: spotData.frequency,
+    reference: spotData.reference,
+    mode: spotData.mode,
+    source: 'POTA CAT',
+    comments: spotData.comments,
+  });
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'api.pota.app',
+      path: '/spot/',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+        'origin': 'https://pota.app',
+        'referer': 'https://pota.app/',
+      },
+      timeout: 10000,
+    }, (res) => {
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve();
+        } else {
+          reject(new Error(`HTTP ${res.statusCode}: ${body.slice(0, 200)}`));
+        }
+      });
+    });
+    req.on('error', (err) => reject(err));
+    req.on('timeout', () => { req.destroy(); reject(new Error('Request timed out')); });
+    req.write(payload);
+    req.end();
+  });
+}
+
 function sendTelemetry(sessionSeconds) {
   if (!settings || !settings.enableTelemetry) return Promise.resolve();
   if (!settings.telemetryId) {
@@ -1494,6 +1535,24 @@ app.whenReady().then(() => {
         } catch (fwdErr) {
           console.error('Logbook forwarding failed:', fwdErr.message);
           return { success: true, logbookError: fwdErr.message };
+        }
+      }
+
+      // Re-spot on POTA if requested
+      if (qsoData.respot && qsoData.sig === 'POTA' && qsoData.sigInfo && settings.myCallsign) {
+        try {
+          await postPotaRespot({
+            activator: qsoData.callsign,
+            spotter: settings.myCallsign.toUpperCase(),
+            frequency: qsoData.frequency,
+            reference: qsoData.sigInfo,
+            mode: qsoData.mode,
+            comments: qsoData.respotComment || '',
+          });
+          return { success: true, resposted: true };
+        } catch (respotErr) {
+          console.error('POTA re-spot failed:', respotErr.message);
+          return { success: true, respotError: respotErr.message };
         }
       }
 

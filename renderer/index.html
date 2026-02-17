@@ -555,6 +555,16 @@
     <label>Notes:
       <input type="text" id="log-comment" placeholder="Optional notes">
     </label>
+    <div id="log-respot-section" class="hidden" style="margin:8px 0;">
+      <label class="checkbox-label" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+        <input type="checkbox" id="log-respot"> Re-spot on POTA
+      </label>
+      <label id="log-respot-comment-label" style="display:block;margin-top:6px;">
+        Re-spot comment:
+        <input type="text" id="log-respot-comment" placeholder="Thanks for {rst}. 73s {mycallsign} via POTA CAT">
+        <span class="help-text">Use {rst} to automatically fill in the received signal report</span>
+      </label>
+    </div>
     <div class="dialog-buttons">
       <button type="button" id="log-cancel">Cancel</button>
       <button type="button" id="log-save" class="log-save-btn">Save QSO</button>
