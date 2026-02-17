@@ -1212,7 +1212,7 @@ app.whenReady().then(() => {
 
   ipcMain.on('refresh', () => { refreshSpots(); });
 
-  ipcMain.handle('get-settings', () => settings);
+  ipcMain.handle('get-settings', () => ({ ...settings, appVersion: require('./package.json').version }));
 
   ipcMain.handle('list-ports', async () => {
     return listSerialPorts();

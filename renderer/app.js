@@ -2821,6 +2821,9 @@ document.getElementById('welcome-discord-link').addEventListener('click', (e) =>
   e.preventDefault();
   window.api.openExternal('https://discord.gg/JjdKSshej');
 });
+document.getElementById('welcome-coffee-btn').addEventListener('click', () => {
+  window.api.openExternal('https://buymeacoffee.com/potacat');
+});
 document.getElementById('issues-link').addEventListener('click', (e) => {
   e.preventDefault();
   window.api.openExternal('https://github.com/Waffleslop/POTA-CAT/issues');
@@ -2839,34 +2842,70 @@ document.getElementById('tb-close').addEventListener('click', () => window.api.c
 const welcomeDialog = document.getElementById('welcome-dialog');
 const welcomeGridInput = document.getElementById('welcome-grid');
 const welcomeLightMode = document.getElementById('welcome-light-mode');
+const welcomeCallsignInput = document.getElementById('welcome-callsign');
+const welcomeWatchlistInput = document.getElementById('welcome-watchlist');
 
 welcomeLightMode.addEventListener('change', () => applyTheme(welcomeLightMode.checked));
 
+// Pre-fill watchlist with callsign as user types
+welcomeCallsignInput.addEventListener('input', () => {
+  const call = welcomeCallsignInput.value.trim().toUpperCase();
+  if (call && !welcomeWatchlistInput.value.trim()) {
+    welcomeWatchlistInput.placeholder = `${call}, K4SWL, KI6NAZ`;
+  } else if (!call) {
+    welcomeWatchlistInput.placeholder = 'K3SBP, K4SWL, KI6NAZ';
+  }
+});
+
 document.getElementById('welcome-start').addEventListener('click', async () => {
-  const myCallsign = (document.getElementById('welcome-callsign').value.trim() || '').toUpperCase();
+  const myCallsign = (welcomeCallsignInput.value.trim() || '').toUpperCase();
   const grid = welcomeGridInput.value.trim() || 'FN20jb';
+  const distUnitVal = document.getElementById('welcome-dist-unit').value;
+  const licenseClassVal = document.getElementById('welcome-license-class').value;
+  const watchlistVal = welcomeWatchlistInput.value.trim();
+  const enablePotaVal = document.getElementById('welcome-enable-pota').checked;
+  const enableSotaVal = document.getElementById('welcome-enable-sota').checked;
   const telemetryOptIn = document.getElementById('welcome-telemetry').checked;
   const lightModeEnabled = welcomeLightMode.checked;
+  const currentSettings = await window.api.getSettings();
 
   await window.api.saveSettings({
     myCallsign,
     grid,
+    distUnit: distUnitVal,
+    licenseClass: licenseClassVal,
+    watchlist: watchlistVal,
     firstRun: false,
-    distUnit: 'mi',
+    lastVersion: currentSettings.appVersion,
     maxAgeMin: 5,
     scanDwell: 7,
-    enablePota: true,
-    enableSota: false,
+    enablePota: enablePotaVal,
+    enableSota: enableSotaVal,
     enableTelemetry: telemetryOptIn,
     lightMode: lightModeEnabled,
   });
 
   welcomeDialog.close();
+  // Reload prefs so the main UI reflects welcome choices
+  loadPrefs();
 });
 
 async function checkFirstRun() {
   const s = await window.api.getSettings();
-  if (s.firstRun) {
+  const isNewVersion = s.appVersion && s.lastVersion !== s.appVersion;
+  if (s.firstRun || isNewVersion) {
+    // Pre-fill with existing settings on upgrade (not fresh install)
+    if (!s.firstRun) {
+      welcomeCallsignInput.value = s.myCallsign || '';
+      welcomeGridInput.value = s.grid || '';
+      welcomeWatchlistInput.value = s.watchlist || '';
+      if (s.distUnit) document.getElementById('welcome-dist-unit').value = s.distUnit;
+      if (s.licenseClass) document.getElementById('welcome-license-class').value = s.licenseClass;
+      document.getElementById('welcome-enable-pota').checked = s.enablePota !== false;
+      document.getElementById('welcome-enable-sota').checked = s.enableSota === true;
+      document.getElementById('welcome-telemetry').checked = s.enableTelemetry === true;
+      welcomeLightMode.checked = s.lightMode === true;
+    }
     welcomeDialog.showModal();
   }
 }
