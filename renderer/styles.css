@@ -1396,6 +1396,15 @@ dialog input, dialog select {
   display: table-cell;
 }
 
+/* Beam heading column */
+.bearing-col {
+  display: none;
+}
+
+.bearing-enabled .bearing-col {
+  display: table-cell;
+}
+
 .log-cell {
   text-align: center;
   overflow: visible;

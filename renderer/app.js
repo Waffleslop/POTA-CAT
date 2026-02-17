@@ -26,6 +26,7 @@ let tuneClick = false;
 let activeRigName = ''; // name of the currently active rig profile
 let workedCallsigns = new Set(); // uppercase callsigns from QSO log
 let hideWorked = false;
+let showBearing = false;
 let respotDefault = true; // default: re-spot on POTA after logging
 let respotTemplate = 'Thanks for {rst}. 73s {mycallsign} via POTA CAT'; // re-spot comment template
 let myCallsign = '';
@@ -146,6 +147,7 @@ const kStatusEl = document.getElementById('k-status');
 const aStatusEl = document.getElementById('a-status');
 const setEnableSolar = document.getElementById('set-enable-solar');
 const setEnableBandActivity = document.getElementById('set-enable-band-activity');
+const setShowBearing = document.getElementById('set-show-bearing');
 const setEnableLogging = document.getElementById('set-enable-logging');
 const loggingConfig = document.getElementById('logging-config');
 const setAdifLogPath = document.getElementById('set-adif-log-path');
@@ -219,6 +221,8 @@ async function loadPrefs() {
   enableLogging = settings.enableLogging === true;
   defaultPower = parseInt(settings.defaultPower, 10) || 100;
   updateLoggingVisibility();
+  showBearing = settings.showBearing === true;
+  updateBearingVisibility();
   licenseClass = settings.licenseClass || 'none';
   hideOutOfBand = settings.hideOutOfBand === true;
   hideWorked = settings.hideWorked === true;
@@ -770,6 +774,14 @@ function updateLoggingVisibility() {
   }
 }
 
+function updateBearingVisibility() {
+  if (showBearing) {
+    spotsTable.classList.add('bearing-enabled');
+  } else {
+    spotsTable.classList.remove('bearing-enabled');
+  }
+}
+
 // --- Tune confirmation click ---
 let audioCtx = null;
 function playTuneClick() {
@@ -1110,9 +1122,9 @@ function sortSpots(spots) {
 // --- Column Resizing ---
 // --- Column Resizing ---
 // Widths stored as percentages of table width so they always fit
-const COL_WIDTHS_KEY = 'pota-cat-col-pct-v5';
-// Log, Callsign, Freq, Mode, Ref, Name, State, Dist, Age, Skip
-const DEFAULT_COL_PCT = [4, 10, 8, 5, 8, 24, 11, 7, 7, 6];
+const COL_WIDTHS_KEY = 'pota-cat-col-pct-v6';
+// Log, Callsign, Freq, Mode, Ref, Name, State, Dist, Heading, Age, Skip
+const DEFAULT_COL_PCT = [4, 10, 8, 5, 8, 22, 10, 7, 5, 7, 6];
 
 function loadColWidths() {
   try {
@@ -1469,6 +1481,14 @@ function formatDistance(miles) {
   if (miles == null) return '—';
   if (distUnit === 'km') return Math.round(miles * MI_TO_KM);
   return miles;
+}
+
+const COMPASS_POINTS = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+
+function formatBearing(deg) {
+  if (deg == null) return '—';
+  const idx = Math.round(deg / 22.5) % 16;
+  return deg + '\u00B0 ' + COMPASS_POINTS[idx];
 }
 
 function updateMapMarkers(filtered) {
@@ -1850,17 +1870,19 @@ function render() {
       tr.appendChild(freqTd);
 
       const cells = [
-        s.mode,
-        s.reference,
-        s.parkName,
-        s.locationDesc,
-        formatDistance(s.distance),
-        formatAge(s.spotTime),
+        { val: s.mode },
+        { val: s.reference },
+        { val: s.parkName },
+        { val: s.locationDesc },
+        { val: formatDistance(s.distance) },
+        { val: formatBearing(s.bearing), cls: 'bearing-col' },
+        { val: formatAge(s.spotTime) },
       ];
 
-      for (const val of cells) {
+      for (const cell of cells) {
         const td = document.createElement('td');
-        td.textContent = val;
+        td.textContent = cell.val;
+        if (cell.cls) td.className = cell.cls;
         tr.appendChild(td);
       }
 
@@ -2142,7 +2164,7 @@ document.querySelectorAll('thead th[data-sort]').forEach((th) => {
       sortAsc = !sortAsc;
     } else {
       sortCol = col;
-      sortAsc = col === 'distance';
+      sortAsc = col === 'distance' || col === 'bearing';
     }
     render();
   });
@@ -2190,6 +2212,7 @@ settingsBtn.addEventListener('click', async () => {
   updateLogbookPortConfig();
   setEnableSolar.checked = s.enableSolar === true;
   setEnableBandActivity.checked = s.enableBandActivity === true;
+  setShowBearing.checked = s.showBearing === true;
   setEnableDxcc.checked = s.enableDxcc === true;
   setAdifPath.value = s.adifPath || '';
   adifPicker.classList.toggle('hidden', !s.enableDxcc);
@@ -2233,6 +2256,7 @@ settingsSave.addEventListener('click', async () => {
   const clusterPort = parseInt(setClusterPort.value, 10) || 7373;
   const solarEnabled = setEnableSolar.checked;
   const bandActivityEnabled = setEnableBandActivity.checked;
+  const showBearingEnabled = setShowBearing.checked;
   const dxccEnabled = setEnableDxcc.checked;
   const licenseClassVal = setLicenseClass.value;
   const hideOob = setHideOutOfBand.checked;
@@ -2284,6 +2308,7 @@ settingsSave.addEventListener('click', async () => {
     clusterPort: clusterPort,
     enableSolar: solarEnabled,
     enableBandActivity: bandActivityEnabled,
+    showBearing: showBearingEnabled,
     enableDxcc: dxccEnabled,
     licenseClass: licenseClassVal,
     hideOutOfBand: hideOob,
@@ -2322,6 +2347,8 @@ settingsSave.addEventListener('click', async () => {
   updateSolarVisibility();
   enableBandActivity = bandActivityEnabled;
   updateBandActivityVisibility();
+  showBearing = showBearingEnabled;
+  updateBearingVisibility();
   enableLogging = loggingEnabled;
   defaultPower = defaultPowerVal;
   updateLoggingVisibility();

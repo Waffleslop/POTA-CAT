@@ -5,7 +5,7 @@ const { execFile, spawn } = require('child_process');
 const { fetchSpots: fetchPotaSpots } = require('./lib/pota');
 const { fetchSpots: fetchSotaSpots, fetchSummitCoordsBatch, summitCache } = require('./lib/sota');
 const { CatClient, RigctldClient, listSerialPorts } = require('./lib/cat');
-const { gridToLatLon, haversineDistanceMiles } = require('./lib/grid');
+const { gridToLatLon, haversineDistanceMiles, bearing } = require('./lib/grid');
 const { freqToBand } = require('./lib/bands');
 const { loadCtyDat, resolveCallsign, getAllEntities } = require('./lib/cty');
 const { parseAdifFile, parseWorkedCallsigns } = require('./lib/adif');
@@ -340,6 +340,7 @@ function connectCluster() {
           // Skip distance for same-entity spots — cty.dat centroid is meaningless
           if (myPos && entity !== myEntity) {
             spot.distance = Math.round(haversineDistanceMiles(myPos.lat, myPos.lon, entity.lat, entity.lon));
+            spot.bearing = Math.round(bearing(myPos.lat, myPos.lon, entity.lat, entity.lon));
           }
         }
       }
@@ -546,7 +547,7 @@ function connectRbn() {
     // Add watchlist callsigns (not self) to main table as merged spots
     if (rbnWatchSet.has(raw.callsign.toUpperCase()) && raw.callsign.toUpperCase() !== myCall) {
       // Resolve activator's location (not spotter's) for main table/map
-      let actLat = null, actLon = null, actDist = null, actLoc = '', actContinent = '';
+      let actLat = null, actLon = null, actDist = null, actBearing = null, actLoc = '', actContinent = '';
       if (ctyDb) {
         const actEntity = resolveCallsign(raw.callsign, ctyDb);
         if (actEntity) {
@@ -557,6 +558,7 @@ function connectRbn() {
             actLon = actEntity.lon;
             if (myPos) {
               actDist = Math.round(haversineDistanceMiles(myPos.lat, myPos.lon, actEntity.lat, actEntity.lon));
+              actBearing = Math.round(bearing(myPos.lat, myPos.lon, actEntity.lat, actEntity.lon));
             }
           }
         }
@@ -573,6 +575,7 @@ function connectRbn() {
         locationDesc: actLoc,
         continent: actContinent,
         distance: actDist,
+        bearing: actBearing,
         lat: actLat,
         lon: actLon,
         spotTime: raw.spotTime,
@@ -718,6 +721,11 @@ function processPotaSpots(raw) {
       if (entity) continent = entity.continent || '';
     }
 
+    let spotBearing = null;
+    if (myPos && lat != null && lon != null) {
+      spotBearing = Math.round(bearing(myPos.lat, myPos.lon, lat, lon));
+    }
+
     return {
       source: 'pota',
       callsign,
@@ -728,6 +736,7 @@ function processPotaSpots(raw) {
       parkName: s.name || s.parkName || '',
       locationDesc: s.locationDesc || '',
       distance,
+      bearing: spotBearing,
       lat,
       lon,
       band: freqToBand(freqMHz),
@@ -768,6 +777,11 @@ async function processSotaSpots(raw) {
       if (entity) continent = entity.continent || '';
     }
 
+    let spotBearing = null;
+    if (myPos && lat != null && lon != null) {
+      spotBearing = Math.round(bearing(myPos.lat, myPos.lon, lat, lon));
+    }
+
     return {
       source: 'sota',
       callsign,
@@ -778,6 +792,7 @@ async function processSotaSpots(raw) {
       parkName: s.summitDetails || '',
       locationDesc: assoc,
       distance,
+      bearing: spotBearing,
       lat,
       lon,
       band: freqToBand(freqMHz),
