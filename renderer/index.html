@@ -483,7 +483,7 @@
       <button id="settings-cancel">Cancel</button>
     </div>
     <div class="settings-footer">
-      <div class="settings-version">v0.9.6 beta &mdash; <a href="#" id="bio-link">Casey Stanton, K3SBP</a></div>
+      <div class="settings-version">v0.9.7 beta &mdash; <a href="#" id="bio-link">Casey Stanton, K3SBP</a></div>
       <div class="settings-coffee"><a href="#" id="coffee-link">Buy Me a Coffee</a></div>
       <div class="settings-links">
         <a href="#" id="discord-link">Discord</a>
@@ -562,24 +562,42 @@
   <!-- Welcome dialog (first run) -->
   <dialog id="welcome-dialog">
     <h3>Welcome to POTA CAT</h3>
-    <p class="welcome-text">Let's get you set up. What radio are you using?</p>
-    <div class="welcome-choices">
-      <button class="welcome-choice" data-radio="flex">
-        <span class="welcome-choice-title">FlexRadio</span>
-        <span class="welcome-choice-desc">SmartSDR via TCP</span>
-      </button>
-      <button class="welcome-choice" data-radio="hamlib">
-        <span class="welcome-choice-title">Other Rig</span>
-        <span class="welcome-choice-desc">Via Hamlib (rigctld)</span>
-      </button>
-      <button class="welcome-choice" data-radio="none">
-        <span class="welcome-choice-title">No Radio</span>
-        <span class="welcome-choice-desc">Just browse spots</span>
-      </button>
+    <p class="welcome-text">Let's get you set up. You can configure your radio any time in Settings.</p>
+    <label class="welcome-field">Callsign: <input type="text" id="welcome-callsign" maxlength="10" placeholder="WB6ACU" style="text-transform:uppercase;"></label>
+    <span class="help-text" style="margin-top:-4px;margin-bottom:8px;display:block;">Required for DX Cluster login and QSO logging</span>
+    <label class="welcome-field">QTH Grid Square: <input type="text" id="welcome-grid" maxlength="6" placeholder="FN20jb"></label>
+    <span class="help-text" style="margin-top:-4px;margin-bottom:8px;display:block;">Used to calculate distance from you to each spot</span>
+    <div style="display:flex;gap:8px;">
+      <label class="welcome-field" style="flex:1;">Distance Unit:
+        <select id="welcome-dist-unit">
+          <option value="mi">Miles</option>
+          <option value="km">Kilometers</option>
+        </select>
+      </label>
+      <label class="welcome-field" style="flex:1;">License Class:
+        <select id="welcome-license-class">
+          <option value="none">None (no filtering)</option>
+          <optgroup label="United States">
+            <option value="us_extra">US Extra</option>
+            <option value="us_advanced">US Advanced</option>
+            <option value="us_general">US General</option>
+            <option value="us_technician">US Technician</option>
+          </optgroup>
+          <optgroup label="Canada">
+            <option value="ca_honours">CA Basic with Honours</option>
+            <option value="ca_basic">CA Basic</option>
+          </optgroup>
+        </select>
+      </label>
     </div>
-    <label class="welcome-grid">Callsign: <input type="text" id="welcome-callsign" maxlength="10" placeholder="WB6ACU" style="text-transform:uppercase;"></label>
-    <span class="help-text" style="margin-left:0;margin-top:-4px;margin-bottom:8px;display:block;">Used for DX Cluster, Reverse Beacon Network, and QSO logging</span>
-    <label class="welcome-grid">QTH Grid Square: <input type="text" id="welcome-grid" maxlength="6" placeholder="FN20jb"></label>
+    <label class="welcome-field">Watchlist:
+      <input type="text" id="welcome-watchlist" placeholder="K3SBP, K4SWL, KI6NAZ">
+    </label>
+    <span class="help-text" style="margin-top:-4px;margin-bottom:8px;display:block;">Comma-separated callsigns to highlight in the spot table</span>
+    <div style="display:flex;gap:12px;margin-bottom:8px;">
+      <label class="checkbox-label"><input type="checkbox" id="welcome-enable-pota" checked> POTA spots</label>
+      <label class="checkbox-label"><input type="checkbox" id="welcome-enable-sota" checked> SOTA spots</label>
+    </div>
     <label class="switch-label welcome-theme-switch">
       <span>Dark Mode</span>
       <div class="switch">
@@ -592,6 +610,13 @@
     <span class="help-text" style="margin-left:12px;margin-top:-4px;display:block;">No callsign, grid, or personal data is collected. You can opt out any time in Settings.</span>
     <div class="welcome-beta-note">
       POTA CAT is in beta and we're working toward a strong v1 release. We're still collecting feedback on radio settings that work for each rig. Please visit the <a href="#" id="welcome-discord-link">Discord</a> and share a rig report on what you're integrating &mdash; every tester helps!
+    </div>
+    <div class="dialog-buttons" style="margin-top:12px;">
+      <button type="button" id="welcome-start" class="log-save-btn">Get Started</button>
+    </div>
+    <div class="welcome-coffee">
+      <span>Love POTA CAT? A coffee goes a long way to keep development alive!</span>
+      <button type="button" id="welcome-coffee-btn" class="coffee-btn">Buy Me a Coffee</button>
     </div>
   </dialog>
 
