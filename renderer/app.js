@@ -66,6 +66,7 @@ const setLicenseClass = document.getElementById('set-license-class');
 const setHideOutOfBand = document.getElementById('set-hide-out-of-band');
 const setHideWorked = document.getElementById('set-hide-worked');
 const setTuneClick = document.getElementById('set-tune-click');
+const setVerboseLog = document.getElementById('set-verbose-log');
 const continentFilterEl = document.getElementById('continent-filter');
 const scanBtn = document.getElementById('scan-btn');
 const hamlibConfig = document.getElementById('hamlib-config');
@@ -219,6 +220,7 @@ async function loadPrefs() {
   hideOutOfBand = settings.hideOutOfBand === true;
   hideWorked = settings.hideWorked === true;
   tuneClick = settings.tuneClick === true;
+  catLogToggleBtn.classList.toggle('hidden', settings.verboseLog !== true);
   // Resolve active rig name
   const rigs = settings.rigs || [];
   const activeRig = rigs.find(r => r.id === settings.activeRigId);
@@ -2119,6 +2121,7 @@ settingsBtn.addEventListener('click', async () => {
   setHideOutOfBand.checked = s.hideOutOfBand === true;
   setHideWorked.checked = s.hideWorked === true;
   setTuneClick.checked = s.tuneClick === true;
+  setVerboseLog.checked = s.verboseLog === true;
   setEnablePota.checked = s.enablePota !== false;
   setEnableSota.checked = s.enableSota === true;
   setEnableCluster.checked = s.enableCluster === true;
@@ -2192,6 +2195,7 @@ settingsSave.addEventListener('click', async () => {
   const hideOob = setHideOutOfBand.checked;
   const hideWorkedEnabled = setHideWorked.checked;
   const tuneClickEnabled = setTuneClick.checked;
+  const verboseLogEnabled = setVerboseLog.checked;
   const telemetryEnabled = setEnableTelemetry.checked;
   const lightModeEnabled = setLightMode.checked;
   const smartSdrSpotsEnabled = setSmartSdrSpots.checked;
@@ -2242,6 +2246,7 @@ settingsSave.addEventListener('click', async () => {
     hideOutOfBand: hideOob,
     hideWorked: hideWorkedEnabled,
     tuneClick: tuneClickEnabled,
+    verboseLog: verboseLogEnabled,
     adifPath: adifPath,
     enableLogging: loggingEnabled,
     adifLogPath: adifLogPath,
@@ -2283,6 +2288,12 @@ settingsSave.addEventListener('click', async () => {
   hideOutOfBand = hideOob;
   hideWorked = hideWorkedEnabled;
   tuneClick = tuneClickEnabled;
+  catLogToggleBtn.classList.toggle('hidden', !verboseLogEnabled);
+  if (!verboseLogEnabled) {
+    catLogPanel.classList.add('hidden');
+    catLogToggleBtn.classList.remove('active');
+    document.body.classList.remove('cat-log-open');
+  }
   activeRigName = selectedRig ? selectedRig.name : '';
   updateDxccButton();
   updateHeaders();

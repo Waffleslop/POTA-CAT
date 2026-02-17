@@ -77,7 +77,7 @@
       <span id="sfi-status" class="status solar-pill hidden">SFI —</span>
       <span id="k-status" class="status solar-pill hidden">K —</span>
       <span id="a-status" class="status solar-pill hidden">A —</span>
-      <button id="cat-log-toggle" class="status cat-log-btn" title="Toggle CAT log panel">Log</button>
+      <button id="cat-log-toggle" class="status cat-log-btn hidden" title="Toggle CAT log panel">Verbose Log</button>
       <span id="spot-count"></span>
       <span id="last-refresh"></span>
     </div>
@@ -268,6 +268,8 @@
       </label>
       <label class="checkbox-label"><input type="checkbox" id="set-tune-click"> Tune confirmation sound</label>
       <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Play a click when the radio confirms it has changed frequency</span>
+      <label class="checkbox-label"><input type="checkbox" id="set-verbose-log"> Verbose CAT log</label>
+      <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Show a log button in the status bar with raw CAT commands and responses</span>
     </fieldset>
     <fieldset class="source-toggles">
       <legend>Watchlist</legend>
