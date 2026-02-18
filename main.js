@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { execFile, spawn } = require('child_process');
 const { fetchSpots: fetchPotaSpots } = require('./lib/pota');
-const { fetchSpots: fetchSotaSpots, fetchSummitCoordsBatch, summitCache } = require('./lib/sota');
+const { fetchSpots: fetchSotaSpots, fetchSummitCoordsBatch, summitCache, loadAssociations, getAssociationName } = require('./lib/sota');
 const { CatClient, RigctldClient, listSerialPorts } = require('./lib/cat');
 const { gridToLatLon, haversineDistanceMiles, bearing } = require('./lib/grid');
 const { freqToBand } = require('./lib/bands');
@@ -979,7 +979,7 @@ async function processSotaSpots(raw) {
       mode: (s.mode || '').toUpperCase(),
       reference: ref,
       parkName: s.summitDetails || '',
-      locationDesc: assoc,
+      locationDesc: getAssociationName(assoc),
       distance,
       bearing: spotBearing,
       lat,
@@ -1629,6 +1629,9 @@ app.whenReady().then(() => {
   } catch (err) {
     console.error('Failed to load cty.dat:', err.message);
   }
+
+  // Load SOTA association names (async, non-blocking — falls back to codes if it fails)
+  loadAssociations().catch(err => console.error('Failed to load SOTA associations:', err.message));
 
   createWindow();
   if (!settings.enableWsjtx) connectCat();
