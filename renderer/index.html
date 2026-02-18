@@ -83,6 +83,18 @@
       <span id="spot-count"></span>
       <span id="last-refresh"></span>
     </div>
+    <div id="cat-popover" class="cat-popover hidden">
+      <div class="cat-popover-rigs" id="cat-popover-rigs"></div>
+      <div class="cat-popover-divider"></div>
+      <label class="cat-popover-wsjtx">
+        <input type="checkbox" id="cat-popover-wsjtx"> WSJT-X Mode
+      </label>
+      <div id="cat-popover-wsjtx-port" class="cat-popover-port hidden">
+        <label>UDP Port:
+          <input type="number" id="cat-popover-wsjtx-port-input" min="1024" max="65535" style="width:70px;">
+        </label>
+      </div>
+    </div>
   </header>
 
   <div id="update-banner" class="hidden">
@@ -353,6 +365,7 @@
         <label class="checkbox-label" style="margin-top:4px;"><input type="checkbox" id="set-hide-worked-parks"> Hide already-worked parks</label>
       </div>
       <label class="checkbox-label"><input type="checkbox" id="set-enable-sota"> Enable SOTA</label>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-wwff"> Enable WWFF</label>
       <label class="checkbox-label"><input type="checkbox" id="set-enable-cluster"> Enable DX Cluster</label>
       <div id="cluster-config" class="radio-sub hidden">
         <label>Cluster Host: <input type="text" id="set-cluster-host" value="w3lpl.net"></label>
@@ -390,6 +403,7 @@
           <label class="checkbox-label"><input type="checkbox" id="set-smartsdr-sota" checked> SOTA</label>
           <label class="checkbox-label"><input type="checkbox" id="set-smartsdr-cluster" checked> DX Cluster</label>
           <label class="checkbox-label"><input type="checkbox" id="set-smartsdr-rbn"> RBN</label>
+          <label class="checkbox-label"><input type="checkbox" id="set-smartsdr-wwff" checked> WWFF</label>
         </div>
       </div>
     </fieldset>
@@ -677,6 +691,7 @@
     <div style="display:flex;gap:12px;margin-bottom:8px;">
       <label class="checkbox-label"><input type="checkbox" id="welcome-enable-pota" checked> POTA spots</label>
       <label class="checkbox-label"><input type="checkbox" id="welcome-enable-sota" checked> SOTA spots</label>
+      <label class="checkbox-label"><input type="checkbox" id="welcome-enable-wwff"> WWFF spots</label>
     </div>
     <label class="switch-label welcome-theme-switch">
       <span>Dark Mode</span>

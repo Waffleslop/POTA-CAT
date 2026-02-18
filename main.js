@@ -15,6 +15,8 @@ const { appendQso, buildAdifRecord, appendImportedQso } = require('./lib/adif-wr
 const { SmartSdrClient } = require('./lib/smartsdr');
 const { parsePotaParksCSV } = require('./lib/pota-parks');
 const { WsjtxClient } = require('./lib/wsjtx');
+const { fetchSpots: fetchWwffSpots } = require('./lib/wwff');
+const { postWwffRespot } = require('./lib/wwff-respot');
 
 // --- cty.dat database (loaded once at startup) ---
 let ctyDb = null;
@@ -89,7 +91,7 @@ function notifyWatchlistSpot({ callsign, frequency, mode, source, reference, loc
   const freqMHz = (parseFloat(frequency) / 1000).toFixed(3);
   let body = `${freqMHz} MHz`;
   if (mode) body += ` ${mode}`;
-  const sourceLabels = { pota: 'POTA', sota: 'SOTA', dxc: 'DX Cluster', rbn: 'RBN' };
+  const sourceLabels = { pota: 'POTA', sota: 'SOTA', wwff: 'WWFF', dxc: 'DX Cluster', rbn: 'RBN' };
   const label = sourceLabels[source] || source;
   if (reference) {
     body += ` \u2014 ${label} ${reference}`;
@@ -839,6 +841,7 @@ function pushSpotsToSmartSdr(spots) {
     if (spot.source === 'sota' && settings.smartSdrSota === false) continue;
     if (spot.source === 'dxc' && settings.smartSdrCluster === false) continue;
     if (spot.source === 'rbn' && !settings.smartSdrRbn) continue;
+    if (spot.source === 'wwff' && settings.smartSdrWwff === false) continue;
     smartSdr.addSpot(spot);
   }
 }
@@ -979,7 +982,58 @@ async function processSotaSpots(raw) {
   });
 }
 
-let lastPotaSotaSpots = []; // cache of last fetched POTA+SOTA spots
+function processWwffSpots(raw) {
+  const myPos = gridToLatLon(settings.grid);
+  return raw.map((s) => {
+    const freqKhz = s.frequency_khz;
+    const freqMHz = freqKhz / 1000;
+    const callsign = s.activator || '';
+    const lat = s.latitude != null ? parseFloat(s.latitude) : null;
+    const lon = s.longitude != null ? parseFloat(s.longitude) : null;
+
+    let distance = null;
+    if (myPos && lat != null && lon != null && !isNaN(lat) && !isNaN(lon)) {
+      distance = Math.round(haversineDistanceMiles(myPos.lat, myPos.lon, lat, lon));
+    }
+
+    let continent = '';
+    if (ctyDb && callsign) {
+      const entity = resolveCallsign(callsign, ctyDb);
+      if (entity) continent = entity.continent || '';
+    }
+
+    let spotBearing = null;
+    if (myPos && lat != null && lon != null && !isNaN(lat) && !isNaN(lon)) {
+      spotBearing = Math.round(bearing(myPos.lat, myPos.lon, lat, lon));
+    }
+
+    // Convert Unix timestamp to ISO string
+    let spotTime = '';
+    if (s.spot_time) {
+      spotTime = new Date(s.spot_time * 1000).toISOString();
+    }
+
+    return {
+      source: 'wwff',
+      callsign,
+      frequency: String(freqKhz),
+      freqMHz,
+      mode: (s.mode || '').toUpperCase(),
+      reference: s.reference || '',
+      parkName: s.reference_name || '',
+      locationDesc: '',
+      distance,
+      bearing: spotBearing,
+      lat: (lat != null && !isNaN(lat)) ? lat : null,
+      lon: (lon != null && !isNaN(lon)) ? lon : null,
+      band: freqToBand(freqMHz),
+      spotTime,
+      continent,
+    };
+  });
+}
+
+let lastPotaSotaSpots = []; // cache of last fetched POTA+SOTA+WWFF spots
 
 function sendMergedSpots() {
   if (!win || win.isDestroyed()) return;
@@ -992,15 +1046,48 @@ async function refreshSpots() {
   try {
     const enablePota = settings.enablePota !== false; // default true
     const enableSota = settings.enableSota === true;  // default false
+    const enableWwff = settings.enableWwff === true;   // default false
 
     const fetches = [];
     if (enablePota) fetches.push(fetchPotaSpots().then(processPotaSpots));
     if (enableSota) fetches.push(fetchSotaSpots().then(processSotaSpots));
+    if (enableWwff) fetches.push(fetchWwffSpots().then(processWwffSpots));
 
     const results = await Promise.allSettled(fetches);
-    lastPotaSotaSpots = results
+    const allSpots = results
       .filter((r) => r.status === 'fulfilled')
       .flatMap((r) => r.value);
+
+    // Cross-reference POTA ↔ WWFF: same callsign + same frequency = dual-park
+    const potaSpots = allSpots.filter(s => s.source === 'pota');
+    const wwffSpots = allSpots.filter(s => s.source === 'wwff');
+    const otherSpots = allSpots.filter(s => s.source !== 'pota' && s.source !== 'wwff');
+
+    if (wwffSpots.length > 0 && potaSpots.length > 0) {
+      const wwffMap = new Map();
+      for (const w of wwffSpots) {
+        const key = w.callsign.toUpperCase() + '_' + String(Math.round(parseFloat(w.frequency)));
+        wwffMap.set(key, w);
+      }
+      const matchedWwffKeys = new Set();
+      for (const p of potaSpots) {
+        const key = p.callsign.toUpperCase() + '_' + String(Math.round(parseFloat(p.frequency)));
+        const match = wwffMap.get(key);
+        if (match) {
+          p.wwffReference = match.reference;
+          p.wwffParkName = match.parkName;
+          matchedWwffKeys.add(key);
+        }
+      }
+      // Only keep unmatched WWFF spots as standalone rows
+      const unmatchedWwff = wwffSpots.filter(w => {
+        const key = w.callsign.toUpperCase() + '_' + String(Math.round(parseFloat(w.frequency)));
+        return !matchedWwffKeys.has(key);
+      });
+      lastPotaSotaSpots = [...potaSpots, ...otherSpots, ...unmatchedWwff];
+    } else {
+      lastPotaSotaSpots = allSpots;
+    }
 
     sendMergedSpots();
 
@@ -1897,14 +1984,31 @@ app.whenReady().then(() => {
           });
           // Track re-spot in telemetry (fire-and-forget)
           trackRespot();
-          return { success: true, resposted: true };
         } catch (respotErr) {
           console.error('POTA re-spot failed:', respotErr.message);
           return { success: true, respotError: respotErr.message };
         }
       }
 
-      return { success: true };
+      // Re-spot on WWFF if requested
+      if (qsoData.wwffRespot && qsoData.wwffReference && settings.myCallsign) {
+        try {
+          await postWwffRespot({
+            activator: qsoData.callsign,
+            spotter: settings.myCallsign.toUpperCase(),
+            frequency: qsoData.frequency,
+            reference: qsoData.wwffReference,
+            mode: qsoData.mode,
+            comments: qsoData.respotComment || '',
+          });
+        } catch (respotErr) {
+          console.error('WWFF re-spot failed:', respotErr.message);
+          return { success: true, wwffRespotError: respotErr.message };
+        }
+      }
+
+      const didRespot = (qsoData.respot && qsoData.sig === 'POTA') || qsoData.wwffRespot;
+      return { success: true, resposted: didRespot || false };
     } catch (err) {
       return { success: false, error: err.message };
     }

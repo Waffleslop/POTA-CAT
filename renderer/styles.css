@@ -136,6 +136,7 @@ header {
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid var(--border-primary);
+  position: relative;
 }
 
 .filters {
@@ -708,6 +709,10 @@ dialog input, dialog select {
 
 .spot-rbn {
   border-left: 3px solid #00bcd4;
+}
+
+.spot-wwff {
+  border-left: 3px solid #26a69a;
 }
 
 /* Settings source toggles */
@@ -1878,5 +1883,135 @@ dialog input, dialog select {
   height: 1px;
   background: var(--border-primary);
   margin: 2px 12px;
+}
+
+/* CAT Popover — rig switcher dropdown */
+.cat-popover {
+  position: absolute;
+  top: 100%;
+  right: auto;
+  z-index: 10001;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 6px;
+  padding: 6px 0;
+  min-width: 220px;
+  max-width: 300px;
+  box-shadow: 0 4px 16px var(--shadow-heavy);
+}
+
+.cat-popover.hidden {
+  display: none !important;
+}
+
+.cat-popover-rigs {
+  padding: 0;
+}
+
+.cat-popover-rig {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  border-left: 3px solid transparent;
+}
+
+.cat-popover-rig:hover {
+  background: var(--bg-hover);
+}
+
+.cat-popover-rig.active {
+  border-left-color: var(--accent-blue);
+  background: var(--bg-hover);
+}
+
+.cat-popover-rig-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.cat-popover-rig.active .cat-popover-rig-dot {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+
+.cat-popover-rig-info {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.cat-popover-rig-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cat-popover-rig-desc {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cat-popover-divider {
+  height: 1px;
+  background: var(--border-primary);
+  margin: 4px 8px;
+}
+
+.cat-popover-wsjtx {
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  margin-bottom: 0 !important;
+}
+
+.cat-popover-wsjtx:hover {
+  background: var(--bg-hover);
+}
+
+.cat-popover-wsjtx input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  accent-color: var(--accent-blue);
+}
+
+.cat-popover-port {
+  padding: 4px 12px 6px 30px;
+  font-size: 12px;
+}
+
+.cat-popover-port label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  margin-bottom: 0;
+}
+
+.cat-popover-port input {
+  margin-top: 0;
+  width: auto;
+}
+
+#cat-status {
+  cursor: pointer;
+  user-select: none;
+}
+
+#cat-status:hover {
+  filter: brightness(1.2);
 }
 

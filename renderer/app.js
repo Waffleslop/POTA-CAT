@@ -13,6 +13,7 @@ let maxAgeMin = 5;       // max spot age in minutes
 let scanDwell = 7;       // seconds per frequency during scan
 let enablePota = true;
 let enableSota = false;
+let enableWwff = false;
 let enableDxcc = false;
 let enableCluster = false;
 let enableRbn = false;
@@ -69,6 +70,7 @@ const setScanDwell = document.getElementById('set-scan-dwell');
 const setWatchlist = document.getElementById('set-watchlist');
 const setEnablePota = document.getElementById('set-enable-pota');
 const setEnableSota = document.getElementById('set-enable-sota');
+const setEnableWwff = document.getElementById('set-enable-wwff');
 const setCwXit = document.getElementById('set-cw-xit');
 const setNotifyPopup = document.getElementById('set-notify-popup');
 const setNotifySound = document.getElementById('set-notify-sound');
@@ -198,6 +200,7 @@ const setSmartSdrPota = document.getElementById('set-smartsdr-pota');
 const setSmartSdrSota = document.getElementById('set-smartsdr-sota');
 const setSmartSdrCluster = document.getElementById('set-smartsdr-cluster');
 const setSmartSdrRbn = document.getElementById('set-smartsdr-rbn');
+const setSmartSdrWwff = document.getElementById('set-smartsdr-wwff');
 const logDialog = document.getElementById('log-dialog');
 const logCallsign = document.getElementById('log-callsign');
 const logFrequency = document.getElementById('log-frequency');
@@ -357,6 +360,7 @@ async function loadPrefs() {
   watchlist = parseWatchlist(settings.watchlist);
   enablePota = settings.enablePota !== false; // default true
   enableSota = settings.enableSota === true;  // default false
+  enableWwff = settings.enableWwff === true;  // default false
   enableDxcc = settings.enableDxcc === true;  // default false
   enableCluster = settings.enableCluster === true; // default false
   enableRbn = settings.enableRbn === true; // default false
@@ -1269,6 +1273,7 @@ function getFiltered() {
     const sourceOff =
       (s.source === 'pota' && !enablePota) ||
       (s.source === 'sota' && !enableSota) ||
+      (s.source === 'wwff' && !enableWwff) ||
       (s.source === 'dxc' && !enableCluster) ||
       (s.source === 'rbn' && !enableRbn);
     const isWatched = watchlist.has(s.callsign.toUpperCase());
@@ -1398,6 +1403,18 @@ const rbnIcon = L.divIcon({
   className: '',
   html: '<svg width="25" height="41" viewBox="0 0 25 41" xmlns="http://www.w3.org/2000/svg">' +
     '<path d="M12.5 0C5.6 0 0 5.6 0 12.5C0 21.9 12.5 41 12.5 41S25 21.9 25 12.5C25 5.6 19.4 0 12.5 0Z" fill="#00bcd4" stroke="#0097a7" stroke-width="1"/>' +
+    '<circle cx="12.5" cy="12.5" r="5.5" fill="#fff" opacity="0.4"/>' +
+    '</svg>',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+});
+
+// Teal teardrop pin for WWFF spots
+const wwffIcon = L.divIcon({
+  className: '',
+  html: '<svg width="25" height="41" viewBox="0 0 25 41" xmlns="http://www.w3.org/2000/svg">' +
+    '<path d="M12.5 0C5.6 0 0 5.6 0 12.5C0 21.9 12.5 41 12.5 41S25 21.9 25 12.5C25 5.6 19.4 0 12.5 0Z" fill="#26a69a" stroke="#1b7a71" stroke-width="1"/>' +
     '<circle cx="12.5" cy="12.5" r="5.5" fill="#fff" opacity="0.4"/>' +
     '</svg>',
   iconSize: [25, 41],
@@ -1701,16 +1718,18 @@ function updateMapMarkers(filtered) {
     const watched = watchlist.has(s.callsign.toUpperCase());
 
     const sourceLabel = (s.source || 'pota').toUpperCase();
-    const sourceColor = s.source === 'sota' ? '#f0a500' : s.source === 'dxc' ? '#e040fb' : s.source === 'rbn' ? '#00bcd4' : '#4ecca3';
+    const sourceColor = s.source === 'sota' ? '#f0a500' : s.source === 'dxc' ? '#e040fb' : s.source === 'rbn' ? '#00bcd4' : s.source === 'wwff' ? '#26a69a' : '#4ecca3';
     const logBtnHtml = enableLogging
-      ? ` <button class="log-popup-btn" data-call="${s.callsign}" data-freq="${s.frequency}" data-mode="${s.mode}" data-ref="${s.reference || ''}" data-name="${(s.parkName || '').replace(/"/g, '&quot;')}" data-source="${s.source || ''}">Log</button>`
+      ? ` <button class="log-popup-btn" data-call="${s.callsign}" data-freq="${s.frequency}" data-mode="${s.mode}" data-ref="${s.reference || ''}" data-name="${(s.parkName || '').replace(/"/g, '&quot;')}" data-source="${s.source || ''}" data-wwff-ref="${s.wwffReference || ''}" data-wwff-name="${(s.wwffParkName || '').replace(/"/g, '&quot;')}">Log</button>`
       : '';
-    const mapNewPark = workedParksSet.size > 0 && s.source === 'pota' && s.reference && !workedParksSet.has(s.reference);
+    const mapNewPark = workedParksSet.size > 0 && (s.source === 'pota' || s.source === 'wwff') && s.reference && !workedParksSet.has(s.reference);
     const newBadge = mapNewPark ? ' <span style="background:#4ecca3;color:#000;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;">NEW</span>' : '';
+    const wwffBadge = s.wwffReference ? ` <span style="background:#26a69a;color:#000;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;">WWFF</span>` : '';
+    const wwffRefLine = s.wwffReference ? `<br><b>${s.wwffReference}</b> ${s.wwffParkName || ''} <span style="color:#26a69a;font-size:11px;">[WWFF]</span>` : '';
     const popupContent = `
-      <b>${watched ? '\u2B50 ' : ''}<a href="#" class="popup-qrz" data-call="${s.callsign}">${s.callsign}</a></b> <span style="color:${sourceColor};font-size:11px;">[${sourceLabel}]</span>${newBadge}<br>
+      <b>${watched ? '\u2B50 ' : ''}<a href="#" class="popup-qrz" data-call="${s.callsign}">${s.callsign}</a></b> <span style="color:${sourceColor};font-size:11px;">[${sourceLabel}]</span>${newBadge}${wwffBadge}<br>
       ${parseFloat(s.frequency).toFixed(1)} kHz &middot; ${s.mode}<br>
-      <b>${s.reference}</b> ${s.parkName}<br>
+      <b>${s.reference}</b> ${s.parkName}${wwffRefLine}<br>
       ${distStr}<br>
       <button class="tune-btn" data-freq="${s.frequency}" data-mode="${s.mode}">Tune</button>${logBtnHtml}
     `;
@@ -1724,7 +1743,9 @@ function updateMapMarkers(filtered) {
         ? { icon: sotaIcon, ...(worked ? { opacity: 0.5 } : {}) }
         : s.source === 'rbn'
           ? { icon: rbnIcon, ...(worked ? { opacity: 0.5 } : {}) }
-          : worked ? { opacity: 0.5 } : {};
+          : s.source === 'wwff'
+            ? { icon: wwffIcon, ...(worked ? { opacity: 0.5 } : {}) }
+            : worked ? { opacity: 0.5 } : {};
 
     // Plot marker at canonical position and one world-copy in each direction
     for (const offset of [-360, 0, 360]) {
@@ -1768,6 +1789,8 @@ function bindPopupClickHandlers(mapInstance) {
           reference: btn.dataset.ref,
           parkName: btn.dataset.name,
           source: btn.dataset.source,
+          wwffReference: btn.dataset.wwffRef || '',
+          wwffParkName: btn.dataset.wwffName || '',
         };
         openLogPopup(spot);
       });
@@ -2068,6 +2091,7 @@ function render() {
       if (s.source === 'sota') tr.classList.add('spot-sota');
       if (s.source === 'dxc') tr.classList.add('spot-dxc');
       if (s.source === 'rbn') tr.classList.add('spot-rbn');
+      if (s.source === 'wwff') tr.classList.add('spot-wwff');
 
       // License privilege check
       if (isOutOfPrivilege(parseFloat(s.frequency), s.mode, licenseClass)) {
@@ -2151,10 +2175,14 @@ function render() {
       freqTd.appendChild(freqLink);
       tr.appendChild(freqTd);
 
+      // Build reference display — dual-park shows both refs
+      const refDisplay = s.wwffReference ? s.reference + ' / ' + s.wwffReference : s.reference;
+      const parkDisplay = s.wwffReference ? s.parkName : s.parkName;
+
       const cells = [
         { val: s.mode },
-        { val: s.reference },
-        { val: s.parkName },
+        { val: refDisplay, wwff: !!s.wwffReference },
+        { val: parkDisplay },
         { val: s.locationDesc },
         { val: formatDistance(s.distance) },
         { val: formatBearing(s.bearing), cls: 'bearing-col' },
@@ -2165,6 +2193,12 @@ function render() {
         const td = document.createElement('td');
         td.textContent = cell.val;
         if (cell.cls) td.className = cell.cls;
+        if (cell.wwff) {
+          const badge = document.createElement('span');
+          badge.textContent = 'WWFF';
+          badge.style.cssText = 'background:#26a69a;color:#000;font-size:9px;font-weight:bold;padding:1px 3px;border-radius:3px;margin-left:4px;';
+          td.appendChild(badge);
+        }
         tr.appendChild(td);
       }
 
@@ -2279,9 +2313,10 @@ function openLogPopup(spot) {
 
   // Show park/summit reference if applicable
   if (spot.reference) {
-    const sig = spot.source === 'sota' ? 'SOTA' : spot.source === 'pota' ? 'POTA' : '';
+    const sig = spot.source === 'sota' ? 'SOTA' : spot.source === 'pota' ? 'POTA' : spot.source === 'wwff' ? 'WWFF' : '';
     logRefDisplay.textContent = sig ? `${sig}: ${spot.reference}` : spot.reference;
     if (spot.parkName) logRefDisplay.textContent += ` — ${spot.parkName}`;
+    if (spot.wwffReference) logRefDisplay.textContent += `\nWWFF: ${spot.wwffReference}` + (spot.wwffParkName ? ` — ${spot.wwffParkName}` : '');
     logRefDisplay.classList.remove('hidden');
   } else {
     logRefDisplay.classList.add('hidden');
@@ -2289,21 +2324,62 @@ function openLogPopup(spot) {
 
   logComment.value = '';
 
-  // Re-spot section: only show for POTA spots when myCallsign is set
+  // Re-spot section: show for POTA and/or WWFF spots when myCallsign is set
   const respotSection = document.getElementById('log-respot-section');
   const respotCheckbox = document.getElementById('log-respot');
   const respotComment = document.getElementById('log-respot-comment');
   const respotCommentLabel = document.getElementById('log-respot-comment-label');
-  if (spot.source === 'pota' && spot.reference) {
+  // WWFF respot checkbox (dynamically create/remove)
+  let wwffRespotCheckbox = document.getElementById('log-wwff-respot');
+  const isPota = spot.source === 'pota' && spot.reference;
+  const isWwff = spot.source === 'wwff' && spot.reference;
+  const isDualPark = spot.source === 'pota' && spot.wwffReference;
+  if (isPota || isWwff || isDualPark) {
     respotSection.classList.remove('hidden');
-    respotCheckbox.checked = respotDefault;
+    // Label the POTA checkbox appropriately
+    if (isPota || isDualPark) {
+      respotCheckbox.checked = respotDefault;
+      respotCheckbox.parentElement.style.display = '';
+      respotCheckbox.parentElement.querySelector('span') && (respotCheckbox.parentElement.childNodes[1].textContent = isDualPark ? ' Re-spot on POTA' : ' Re-spot on POTA');
+    } else {
+      // Pure WWFF spot — hide POTA checkbox
+      respotCheckbox.checked = false;
+      respotCheckbox.parentElement.style.display = 'none';
+    }
+    // Show/create WWFF respot checkbox for WWFF-related spots
+    if (isWwff || isDualPark) {
+      if (!wwffRespotCheckbox) {
+        const label = document.createElement('label');
+        label.className = 'checkbox-label';
+        label.style.marginTop = '4px';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.id = 'log-wwff-respot';
+        cb.checked = true;
+        label.appendChild(cb);
+        label.appendChild(document.createTextNode(' Re-spot on WWFF'));
+        respotCheckbox.parentElement.parentElement.insertBefore(label, respotCommentLabel);
+        wwffRespotCheckbox = cb;
+      } else {
+        wwffRespotCheckbox.checked = true;
+        wwffRespotCheckbox.parentElement.style.display = '';
+      }
+    } else if (wwffRespotCheckbox) {
+      wwffRespotCheckbox.parentElement.style.display = 'none';
+      wwffRespotCheckbox.checked = false;
+    }
     respotComment.value = respotTemplate;
-    respotCommentLabel.style.display = respotCheckbox.checked ? '' : 'none';
-    respotCheckbox.onchange = () => {
-      respotCommentLabel.style.display = respotCheckbox.checked ? '' : 'none';
-    };
+    const anyChecked = () => respotCheckbox.checked || (wwffRespotCheckbox && wwffRespotCheckbox.checked);
+    respotCommentLabel.style.display = anyChecked() ? '' : 'none';
+    const updateCommentVis = () => { respotCommentLabel.style.display = anyChecked() ? '' : 'none'; };
+    respotCheckbox.onchange = updateCommentVis;
+    if (wwffRespotCheckbox) wwffRespotCheckbox.onchange = updateCommentVis;
   } else {
     respotSection.classList.add('hidden');
+    if (wwffRespotCheckbox) {
+      wwffRespotCheckbox.parentElement.style.display = 'none';
+      wwffRespotCheckbox.checked = false;
+    }
   }
 
   logDialog.showModal();
@@ -2363,6 +2439,7 @@ logSaveBtn.addEventListener('click', async () => {
   if (currentLogSpot && currentLogSpot.reference) {
     if (currentLogSpot.source === 'pota') sig = 'POTA';
     else if (currentLogSpot.source === 'sota') sig = 'SOTA';
+    else if (currentLogSpot.source === 'wwff') sig = 'WWFF';
     sigInfo = currentLogSpot.reference;
   }
 
@@ -2370,7 +2447,9 @@ logSaveBtn.addEventListener('click', async () => {
   const respotCheckbox = document.getElementById('log-respot');
   const respotComment = document.getElementById('log-respot-comment');
   const respotSection = document.getElementById('log-respot-section');
+  const wwffRespotCheckbox = document.getElementById('log-wwff-respot');
   const wantsRespot = !respotSection.classList.contains('hidden') && respotCheckbox.checked;
+  const wantsWwffRespot = !respotSection.classList.contains('hidden') && wwffRespotCheckbox && wwffRespotCheckbox.checked;
 
   // Persist re-spot preference and template
   if (!respotSection.classList.contains('hidden')) {
@@ -2378,6 +2457,10 @@ logSaveBtn.addEventListener('click', async () => {
     respotTemplate = respotComment.value.trim() || respotTemplate;
     window.api.saveSettings({ respotDefault: respotCheckbox.checked, respotTemplate });
   }
+
+  // Determine WWFF reference for respot
+  const wwffRef = currentLogSpot ? (currentLogSpot.wwffReference || (currentLogSpot.source === 'wwff' ? currentLogSpot.reference : '')) : '';
+  const commentText = respotComment.value.trim().replace(/\{rst\}/gi, logRstSent.value.trim() || '59').replace(/\{mycallsign\}/gi, myCallsign);
 
   const qsoData = {
     callsign,
@@ -2393,7 +2476,9 @@ logSaveBtn.addEventListener('click', async () => {
     sigInfo,
     comment: logComment.value.trim(),
     respot: wantsRespot,
-    respotComment: wantsRespot ? respotComment.value.trim().replace(/\{rst\}/gi, logRstSent.value.trim() || '59').replace(/\{mycallsign\}/gi, myCallsign) : '',
+    wwffRespot: wantsWwffRespot,
+    wwffReference: wantsWwffRespot ? wwffRef : '',
+    respotComment: (wantsRespot || wantsWwffRespot) ? commentText : '',
   };
 
   logSaveBtn.disabled = true;
@@ -2408,8 +2493,11 @@ logSaveBtn.addEventListener('click', async () => {
         showLogToast(`Logged ${callsign} to ADIF, but logbook forwarding failed: ${friendly}`, { warn: true, duration: 8000 });
       } else if (result.respotError) {
         showLogToast(`Logged ${callsign} to ADIF, but POTA re-spot failed: ${result.respotError}`, { warn: true, duration: 8000 });
+      } else if (result.wwffRespotError) {
+        showLogToast(`Logged ${callsign} to ADIF, but WWFF re-spot failed: ${result.wwffRespotError}`, { warn: true, duration: 8000 });
       } else if (result.resposted) {
-        showLogToast(`Logged ${callsign} — re-spotted on POTA`);
+        const sources = [wantsRespot && 'POTA', wantsWwffRespot && 'WWFF'].filter(Boolean).join(' & ');
+        showLogToast(`Logged ${callsign} — re-spotted on ${sources || 'POTA'}`);
       } else {
         showLogToast(`Logged ${callsign}`);
       }
@@ -2471,6 +2559,7 @@ settingsBtn.addEventListener('click', async () => {
   setVerboseLog.checked = s.verboseLog === true;
   setEnablePota.checked = s.enablePota !== false;
   setEnableSota.checked = s.enableSota === true;
+  setEnableWwff.checked = s.enableWwff === true;
   setEnableCluster.checked = s.enableCluster === true;
   setEnableRbn.checked = s.enableRbn === true;
   setMyCallsign.value = s.myCallsign || '';
@@ -2511,6 +2600,7 @@ settingsBtn.addEventListener('click', async () => {
   setSmartSdrSota.checked = s.smartSdrSota !== false;
   setSmartSdrCluster.checked = s.smartSdrCluster !== false;
   setSmartSdrRbn.checked = s.smartSdrRbn === true;
+  setSmartSdrWwff.checked = s.smartSdrWwff !== false;
   smartSdrConfig.classList.toggle('hidden', !s.smartSdrSpots);
   setEnableTelemetry.checked = s.enableTelemetry === true;
   setLightMode.checked = s.lightMode === true;
@@ -2538,6 +2628,7 @@ settingsSave.addEventListener('click', async () => {
   const notifyTimeoutVal = parseInt(setNotifyTimeout.value, 10) || 10;
   const potaEnabled = setEnablePota.checked;
   const sotaEnabled = setEnableSota.checked;
+  const wwffEnabled = setEnableWwff.checked;
   const clusterEnabled = setEnableCluster.checked;
   const rbnEnabled = setEnableRbn.checked;
   const myCallsign = setMyCallsign.value.trim().toUpperCase();
@@ -2564,6 +2655,7 @@ settingsSave.addEventListener('click', async () => {
   const smartSdrSotaEnabled = setSmartSdrSota.checked;
   const smartSdrClusterEnabled = setSmartSdrCluster.checked;
   const smartSdrRbnEnabled = setSmartSdrRbn.checked;
+  const smartSdrWwffEnabled = setSmartSdrWwff.checked;
   const adifPath = setAdifPath.value.trim() || '';
   const potaParksPath = setPotaParksPath.value.trim() || '';
   const hideWorkedParksEnabled = setHideWorkedParks.checked;
@@ -2596,6 +2688,7 @@ settingsSave.addEventListener('click', async () => {
     notifyTimeout: notifyTimeoutVal,
     enablePota: potaEnabled,
     enableSota: sotaEnabled,
+    enableWwff: wwffEnabled,
     enableCluster: clusterEnabled,
     enableRbn: rbnEnabled,
     enableWsjtx: wsjtxEnabled,
@@ -2632,6 +2725,7 @@ settingsSave.addEventListener('click', async () => {
     smartSdrSota: smartSdrSotaEnabled,
     smartSdrCluster: smartSdrClusterEnabled,
     smartSdrRbn: smartSdrRbnEnabled,
+    smartSdrWwff: smartSdrWwffEnabled,
   });
   distUnit = setDistUnit.value;
   maxAgeMin = maxAgeVal;
@@ -2639,6 +2733,7 @@ settingsSave.addEventListener('click', async () => {
   watchlist = parseWatchlist(watchlistRaw);
   enablePota = potaEnabled;
   enableSota = sotaEnabled;
+  enableWwff = wwffEnabled;
   enableCluster = clusterEnabled;
   enableRbn = rbnEnabled;
   enableWsjtx = wsjtxEnabled;
@@ -3372,6 +3467,7 @@ document.getElementById('welcome-start').addEventListener('click', async () => {
   const watchlistVal = welcomeWatchlistInput.value.trim();
   const enablePotaVal = document.getElementById('welcome-enable-pota').checked;
   const enableSotaVal = document.getElementById('welcome-enable-sota').checked;
+  const enableWwffVal = document.getElementById('welcome-enable-wwff') ? document.getElementById('welcome-enable-wwff').checked : false;
   const telemetryOptIn = document.getElementById('welcome-telemetry').checked;
   const lightModeEnabled = welcomeLightMode.checked;
   const currentSettings = await window.api.getSettings();
@@ -3388,6 +3484,7 @@ document.getElementById('welcome-start').addEventListener('click', async () => {
     scanDwell: 7,
     enablePota: enablePotaVal,
     enableSota: enableSotaVal,
+    enableWwff: enableWwffVal,
     enableTelemetry: telemetryOptIn,
     lightMode: lightModeEnabled,
   });
@@ -3410,6 +3507,7 @@ async function checkFirstRun() {
       if (s.licenseClass) document.getElementById('welcome-license-class').value = s.licenseClass;
       document.getElementById('welcome-enable-pota').checked = s.enablePota !== false;
       document.getElementById('welcome-enable-sota').checked = s.enableSota === true;
+      if (document.getElementById('welcome-enable-wwff')) document.getElementById('welcome-enable-wwff').checked = s.enableWwff === true;
       document.getElementById('welcome-telemetry').checked = s.enableTelemetry === true;
       welcomeLightMode.checked = s.lightMode === true;
     }
