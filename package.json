@@ -1,6 +1,6 @@
 {
   "name": "pota-cat",
-  "version": "0.9.7",
+  "version": "0.9.8",
   "description": "POTA activator lookup with FlexRadio CAT control",
   "main": "main.js",
   "scripts": {
@@ -8,7 +8,8 @@
     "build-icon": "node scripts/build-icon.js",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",
-    "dist:mac": "electron-builder --mac"
+    "dist:mac": "electron-builder --mac",
+    "release": "node scripts/release.js"
   },
   "build": {
     "appId": "com.waffleslop.pota-cat",
