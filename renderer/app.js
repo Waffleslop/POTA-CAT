@@ -1748,6 +1748,16 @@ async function openRecentQsos() {
       tbody.appendChild(tr);
     }
   }
+  // Show log file path
+  const pathLink = document.getElementById('recent-qsos-path-link');
+  const settings = await window.api.getSettings();
+  const logPath = settings.adifLogPath || await window.api.getDefaultLogPath();
+  pathLink.textContent = logPath;
+  pathLink.onclick = (e) => {
+    e.preventDefault();
+    window.api.openExternal('file://' + logPath);
+  };
+
   dlg.showModal();
 }
 

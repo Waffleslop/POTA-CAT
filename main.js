@@ -640,7 +640,7 @@ function connectWsjtx() {
   disconnectWsjtx();
   if (!settings.enableWsjtx) return;
 
-  // Release the radio so WSJT-X can control it
+  // Release the radio so WSJT-X can control it (even on FlexRadio — dual CAT conflicts)
   if (cat) cat.disconnect();
   killRigctld();
   sendCatStatus({ connected: false, wsjtxMode: true });
@@ -737,7 +737,7 @@ function connectWsjtx() {
 }
 
 function disconnectWsjtx() {
-  const wasConnected = wsjtx != null;
+  const wasRunning = wsjtx != null;
   if (wsjtxHighlightTimer) {
     clearTimeout(wsjtxHighlightTimer);
     wsjtxHighlightTimer = null;
@@ -750,8 +750,8 @@ function disconnectWsjtx() {
   wsjtxStatus = null;
   sendWsjtxStatus({ connected: false });
 
-  // Reconnect CAT now that WSJT-X is releasing the radio
-  if (wasConnected) {
+  // Reconnect CAT now that WSJT-X is no longer managing the radio
+  if (wasRunning) {
     connectCat();
   }
 }
@@ -793,14 +793,24 @@ function updateWsjtxHighlights() {
 }
 
 // --- SmartSDR panadapter spots ---
+function needsSmartSdr() {
+  // Connect SmartSDR API if panadapter spots are enabled, OR if WSJT-X is active
+  // with a Flex (TCP CAT) so we can tune via the API when CAT is released
+  if (settings.smartSdrSpots) return true;
+  if (settings.enableWsjtx && settings.catTarget && settings.catTarget.type === 'tcp') return true;
+  return false;
+}
+
 function connectSmartSdr() {
   disconnectSmartSdr();
-  if (!settings.smartSdrSpots) return;
+  if (!needsSmartSdr()) return;
   smartSdr = new SmartSdrClient();
   smartSdr.on('error', (err) => {
     console.error('SmartSDR:', err.message);
   });
-  smartSdr.connect(settings.smartSdrHost || '127.0.0.1');
+  // Use SmartSDR host if configured, else fall back to Flex CAT host, else localhost
+  const sdrHost = settings.smartSdrHost || (settings.catTarget && settings.catTarget.host) || '127.0.0.1';
+  smartSdr.connect(sdrHost);
 }
 
 function disconnectSmartSdr() {
@@ -1435,7 +1445,7 @@ app.whenReady().then(() => {
   if (!settings.enableWsjtx) connectCat();
   if (settings.enableCluster) connectCluster();
   if (settings.enableRbn) connectRbn();
-  if (settings.smartSdrSpots) connectSmartSdr();
+  connectSmartSdr(); // connects if smartSdrSpots or WSJT-X+Flex
   if (settings.enableWsjtx) connectWsjtx();
 
   // Window control IPC
@@ -1463,6 +1473,12 @@ app.whenReady().then(() => {
   // IPC handlers
   ipcMain.on('open-external', (_e, url) => {
     const { shell } = require('electron');
+    // Allow opening local log files
+    if (url.startsWith('file://')) {
+      const filePath = url.replace('file://', '');
+      shell.showItemInFolder(filePath);
+      return;
+    }
     // Only allow known URLs
     if (url.startsWith('https://www.qrz.com/') || url.startsWith('https://caseystanton.com/') || url.startsWith('https://github.com/Waffleslop/POTA-CAT/') || url.startsWith('https://hamlib.github.io/') || url.startsWith('https://github.com/Hamlib/') || url.startsWith('https://discord.gg/') || url.startsWith('https://potacat.com/') || url.startsWith('https://buymeacoffee.com/potacat')) {
       shell.openExternal(url);
@@ -1470,12 +1486,27 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('tune', (_e, { frequency, mode }) => {
-    if (!cat || !cat.connected) return; // WSJT-X mode or no radio
     let freqHz = Math.round(parseFloat(frequency) * 1000); // kHz → Hz
     // Apply CW XIT offset — shift tune frequency so TX lands offset from the activator
     if ((mode === 'CW') && settings.cwXit) {
       freqHz += settings.cwXit;
     }
+
+    // If WSJT-X is active and CAT is released, try to tune via SmartSDR API
+    if (settings.enableWsjtx && (!cat || !cat.connected)) {
+      if (smartSdr && smartSdr.connected && settings.catTarget && settings.catTarget.type === 'tcp') {
+        const sliceIndex = (settings.catTarget.port || 5002) - 5002;
+        const freqMhz = freqHz / 1e6;
+        // Map common modes to FlexRadio mode strings
+        const flexMode = (mode === 'FT8' || mode === 'FT4' || mode === 'JT65' || mode === 'JT9' || mode === 'WSPR')
+          ? 'DIGU' : (mode === 'CW' ? 'CW' : (mode === 'SSB' || mode === 'USB' ? 'USB' : (mode === 'LSB' ? 'LSB' : null)));
+        sendCatLog(`tune via SmartSDR API: slice=${sliceIndex} freq=${freqMhz.toFixed(6)}MHz mode=${mode}→${flexMode}`);
+        smartSdr.tuneSlice(sliceIndex, freqMhz, flexMode);
+      }
+      return;
+    }
+
+    if (!cat || !cat.connected) return;
     sendCatLog(`tune IPC: freq=${frequency}kHz → ${freqHz}Hz mode=${mode} cat.connected=${cat ? cat.connected : 'no cat'}`);
     cat.tune(freqHz, mode);
   });
@@ -1540,13 +1571,9 @@ app.whenReady().then(() => {
       }
     }
 
-    // Reconnect SmartSDR if settings changed
-    if (smartSdrChanged) {
-      if (settings.smartSdrSpots) {
-        connectSmartSdr();
-      } else {
-        disconnectSmartSdr();
-      }
+    // Reconnect SmartSDR if settings changed (also needed for WSJT-X+Flex tuning)
+    if (smartSdrChanged || wsjtxChanged) {
+      connectSmartSdr(); // needsSmartSdr() decides whether to actually connect
     }
 
     // Reconnect WSJT-X if settings changed
@@ -1908,8 +1935,8 @@ app.whenReady().then(() => {
     try {
       if (!fs.existsSync(logPath)) return [];
       const qsos = parseAllQsos(logPath);
-      qsos.sort((a, b) => (a.qsoDate + a.timeOn).localeCompare(b.qsoDate + b.timeOn));
-      return qsos.slice(-10).map(q => ({
+      qsos.sort((a, b) => (b.qsoDate + b.timeOn).localeCompare(a.qsoDate + a.timeOn));
+      return qsos.slice(0, 10).map(q => ({
         call: q.call,
         qsoDate: q.qsoDate,
         timeOn: q.timeOn,

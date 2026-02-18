@@ -24,7 +24,10 @@
       "node_modules/leaflet/**/*"
     ],
     "win": {
-      "target": "nsis"
+      "target": [
+        "nsis",
+        "portable"
+      ]
     },
     "nsis": {
       "oneClick": false,
@@ -32,14 +35,24 @@
       "perMachine": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "POTA CAT"
+      "shortcutName": "POTA CAT",
+      "include": "build/installer.nsh"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
     },
     "mac": {
       "target": "dmg",
       "category": "public.app-category.utilities"
     },
     "extraResources": [
-      { "from": "assets/hamlib", "to": "hamlib", "filter": ["**/*"] }
+      {
+        "from": "assets/hamlib",
+        "to": "hamlib",
+        "filter": [
+          "**/*"
+        ]
+      }
     ]
   },
   "devDependencies": {
