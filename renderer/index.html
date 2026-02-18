@@ -304,6 +304,8 @@
       <label>CW XIT Offset (Hz):
         <input type="number" id="set-cw-xit" min="-999" max="999" step="10" value="0">
       </label>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-split"> Enable split mode</label>
+      <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Send split on/off with each tune command (VFO A = RX, VFO B = TX)</span>
       <label class="checkbox-label"><input type="checkbox" id="set-tune-click"> Tune confirmation sound</label>
       <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Play a click when the radio confirms it has changed frequency</span>
       <label class="checkbox-label"><input type="checkbox" id="set-verbose-log"> Verbose CAT log</label>
@@ -688,6 +690,7 @@
         <tr><td><kbd>F2</kbd></td><td>Recent QSOs</td></tr>
         <tr><td><kbd>F11</kbd></td><td>Welcome / setup screen</td></tr>
         <tr><td><kbd>Space</kbd></td><td>Start / stop scan</td></tr>
+        <tr><td><kbd>S</kbd></td><td>Toggle split mode</td></tr>
         <tr><td><kbd>Esc</kbd></td><td>Close dialog</td></tr>
       </tbody>
     </table>

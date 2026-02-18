@@ -28,6 +28,7 @@ let hideOutOfBand = false;
 let enableLogging = false;
 let defaultPower = 100;
 let tuneClick = false;
+let enableSplit = false;
 let activeRigName = ''; // name of the currently active rig profile
 let workedCallsigns = new Set(); // uppercase callsigns from QSO log
 let hideWorked = false;
@@ -84,6 +85,7 @@ const setLicenseClass = document.getElementById('set-license-class');
 const setHideOutOfBand = document.getElementById('set-hide-out-of-band');
 const setHideWorked = document.getElementById('set-hide-worked');
 const setTuneClick = document.getElementById('set-tune-click');
+const setEnableSplit = document.getElementById('set-enable-split');
 const setVerboseLog = document.getElementById('set-verbose-log');
 const continentFilterEl = document.getElementById('continent-filter');
 const scanBtn = document.getElementById('scan-btn');
@@ -391,6 +393,7 @@ async function loadPrefs() {
   if (settings.respotTemplate != null) respotTemplate = settings.respotTemplate;
   myCallsign = settings.myCallsign || '';
   tuneClick = settings.tuneClick === true;
+  enableSplit = settings.enableSplit === true;
   catLogToggleBtn.classList.toggle('hidden', settings.verboseLog !== true);
   // Resolve active rig name
   const rigs = settings.rigs || [];
@@ -2069,6 +2072,14 @@ document.addEventListener('keydown', (e) => {
     if (scanning) { stopScan(); } else { startScan(); }
     return;
   }
+  // S — Toggle split mode
+  if (e.key === 's' && !e.target.matches('input, select, textarea')) {
+    e.preventDefault();
+    enableSplit = !enableSplit;
+    window.api.saveSettings({ enableSplit });
+    showLogToast(enableSplit ? 'Split mode ON' : 'Split mode OFF', { duration: 1500 });
+    return;
+  }
 });
 
 // --- Recent QSOs (F2) ---
@@ -2876,6 +2887,7 @@ settingsBtn.addEventListener('click', async () => {
   setHideOutOfBand.checked = s.hideOutOfBand === true;
   setHideWorked.checked = s.hideWorked === true;
   setTuneClick.checked = s.tuneClick === true;
+  setEnableSplit.checked = s.enableSplit === true;
   setVerboseLog.checked = s.verboseLog === true;
   setEnablePota.checked = s.enablePota !== false;
   setEnableSota.checked = s.enableSota === true;
@@ -2971,6 +2983,7 @@ settingsSave.addEventListener('click', async () => {
   const hideOob = setHideOutOfBand.checked;
   const hideWorkedEnabled = setHideWorked.checked;
   const tuneClickEnabled = setTuneClick.checked;
+  const enableSplitEnabled = setEnableSplit.checked;
   const verboseLogEnabled = setVerboseLog.checked;
   const telemetryEnabled = setEnableTelemetry.checked;
   const lightModeEnabled = setLightMode.checked;
@@ -3034,6 +3047,7 @@ settingsSave.addEventListener('click', async () => {
     hideOutOfBand: hideOob,
     hideWorked: hideWorkedEnabled,
     tuneClick: tuneClickEnabled,
+    enableSplit: enableSplitEnabled,
     verboseLog: verboseLogEnabled,
     adifPath: adifPath,
     potaParksPath: potaParksPath,
@@ -3090,6 +3104,7 @@ settingsSave.addEventListener('click', async () => {
   hideWorked = hideWorkedEnabled;
   hideWorkedParks = hideWorkedParksEnabled;
   tuneClick = tuneClickEnabled;
+  enableSplit = enableSplitEnabled;
   catLogToggleBtn.classList.toggle('hidden', !verboseLogEnabled);
   if (!verboseLogEnabled) {
     catLogPanel.classList.add('hidden');

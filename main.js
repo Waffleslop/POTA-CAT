@@ -1699,8 +1699,8 @@ app.whenReady().then(() => {
     }
 
     if (!cat || !cat.connected) return;
-    sendCatLog(`tune IPC: freq=${frequency}kHz → ${freqHz}Hz mode=${mode} cat.connected=${cat ? cat.connected : 'no cat'}`);
-    cat.tune(freqHz, mode);
+    sendCatLog(`tune IPC: freq=${frequency}kHz → ${freqHz}Hz mode=${mode} split=${!!settings.enableSplit} cat.connected=${cat ? cat.connected : 'no cat'}`);
+    cat.tune(freqHz, mode, { split: settings.enableSplit });
   });
 
   ipcMain.on('refresh', () => { refreshSpots(); });
