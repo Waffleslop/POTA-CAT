@@ -8,11 +8,13 @@ const { CatClient, RigctldClient, listSerialPorts } = require('./lib/cat');
 const { gridToLatLon, haversineDistanceMiles, bearing } = require('./lib/grid');
 const { freqToBand } = require('./lib/bands');
 const { loadCtyDat, resolveCallsign, getAllEntities } = require('./lib/cty');
-const { parseAdifFile, parseWorkedCallsigns } = require('./lib/adif');
+const { parseAdifFile, parseWorkedCallsigns, parseAllQsos } = require('./lib/adif');
 const { DxClusterClient } = require('./lib/dxcluster');
 const { RbnClient } = require('./lib/rbn');
-const { appendQso, buildAdifRecord } = require('./lib/adif-writer');
+const { appendQso, buildAdifRecord, appendImportedQso } = require('./lib/adif-writer');
 const { SmartSdrClient } = require('./lib/smartsdr');
+const { parsePotaParksCSV } = require('./lib/pota-parks');
+const { WsjtxClient } = require('./lib/wsjtx');
 
 // --- cty.dat database (loaded once at startup) ---
 let ctyDb = null;
@@ -48,6 +50,10 @@ let rbnWatchSpots = []; // RBN spots for watchlist callsigns, merged into main t
 let smartSdr = null;
 let smartSdrPushTimer = null; // throttle timer for SmartSDR spot pushes
 let workedCallsigns = new Set(); // callsigns from QSO log (all QSOs, not just confirmed)
+let workedParks = new Map(); // reference → park data from POTA parks CSV
+let wsjtx = null;
+let wsjtxStatus = null; // last Status message from WSJT-X
+let wsjtxHighlightTimer = null; // throttle timer for highlight updates
 
 // --- Watchlist notifications ---
 const recentNotifications = new Map(); // callsign → timestamp for dedup (5-min window)
@@ -625,6 +631,167 @@ function disconnectRbn() {
   sendRbnStatus({ connected: false });
 }
 
+// --- WSJT-X integration ---
+function sendWsjtxStatus(s) {
+  if (win && !win.isDestroyed()) win.webContents.send('wsjtx-status', s);
+}
+
+function connectWsjtx() {
+  disconnectWsjtx();
+  if (!settings.enableWsjtx) return;
+
+  // Release the radio so WSJT-X can control it
+  if (cat) cat.disconnect();
+  killRigctld();
+  sendCatStatus({ connected: false, wsjtxMode: true });
+
+  wsjtx = new WsjtxClient();
+
+  wsjtx.on('status', (s) => {
+    sendWsjtxStatus(s);
+  });
+
+  wsjtx.on('error', (err) => {
+    console.error('WSJT-X UDP error:', err.message);
+  });
+
+  wsjtx.on('wsjtx-status', (status) => {
+    wsjtxStatus = status;
+    // Feed WSJT-X dial frequency into the same frequency tracker CAT uses
+    if (status.dialFrequency) {
+      sendCatFrequency(status.dialFrequency);
+    }
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('wsjtx-state', {
+        dialFrequency: status.dialFrequency,
+        mode: status.mode,
+        dxCall: status.dxCall,
+        txEnabled: status.txEnabled,
+        transmitting: status.transmitting,
+        decoding: status.decoding,
+        deCall: status.deCall,
+        subMode: status.subMode,
+      });
+    }
+  });
+
+  wsjtx.on('decode', (decode) => {
+    if (!decode.isNew) return;
+    // Forward to renderer for display
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('wsjtx-decode', {
+        time: decode.time,
+        snr: decode.snr,
+        deltaTime: decode.deltaTime,
+        deltaFrequency: decode.deltaFrequency,
+        mode: decode.mode,
+        message: decode.message,
+        dxCall: decode.dxCall,
+        deCall: decode.deCall,
+        lowConfidence: decode.lowConfidence,
+      });
+    }
+  });
+
+  wsjtx.on('clear', () => {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('wsjtx-clear');
+    }
+  });
+
+  wsjtx.on('logged-adif', ({ adif }) => {
+    if (!settings.wsjtxAutoLog) return;
+    // Append the raw ADIF record to our log file
+    const logPath = settings.adifLogPath || path.join(app.getPath('userData'), 'potacat_qso_log.adi');
+    try {
+      // Ensure log file exists with header
+      if (!fs.existsSync(logPath)) {
+        fs.writeFileSync(logPath, 'POTA CAT ADIF Log\n<EOH>\n');
+      }
+      fs.appendFileSync(logPath, adif + '\n');
+      // Reload worked callsigns
+      loadWorkedCallsigns();
+    } catch (err) {
+      console.error('Failed to append WSJT-X ADIF:', err.message);
+    }
+  });
+
+  wsjtx.on('qso-logged', (qso) => {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('wsjtx-qso-logged', {
+        dxCall: qso.dxCall,
+        dxGrid: qso.dxGrid,
+        mode: qso.mode,
+        reportSent: qso.reportSent,
+        reportReceived: qso.reportReceived,
+        txFrequency: qso.txFrequency,
+      });
+    }
+  });
+
+  const port = parseInt(settings.wsjtxPort, 10) || 2237;
+  wsjtx.connect(port);
+
+  // Schedule highlight updates whenever spots change
+  scheduleWsjtxHighlights();
+}
+
+function disconnectWsjtx() {
+  const wasConnected = wsjtx != null;
+  if (wsjtxHighlightTimer) {
+    clearTimeout(wsjtxHighlightTimer);
+    wsjtxHighlightTimer = null;
+  }
+  if (wsjtx) {
+    wsjtx.clearHighlights();
+    wsjtx.disconnect();
+    wsjtx = null;
+  }
+  wsjtxStatus = null;
+  sendWsjtxStatus({ connected: false });
+
+  // Reconnect CAT now that WSJT-X is releasing the radio
+  if (wasConnected) {
+    connectCat();
+  }
+}
+
+/**
+ * Highlight POTA/SOTA activator callsigns in WSJT-X's Band Activity window.
+ * Called after spots refresh and throttled to avoid spamming.
+ */
+function scheduleWsjtxHighlights() {
+  if (wsjtxHighlightTimer) return;
+  wsjtxHighlightTimer = setTimeout(() => {
+    wsjtxHighlightTimer = null;
+    updateWsjtxHighlights();
+  }, 3000);
+}
+
+function updateWsjtxHighlights() {
+  if (!wsjtx || !wsjtx.connected || !settings.wsjtxHighlight) return;
+
+  // Build set of active POTA/SOTA callsigns
+  const activators = new Set();
+  for (const spot of lastPotaSotaSpots) {
+    if (spot.callsign) activators.add(spot.callsign.toUpperCase());
+  }
+
+  // Clear old highlights that are no longer active
+  for (const call of wsjtx._highlightedCalls) {
+    if (!activators.has(call)) {
+      wsjtx.highlightCallsign(call, null, null);
+    }
+  }
+
+  // Set highlights for active POTA callsigns — green background
+  const bgColor = { r: 78, g: 204, b: 163 }; // #4ecca3 POTA green
+  const fgColor = { r: 0, g: 0, b: 0 };
+  for (const call of activators) {
+    wsjtx.highlightCallsign(call, bgColor, fgColor);
+  }
+}
+
 // --- SmartSDR panadapter spots ---
 function connectSmartSdr() {
   disconnectSmartSdr();
@@ -827,6 +994,11 @@ async function refreshSpots() {
 
     sendMergedSpots();
 
+    // Update WSJT-X callsign highlights with fresh activator list
+    if (wsjtx && wsjtx.connected && settings.wsjtxHighlight) {
+      scheduleWsjtxHighlights();
+    }
+
     // Watchlist notifications for newly-appeared POTA/SOTA spots
     const potaSotaWatchSet = parseWatchlist(settings.watchlist);
     if (potaSotaWatchSet.size > 0) {
@@ -939,6 +1111,26 @@ function loadWorkedCallsigns() {
   }
 }
 
+// --- Worked parks tracking ---
+function loadWorkedParks() {
+  if (!settings.potaParksPath) {
+    workedParks = new Map();
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('worked-parks', []);
+    }
+    return;
+  }
+  try {
+    workedParks = parsePotaParksCSV(settings.potaParksPath);
+    if (win && !win.isDestroyed()) {
+      // Serialize Map as array of [key, value] pairs
+      win.webContents.send('worked-parks', [...workedParks.entries()]);
+    }
+  } catch (err) {
+    console.error('Failed to parse POTA parks CSV:', err.message);
+  }
+}
+
 // --- Logbook forwarding ---
 function forwardToLogbook(qsoData) {
   const type = settings.logbookType;
@@ -1034,6 +1226,9 @@ function createWindow() {
       sendRbnStatus({ connected: rbn.connected, host: 'telnet.reversebeacon.net', port: 7000 });
       if (rbnSpots.length > 0) sendRbnSpots();
     }
+    if (wsjtx) {
+      sendWsjtxStatus({ connected: wsjtx.connected, listening: true });
+    }
     refreshSpots();
     fetchSolarData();
     // Auto-send DXCC data if enabled and ADIF path is set
@@ -1042,6 +1237,8 @@ function createWindow() {
     }
     // Load worked callsigns from QSO log
     loadWorkedCallsigns();
+    // Load worked parks from POTA CSV
+    loadWorkedParks();
   });
 }
 
@@ -1235,10 +1432,11 @@ app.whenReady().then(() => {
   }
 
   createWindow();
-  connectCat();
+  if (!settings.enableWsjtx) connectCat();
   if (settings.enableCluster) connectCluster();
   if (settings.enableRbn) connectRbn();
   if (settings.smartSdrSpots) connectSmartSdr();
+  if (settings.enableWsjtx) connectWsjtx();
 
   // Window control IPC
   ipcMain.on('win-minimize', () => { if (win) win.minimize(); });
@@ -1272,6 +1470,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('tune', (_e, { frequency, mode }) => {
+    if (!cat || !cat.connected) return; // WSJT-X mode or no radio
     let freqHz = Math.round(parseFloat(frequency) * 1000); // kHz → Hz
     // Apply CW XIT offset — shift tune frequency so TX lands offset from the activator
     if ((mode === 'CW') && settings.cwXit) {
@@ -1300,6 +1499,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('save-settings', (_e, newSettings) => {
     const adifLogPathChanged = newSettings.adifLogPath !== settings.adifLogPath;
+    const potaParksPathChanged = newSettings.potaParksPath !== settings.potaParksPath;
 
     const clusterChanged = newSettings.enableCluster !== settings.enableCluster ||
       newSettings.myCallsign !== settings.myCallsign ||
@@ -1313,9 +1513,13 @@ app.whenReady().then(() => {
     const smartSdrChanged = newSettings.smartSdrSpots !== settings.smartSdrSpots ||
       newSettings.smartSdrHost !== settings.smartSdrHost;
 
+    const wsjtxChanged = newSettings.enableWsjtx !== settings.enableWsjtx ||
+      newSettings.wsjtxPort !== settings.wsjtxPort;
+
     settings = { ...settings, ...newSettings };
     saveSettings(settings);
-    connectCat();
+    // Only reconnect CAT if WSJT-X is not managing the radio
+    if (!settings.enableWsjtx) connectCat();
     refreshSpots();
 
     // Reconnect cluster if settings changed
@@ -1345,6 +1549,22 @@ app.whenReady().then(() => {
       }
     }
 
+    // Reconnect WSJT-X if settings changed
+    if (wsjtxChanged) {
+      if (settings.enableWsjtx) {
+        connectWsjtx();
+      } else {
+        disconnectWsjtx();
+      }
+    } else if (wsjtx && wsjtx.connected) {
+      // Highlight setting may have changed
+      if (settings.wsjtxHighlight) {
+        updateWsjtxHighlights();
+      } else {
+        wsjtx.clearHighlights();
+      }
+    }
+
     // Auto-parse ADIF and send DXCC data if enabled
     if (settings.enableDxcc && settings.adifPath) {
       sendDxccData();
@@ -1353,6 +1573,11 @@ app.whenReady().then(() => {
     // Reload worked callsigns if log path changed
     if (adifLogPathChanged) {
       loadWorkedCallsigns();
+    }
+
+    // Reload worked parks if CSV path changed
+    if (potaParksPathChanged) {
+      loadWorkedParks();
     }
 
     return settings;
@@ -1372,8 +1597,72 @@ app.whenReady().then(() => {
     return result.filePaths[0];
   });
 
+  ipcMain.handle('choose-pota-parks-file', async () => {
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Select POTA Parks Worked CSV',
+      filters: [
+        { name: 'CSV Files', extensions: ['csv'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+      properties: ['openFile'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
+
   ipcMain.handle('parse-adif', () => {
     return buildDxccData();
+  });
+
+  // --- ADIF Import IPC ---
+  ipcMain.handle('import-adif', async () => {
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Import ADIF File(s)',
+      filters: [
+        { name: 'ADIF Files', extensions: ['adi', 'adif'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+      properties: ['openFile', 'multiSelections'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+
+    const logPath = settings.adifLogPath || path.join(app.getPath('userData'), 'potacat_qso_log.adi');
+    let totalImported = 0;
+    const uniqueCalls = new Set();
+    const fileNames = [];
+
+    for (const filePath of result.filePaths) {
+      try {
+        const qsos = parseAllQsos(filePath);
+        for (const qso of qsos) {
+          appendImportedQso(logPath, qso);
+          uniqueCalls.add(qso.call.toUpperCase());
+          totalImported++;
+        }
+        fileNames.push(path.basename(filePath));
+      } catch (err) {
+        dialog.showMessageBox(win, {
+          type: 'error',
+          title: 'Import Failed',
+          message: `Failed to parse ${path.basename(filePath)}`,
+          detail: err.message,
+        });
+        return { success: false, error: `Failed to parse ${path.basename(filePath)}: ${err.message}` };
+      }
+    }
+
+    // Reload worked callsigns from updated log and push to renderer
+    loadWorkedCallsigns();
+
+    const fileList = fileNames.join(', ');
+    dialog.showMessageBox(win, {
+      type: 'info',
+      title: 'Import Complete',
+      message: `Successfully imported ${fileList}`,
+      detail: `${totalImported} QSOs (${uniqueCalls.size} unique callsigns) added.`,
+    });
+
+    return { success: true, imported: totalImported, unique: uniqueCalls.size };
   });
 
   // --- QSO Logging IPC ---
@@ -1597,7 +1886,43 @@ app.whenReady().then(() => {
   ipcMain.on('connect-cat', (_e, target) => {
     settings.catTarget = target;
     saveSettings(settings);
-    connectCat();
+    if (!settings.enableWsjtx) connectCat();
+  });
+
+  // --- WSJT-X IPC ---
+  ipcMain.on('wsjtx-reply', (_e, decode) => {
+    if (wsjtx && wsjtx.connected) {
+      wsjtx.reply(decode, 0);
+    }
+  });
+
+  ipcMain.on('wsjtx-halt-tx', () => {
+    if (wsjtx && wsjtx.connected) {
+      wsjtx.haltTx(true);
+    }
+  });
+
+  // --- Recent QSOs IPC ---
+  ipcMain.handle('get-recent-qsos', () => {
+    const logPath = settings.adifLogPath || path.join(app.getPath('userData'), 'potacat_qso_log.adi');
+    try {
+      if (!fs.existsSync(logPath)) return [];
+      const qsos = parseAllQsos(logPath);
+      qsos.sort((a, b) => (a.qsoDate + a.timeOn).localeCompare(b.qsoDate + b.timeOn));
+      return qsos.slice(-10).map(q => ({
+        call: q.call,
+        qsoDate: q.qsoDate,
+        timeOn: q.timeOn,
+        band: q.band,
+        mode: q.mode,
+        freq: q.freq,
+        rstSent: q.rstSent,
+        rstRcvd: q.rstRcvd,
+        comment: q.comment,
+      }));
+    } catch {
+      return [];
+    }
   });
 
   // --- RBN IPC ---
@@ -1617,6 +1942,7 @@ app.on('window-all-closed', async () => {
   if (cat) cat.disconnect();
   if (cluster) cluster.disconnect();
   if (rbn) rbn.disconnect();
+  disconnectWsjtx();
   disconnectSmartSdr();
   killRigctld();
   app.quit();

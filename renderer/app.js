@@ -26,11 +26,17 @@ let tuneClick = false;
 let activeRigName = ''; // name of the currently active rig profile
 let workedCallsigns = new Set(); // uppercase callsigns from QSO log
 let hideWorked = false;
+let workedParksSet = new Set(); // park references from CSV for fast lookup
+let workedParksData = new Map(); // reference → full park data for stats
+let hideWorkedParks = false;
 let showBearing = false;
 let respotDefault = true; // default: re-spot on POTA after logging
 let respotTemplate = 'Thanks for {rst}. 73s {mycallsign} via POTA CAT'; // re-spot comment template
 let myCallsign = '';
 let dxccData = null;  // { entities: [...] } from main process
+let enableWsjtx = false;
+let wsjtxDecodes = []; // recent decodes from WSJT-X (FIFO, max 50)
+let wsjtxState = null; // last WSJT-X status (freq, mode, etc.)
 
 // --- Scan state ---
 // --- Radio frequency tracking ---
@@ -116,6 +122,12 @@ const dxccPlaceholder = document.getElementById('dxcc-placeholder');
 const dxccModeFilterEl = document.getElementById('dxcc-mode-filter');
 const setEnableCluster = document.getElementById('set-enable-cluster');
 const setEnableRbn = document.getElementById('set-enable-rbn');
+const setEnableWsjtx = document.getElementById('set-enable-wsjtx');
+const wsjtxConfig = document.getElementById('wsjtx-config');
+const setWsjtxPort = document.getElementById('set-wsjtx-port');
+const setWsjtxHighlight = document.getElementById('set-wsjtx-highlight');
+const setWsjtxAutoLog = document.getElementById('set-wsjtx-auto-log');
+const wsjtxStatusEl = document.getElementById('wsjtx-status');
 const setMyCallsign = document.getElementById('set-my-callsign');
 const setClusterHost = document.getElementById('set-cluster-host');
 const setClusterPort = document.getElementById('set-cluster-port');
@@ -136,6 +148,18 @@ const rbnDistHeader = document.getElementById('rbn-dist-header');
 const rbnBandFilterEl = document.getElementById('rbn-band-filter');
 const rbnMaxAgeInput = document.getElementById('rbn-max-age');
 const rbnAgeUnitSelect = document.getElementById('rbn-age-unit');
+const setPotaParksPath = document.getElementById('set-pota-parks-path');
+const potaParksBrowseBtn = document.getElementById('pota-parks-browse-btn');
+const potaParksPicker = document.getElementById('pota-parks-picker');
+const setHideWorkedParks = document.getElementById('set-hide-worked-parks');
+const parksStatsOverlay = document.getElementById('parks-stats-overlay');
+const parksStatsTotal = document.getElementById('parks-stats-total');
+const parksStatsQsos = document.getElementById('parks-stats-qsos');
+const parksStatsLocations = document.getElementById('parks-stats-locations');
+const parksStatsNewNow = document.getElementById('parks-stats-new-now');
+const parksStatsToggleBtn = document.getElementById('parks-stats-toggle');
+const parksStatsCloseBtn = document.getElementById('parks-stats-close');
+let parksStatsOpen = false;
 const setEnableDxcc = document.getElementById('set-enable-dxcc');
 const setAdifPath = document.getElementById('set-adif-path');
 const adifBrowseBtn = document.getElementById('adif-browse-btn');
@@ -152,6 +176,8 @@ const setEnableLogging = document.getElementById('set-enable-logging');
 const loggingConfig = document.getElementById('logging-config');
 const setAdifLogPath = document.getElementById('set-adif-log-path');
 const adifLogBrowseBtn = document.getElementById('adif-log-browse-btn');
+const adifImportBtn = document.getElementById('adif-import-btn');
+const adifImportResult = document.getElementById('adif-import-result');
 const setDefaultPower = document.getElementById('set-default-power');
 const setSendToLogbook = document.getElementById('set-send-to-logbook');
 const logbookConfig = document.getElementById('logbook-config');
@@ -226,6 +252,7 @@ async function loadPrefs() {
   licenseClass = settings.licenseClass || 'none';
   hideOutOfBand = settings.hideOutOfBand === true;
   hideWorked = settings.hideWorked === true;
+  hideWorkedParks = settings.hideWorkedParks === true;
   respotDefault = settings.respotDefault !== false; // default true
   if (settings.respotTemplate != null) respotTemplate = settings.respotTemplate;
   myCallsign = settings.myCallsign || '';
@@ -235,6 +262,8 @@ async function loadPrefs() {
   const rigs = settings.rigs || [];
   const activeRig = rigs.find(r => r.id === settings.activeRigId);
   activeRigName = activeRig ? activeRig.name : '';
+  enableWsjtx = settings.enableWsjtx === true;
+  updateWsjtxStatusVisibility();
   updateClusterStatusVisibility();
   updateRbnStatusVisibility();
   updateRbnButton();
@@ -749,6 +778,10 @@ function updateClusterStatusVisibility() {
   }
 }
 
+function updateWsjtxStatusVisibility() {
+  wsjtxStatusEl.classList.toggle('hidden', !enableWsjtx);
+}
+
 function updateRbnStatusVisibility() {
   if (enableRbn) {
     rbnStatusEl.classList.remove('hidden');
@@ -894,6 +927,11 @@ setEnableRbn.addEventListener('change', () => {
   rbnConfig.classList.toggle('hidden', !setEnableRbn.checked);
 });
 
+// WSJT-X checkbox toggles config visibility
+setEnableWsjtx.addEventListener('change', () => {
+  wsjtxConfig.classList.toggle('hidden', !setEnableWsjtx.checked);
+});
+
 // SmartSDR checkbox toggles config visibility
 setSmartSdrSpots.addEventListener('change', () => {
   smartSdrConfig.classList.toggle('hidden', !setSmartSdrSpots.checked);
@@ -959,11 +997,39 @@ adifLogBrowseBtn.addEventListener('click', async () => {
   }
 });
 
+// ADIF import
+adifImportBtn.addEventListener('click', async () => {
+  adifImportResult.textContent = 'Importing...';
+  adifImportResult.style.color = '';
+  try {
+    const result = await window.api.importAdif();
+    if (!result) {
+      adifImportResult.textContent = '';
+    } else if (result.success) {
+      adifImportResult.textContent = `${result.imported} QSOs imported`;
+      adifImportResult.style.color = '#4ecca3';
+    } else {
+      adifImportResult.textContent = 'Import failed';
+      adifImportResult.style.color = '#e94560';
+    }
+  } catch (err) {
+    adifImportResult.textContent = 'Import failed';
+    adifImportResult.style.color = '#e94560';
+  }
+});
+
 // ADIF file browser
 adifBrowseBtn.addEventListener('click', async () => {
   const filePath = await window.api.chooseAdifFile();
   if (filePath) {
     setAdifPath.value = filePath;
+  }
+});
+
+potaParksBrowseBtn.addEventListener('click', async () => {
+  const filePath = await window.api.choosePotaParksFile();
+  if (filePath) {
+    setPotaParksPath.value = filePath;
   }
 });
 
@@ -1098,6 +1164,7 @@ function getFiltered() {
     if (continents && !continents.has(s.continent)) return false;
     if (hideOutOfBand && isOutOfPrivilege(parseFloat(s.frequency), s.mode, licenseClass)) return false;
     if (hideWorked && workedCallsigns.has(s.callsign.toUpperCase())) return false;
+    if (hideWorkedParks && s.source === 'pota' && s.reference && workedParksSet.has(s.reference)) return false;
     return true;
   });
 }
@@ -1519,8 +1586,10 @@ function updateMapMarkers(filtered) {
     const logBtnHtml = enableLogging
       ? ` <button class="log-popup-btn" data-call="${s.callsign}" data-freq="${s.frequency}" data-mode="${s.mode}" data-ref="${s.reference || ''}" data-name="${(s.parkName || '').replace(/"/g, '&quot;')}" data-source="${s.source || ''}">Log</button>`
       : '';
+    const mapNewPark = workedParksSet.size > 0 && s.source === 'pota' && s.reference && !workedParksSet.has(s.reference);
+    const newBadge = mapNewPark ? ' <span style="background:#4ecca3;color:#000;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;">NEW</span>' : '';
     const popupContent = `
-      <b>${watched ? '\u2B50 ' : ''}<a href="#" class="popup-qrz" data-call="${s.callsign}">${s.callsign}</a></b> <span style="color:${sourceColor};font-size:11px;">[${sourceLabel}]</span><br>
+      <b>${watched ? '\u2B50 ' : ''}<a href="#" class="popup-qrz" data-call="${s.callsign}">${s.callsign}</a></b> <span style="color:${sourceColor};font-size:11px;">[${sourceLabel}]</span>${newBadge}<br>
       ${parseFloat(s.frequency).toFixed(1)} kHz &middot; ${s.mode}<br>
       <b>${s.reference}</b> ${s.parkName}<br>
       ${distStr}<br>
@@ -1561,6 +1630,11 @@ function bindPopupClickHandlers(mapInstance) {
     if (!container) return;
     container.querySelectorAll('.tune-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
+        if (enableWsjtx) {
+          const freqMHz = (parseFloat(btn.dataset.freq) / 1000).toFixed(3);
+          showLogToast(`Tune WSJT-X to ${freqMHz} MHz ${btn.dataset.mode}`, { duration: 3000 });
+          return;
+        }
         window.api.tune(btn.dataset.freq, btn.dataset.mode);
       });
     });
@@ -1594,6 +1668,10 @@ function getScanList() {
 }
 
 function startScan() {
+  if (enableWsjtx) {
+    showLogToast('Scan disabled — WSJT-X is controlling the radio', { duration: 3000 });
+    return;
+  }
   const list = getScanList();
   if (list.length === 0) return;
   scanning = true;
@@ -1639,11 +1717,54 @@ scanBtn.addEventListener('click', () => {
 });
 
 document.addEventListener('keydown', (e) => {
+  // F2 — Recent QSOs viewer
+  if (e.key === 'F2' && !e.target.matches('input, select, textarea')) {
+    e.preventDefault();
+    openRecentQsos();
+    return;
+  }
   if (!scanning) return;
   if (e.code === 'Space' && !e.target.matches('input, select, textarea')) {
     e.preventDefault();
     stopScan();
   }
+});
+
+// --- Recent QSOs (F2) ---
+async function openRecentQsos() {
+  const dlg = document.getElementById('recent-qsos-dialog');
+  const tbody = document.getElementById('recent-qsos-tbody');
+  const emptyMsg = document.getElementById('recent-qsos-empty');
+  const table = document.getElementById('recent-qsos-table');
+  tbody.innerHTML = '';
+
+  const qsos = await window.api.getRecentQsos();
+  if (qsos.length === 0) {
+    table.classList.add('hidden');
+    emptyMsg.classList.remove('hidden');
+  } else {
+    table.classList.remove('hidden');
+    emptyMsg.classList.add('hidden');
+    for (const q of qsos) {
+      const tr = document.createElement('tr');
+      const date = q.qsoDate ? q.qsoDate.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3') : '';
+      const time = q.timeOn ? q.timeOn.slice(0, 2) + ':' + q.timeOn.slice(2, 4) : '';
+      tr.innerHTML =
+        `<td>${q.call}</td><td>${date}</td><td>${time}</td>` +
+        `<td>${q.band}</td><td>${q.mode}</td>` +
+        `<td>${q.rstSent}</td><td>${q.rstRcvd}</td>` +
+        `<td>${q.comment}</td>`;
+      tbody.appendChild(tr);
+    }
+  }
+  dlg.showModal();
+}
+
+document.getElementById('recent-qsos-close').addEventListener('click', () => {
+  document.getElementById('recent-qsos-dialog').close();
+});
+document.getElementById('recent-qsos-close-btn').addEventListener('click', () => {
+  document.getElementById('recent-qsos-dialog').close();
 });
 
 // --- View Toggle ---
@@ -1692,6 +1813,7 @@ function setView(view) {
     renderRbnMarkers();
     renderRbnTable();
   }
+  updateParksStatsOverlay();
 }
 
 viewTableBtn.addEventListener('click', () => setView('table'));
@@ -1779,6 +1901,7 @@ function render() {
   const filtered = sortSpots(getFiltered());
 
   spotCountEl.textContent = `${filtered.length} spots`;
+  updateParksStatsOverlay();
 
   if (currentView === 'table') {
     tbody.innerHTML = '';
@@ -1814,6 +1937,12 @@ function render() {
         tr.classList.add('already-worked');
       }
 
+      // New park indicator (POTA spot with a reference not in worked parks)
+      const isNewPark = workedParksSet.size > 0 && s.source === 'pota' && s.reference && !workedParksSet.has(s.reference);
+      if (isNewPark) {
+        tr.classList.add('new-park');
+      }
+
       // Highlight the row currently being scanned
       if (scanSpot && s.frequency === scanSpot.frequency) {
         tr.classList.add('scan-highlight');
@@ -1826,8 +1955,19 @@ function render() {
         tr.classList.add('scan-skipped');
       }
 
+      // WSJT-X decode indicator — show if this activator was recently decoded
+      const wsjtxDecode = enableWsjtx && wsjtxDecodes.find(d => d.isPota && d.dxCall && d.dxCall.toUpperCase() === s.callsign.toUpperCase());
+      if (wsjtxDecode) {
+        tr.classList.add('wsjtx-heard');
+      }
+
       tr.addEventListener('click', () => {
         if (scanning) stopScan(); // clicking a row stops scan
+        if (enableWsjtx) {
+          const freqMHz = (parseFloat(s.frequency) / 1000).toFixed(3);
+          showLogToast(`Tune WSJT-X to ${freqMHz} MHz ${s.mode}`, { duration: 3000 });
+          return;
+        }
         window.api.tune(s.frequency, s.mode);
       });
 
@@ -2201,6 +2341,11 @@ settingsBtn.addEventListener('click', async () => {
   setClusterPort.value = s.clusterPort || 7373;
   clusterConfig.classList.toggle('hidden', !s.enableCluster);
   rbnConfig.classList.toggle('hidden', !s.enableRbn);
+  setEnableWsjtx.checked = s.enableWsjtx === true;
+  setWsjtxPort.value = s.wsjtxPort || 2237;
+  setWsjtxHighlight.checked = s.wsjtxHighlight !== false;
+  setWsjtxAutoLog.checked = s.wsjtxAutoLog === true;
+  wsjtxConfig.classList.toggle('hidden', !s.enableWsjtx);
   setEnableLogging.checked = s.enableLogging === true;
   if (s.adifLogPath) {
     setAdifLogPath.value = s.adifLogPath;
@@ -2221,6 +2366,8 @@ settingsBtn.addEventListener('click', async () => {
   setEnableDxcc.checked = s.enableDxcc === true;
   setAdifPath.value = s.adifPath || '';
   adifPicker.classList.toggle('hidden', !s.enableDxcc);
+  setPotaParksPath.value = s.potaParksPath || '';
+  setHideWorkedParks.checked = s.hideWorkedParks === true;
   setSmartSdrSpots.checked = s.smartSdrSpots === true;
   setSmartSdrHost.value = s.smartSdrHost || '127.0.0.1';
   setSmartSdrPota.checked = s.smartSdrPota !== false;
@@ -2259,6 +2406,10 @@ settingsSave.addEventListener('click', async () => {
   const myCallsign = setMyCallsign.value.trim().toUpperCase();
   const clusterHost = setClusterHost.value.trim() || 'w3lpl.net';
   const clusterPort = parseInt(setClusterPort.value, 10) || 7373;
+  const wsjtxEnabled = setEnableWsjtx.checked;
+  const wsjtxPortVal = parseInt(setWsjtxPort.value, 10) || 2237;
+  const wsjtxHighlightEnabled = setWsjtxHighlight.checked;
+  const wsjtxAutoLogEnabled = setWsjtxAutoLog.checked;
   const solarEnabled = setEnableSolar.checked;
   const bandActivityEnabled = setEnableBandActivity.checked;
   const showBearingEnabled = setShowBearing.checked;
@@ -2277,6 +2428,8 @@ settingsSave.addEventListener('click', async () => {
   const smartSdrClusterEnabled = setSmartSdrCluster.checked;
   const smartSdrRbnEnabled = setSmartSdrRbn.checked;
   const adifPath = setAdifPath.value.trim() || '';
+  const potaParksPath = setPotaParksPath.value.trim() || '';
+  const hideWorkedParksEnabled = setHideWorkedParks.checked;
   const loggingEnabled = setEnableLogging.checked;
   const adifLogPath = setAdifLogPath.value.trim() || '';
   const defaultPowerVal = parseInt(setDefaultPower.value, 10) || 100;
@@ -2308,6 +2461,10 @@ settingsSave.addEventListener('click', async () => {
     enableSota: sotaEnabled,
     enableCluster: clusterEnabled,
     enableRbn: rbnEnabled,
+    enableWsjtx: wsjtxEnabled,
+    wsjtxPort: wsjtxPortVal,
+    wsjtxHighlight: wsjtxHighlightEnabled,
+    wsjtxAutoLog: wsjtxAutoLogEnabled,
     myCallsign: myCallsign,
     clusterHost: clusterHost,
     clusterPort: clusterPort,
@@ -2321,6 +2478,8 @@ settingsSave.addEventListener('click', async () => {
     tuneClick: tuneClickEnabled,
     verboseLog: verboseLogEnabled,
     adifPath: adifPath,
+    potaParksPath: potaParksPath,
+    hideWorkedParks: hideWorkedParksEnabled,
     enableLogging: loggingEnabled,
     adifLogPath: adifLogPath,
     defaultPower: defaultPowerVal,
@@ -2345,6 +2504,8 @@ settingsSave.addEventListener('click', async () => {
   enableSota = sotaEnabled;
   enableCluster = clusterEnabled;
   enableRbn = rbnEnabled;
+  enableWsjtx = wsjtxEnabled;
+  updateWsjtxStatusVisibility();
   updateClusterStatusVisibility();
   updateRbnStatusVisibility();
   updateRbnButton();
@@ -2362,6 +2523,7 @@ settingsSave.addEventListener('click', async () => {
   licenseClass = licenseClassVal;
   hideOutOfBand = hideOob;
   hideWorked = hideWorkedEnabled;
+  hideWorkedParks = hideWorkedParksEnabled;
   tuneClick = tuneClickEnabled;
   catLogToggleBtn.classList.toggle('hidden', !verboseLogEnabled);
   if (!verboseLogEnabled) {
@@ -2391,7 +2553,13 @@ window.api.onSpotsError((msg) => {
   lastRefreshEl.textContent = `Error: ${msg}`;
 });
 
-window.api.onCatStatus(({ connected, error }) => {
+window.api.onCatStatus(({ connected, error, wsjtxMode }) => {
+  if (wsjtxMode) {
+    catStatusEl.textContent = 'CAT';
+    catStatusEl.className = 'status connected';
+    catStatusEl.title = 'Radio controlled by WSJT-X';
+    return;
+  }
   catStatusEl.textContent = 'CAT';
   catStatusEl.className = 'status ' + (connected ? 'connected' : 'disconnected');
   catStatusEl.title = connected
@@ -2430,6 +2598,72 @@ window.api.onWorkedCallsigns((list) => {
   render();
 });
 
+// --- Worked parks listener ---
+window.api.onWorkedParks((entries) => {
+  workedParksSet = new Set();
+  workedParksData = new Map();
+  if (entries && entries.length > 0) {
+    for (const [ref, data] of entries) {
+      workedParksSet.add(ref);
+      workedParksData.set(ref, data);
+    }
+  }
+  updateParksStatsOverlay();
+  render();
+});
+
+function updateParksStatsOverlay() {
+  if (!parksStatsOverlay) return;
+
+  // Show/hide the toggle button based on whether CSV is loaded
+  const hasData = workedParksData.size > 0;
+  parksStatsToggleBtn.classList.toggle('hidden', !hasData);
+
+  // Panel visibility: only when toggled open, has data, and on table/map view
+  if (!parksStatsOpen || !hasData || (currentView !== 'table' && currentView !== 'map')) {
+    parksStatsOverlay.classList.add('hidden');
+    parksStatsToggleBtn.classList.remove('active');
+    return;
+  }
+
+  parksStatsOverlay.classList.remove('hidden');
+  parksStatsToggleBtn.classList.add('active');
+
+  // Total parks
+  parksStatsTotal.textContent = workedParksData.size.toLocaleString();
+
+  // Total QSOs
+  let totalQsos = 0;
+  const locations = new Set();
+  for (const [, data] of workedParksData) {
+    totalQsos += data.qsoCount || 0;
+    if (data.location) locations.add(data.location);
+  }
+  parksStatsQsos.textContent = totalQsos.toLocaleString();
+  parksStatsLocations.textContent = locations.size.toLocaleString();
+
+  // New parks on air right now — POTA spots whose reference is NOT in worked set
+  let newOnAir = 0;
+  const seenRefs = new Set();
+  for (const s of allSpots) {
+    if (s.source === 'pota' && s.reference && !seenRefs.has(s.reference)) {
+      seenRefs.add(s.reference);
+      if (!workedParksSet.has(s.reference)) newOnAir++;
+    }
+  }
+  parksStatsNewNow.textContent = newOnAir;
+}
+
+parksStatsToggleBtn.addEventListener('click', () => {
+  parksStatsOpen = !parksStatsOpen;
+  updateParksStatsOverlay();
+});
+
+parksStatsCloseBtn.addEventListener('click', () => {
+  parksStatsOpen = false;
+  updateParksStatsOverlay();
+});
+
 // --- DXCC data listener ---
 window.api.onDxccData((data) => {
   dxccData = data;
@@ -2441,6 +2675,48 @@ window.api.onClusterStatus(({ connected }) => {
   clusterStatusEl.textContent = 'Cluster';
   clusterStatusEl.className = 'status ' + (connected ? 'connected' : 'disconnected');
   if (enableCluster) clusterStatusEl.classList.remove('hidden');
+});
+
+// --- WSJT-X listeners ---
+window.api.onWsjtxStatus(({ connected }) => {
+  wsjtxStatusEl.textContent = 'WSJT-X';
+  wsjtxStatusEl.className = 'status ' + (connected ? 'connected' : 'disconnected');
+  if (enableWsjtx) wsjtxStatusEl.classList.remove('hidden');
+  if (!connected) {
+    wsjtxDecodes = [];
+    wsjtxState = null;
+  }
+});
+
+window.api.onWsjtxState((state) => {
+  wsjtxState = state;
+});
+
+window.api.onWsjtxDecode((decode) => {
+  // Check if this decode's dxCall matches any active POTA spot
+  if (decode.dxCall) {
+    const upper = decode.dxCall.toUpperCase();
+    const matchingSpot = allSpots.find(s => s.source === 'pota' && s.callsign.toUpperCase() === upper);
+    if (matchingSpot) {
+      decode.isPota = true;
+      decode.reference = matchingSpot.reference;
+      decode.parkName = matchingSpot.parkName;
+    }
+  }
+  wsjtxDecodes.push(decode);
+  if (wsjtxDecodes.length > 50) wsjtxDecodes.shift();
+  if (currentView === 'table') render();
+});
+
+window.api.onWsjtxClear(() => {
+  wsjtxDecodes = [];
+  if (currentView === 'table') render();
+});
+
+window.api.onWsjtxQsoLogged((qso) => {
+  // Show a toast when WSJT-X logs a QSO
+  const freqMHz = (qso.txFrequency / 1e6).toFixed(3);
+  showLogToast(`WSJT-X logged ${qso.dxCall} on ${freqMHz} MHz ${qso.mode}`);
 });
 
 // --- Radio frequency tracking ---

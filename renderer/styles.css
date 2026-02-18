@@ -344,6 +344,7 @@ button:hover {
 }
 
 main {
+  position: relative;
   padding: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -1499,6 +1500,43 @@ dialog input, dialog select {
   border-color: var(--accent-green);
 }
 
+/* Recent QSOs dialog */
+#recent-qsos-dialog {
+  min-width: 600px;
+  max-width: 760px;
+}
+
+#recent-qsos-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-family: 'Consolas', 'Courier New', monospace;
+}
+
+#recent-qsos-table th {
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+#recent-qsos-table td {
+  padding: 3px 6px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-secondary);
+}
+
+#recent-qsos-table td:last-child {
+  white-space: normal;
+  word-break: break-word;
+}
+
+#recent-qsos-table tr:last-child td {
+  border-bottom: none;
+}
+
 /* Map popup log button */
 .log-popup-btn {
   background: var(--tint-green);
@@ -1733,5 +1771,112 @@ dialog input, dialog select {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--bg-hover);
+}
+
+/* WSJT-X heard indicator — pulsing right border on decoded POTA activators */
+.wsjtx-heard {
+  border-right: 3px solid #4fc3f7;
+  animation: wsjtx-pulse 2s ease-in-out infinite;
+}
+
+@keyframes wsjtx-pulse {
+  0%, 100% { border-right-color: #4fc3f7; }
+  50% { border-right-color: #1a4080; }
+}
+
+/* New park indicator — green left border on POTA spots for unworked parks */
+.new-park {
+  border-left: 3px solid #66ff99 !important;
+}
+
+/* Parks stats toggle button in status bar */
+.parks-stats-btn {
+  cursor: pointer;
+  background: var(--bg-tertiary) !important;
+  color: var(--text-tertiary) !important;
+  border: 1px solid var(--border-secondary) !important;
+}
+
+.parks-stats-btn:hover {
+  color: var(--text-primary) !important;
+  background: var(--bg-hover) !important;
+}
+
+.parks-stats-btn.active {
+  background: var(--tint-green) !important;
+  color: var(--accent-green) !important;
+  border-color: var(--accent-green) !important;
+}
+
+/* Parks stats overlay panel */
+#parks-stats-overlay {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 8px;
+  padding: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  z-index: 500;
+  min-width: 200px;
+  box-shadow: 0 4px 16px var(--shadow-heavy);
+}
+
+.parks-stats-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-primary);
+  font-weight: bold;
+  font-size: 12px;
+  color: var(--accent-green);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.parks-stats-header button {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.parks-stats-header button:hover {
+  color: var(--text-primary);
+}
+
+.parks-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  white-space: nowrap;
+}
+
+.parks-stat span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.parks-stat strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.parks-stat strong.stat-highlight {
+  color: var(--accent-green);
+}
+
+.parks-stats-divider {
+  height: 1px;
+  background: var(--border-primary);
+  margin: 2px 12px;
 }
 

@@ -74,9 +74,11 @@
       <span id="cat-status" class="status disconnected">CAT</span>
       <span id="cluster-status" class="status disconnected hidden">Cluster</span>
       <span id="rbn-status" class="status disconnected hidden">RBN</span>
+      <span id="wsjtx-status" class="status disconnected hidden">WSJT-X</span>
       <span id="sfi-status" class="status solar-pill hidden">SFI —</span>
       <span id="k-status" class="status solar-pill hidden">K —</span>
       <span id="a-status" class="status solar-pill hidden">A —</span>
+      <button id="parks-stats-toggle" class="status parks-stats-btn hidden" title="Toggle POTA stats panel">POTA Stats</button>
       <button id="cat-log-toggle" class="status cat-log-btn hidden" title="Toggle CAT log panel">Verbose Log</button>
       <span id="spot-count"></span>
       <span id="last-refresh"></span>
@@ -111,6 +113,17 @@
       <tbody id="spots-body"></tbody>
     </table>
     <div id="no-spots" class="hidden">No spots match current filters</div>
+    <div id="parks-stats-overlay" class="hidden">
+      <div class="parks-stats-header">
+        <span>POTA Stats</span>
+        <button id="parks-stats-close" title="Close">&times;</button>
+      </div>
+      <div class="parks-stat"><span>Parks Worked</span><strong id="parks-stats-total">0</strong></div>
+      <div class="parks-stat"><span>Total QSOs</span><strong id="parks-stats-qsos">0</strong></div>
+      <div class="parks-stat"><span>Locations</span><strong id="parks-stats-locations">0</strong></div>
+      <div class="parks-stats-divider"></div>
+      <div class="parks-stat"><span>New on Air Now</span><strong id="parks-stats-new-now" class="stat-highlight">0</strong></div>
+    </div>
     <div id="map-container" class="hidden">
       <div id="map"></div>
       <div id="band-activity-bar" class="hidden"></div>
@@ -294,7 +307,13 @@
           </div>
           <span class="help-text" style="display:block;margin-top:4px;">Local backup of all QSOs logged from POTA CAT</span>
         </label>
-        <label>Default TX Power (W):
+        <div style="margin-top:10px;">
+          <strong style="display:block;margin-bottom:4px;">Import LoTW, POTA, QRZ, or other ADIF</strong>
+          <button type="button" id="adif-import-btn">Import ADIF</button>
+          <span id="adif-import-result" class="help-text" style="margin-left:8px;"></span>
+          <span class="help-text" style="display:block;margin-top:4px;">Import your logs from other services. They will be added to your POTA CAT logfile. You can then hide previously worked spots, or use them for DXCC hunting (coming soon).</span>
+        </div>
+        <label style="margin-top:10px;">Default TX Power (W):
           <input type="number" id="set-default-power" min="1" max="5000" value="100">
         </label>
         <label class="checkbox-label"><input type="checkbox" id="set-send-to-logbook"> Send Data to Logbook</label>
@@ -323,6 +342,16 @@
     <fieldset class="source-toggles">
       <legend>Spot Sources</legend>
       <label class="checkbox-label"><input type="checkbox" id="set-enable-pota" checked> Enable POTA</label>
+      <div id="pota-parks-picker" style="margin-top:6px;margin-left:12px;margin-bottom:8px;">
+        <label>POTA Parks Worked CSV:
+          <div style="display:flex;gap:6px;margin-top:4px;">
+            <input type="text" id="set-pota-parks-path" readonly placeholder="No file selected" style="flex:1;">
+            <button type="button" id="pota-parks-browse-btn">Browse</button>
+          </div>
+        </label>
+        <span class="help-text" style="display:block;margin-top:4px;">Go to pota.app/#/user/stats, under Hunted Parks, click "Export CSV"</span>
+        <label class="checkbox-label" style="margin-top:4px;"><input type="checkbox" id="set-hide-worked-parks"> Hide already-worked parks</label>
+      </div>
       <label class="checkbox-label"><input type="checkbox" id="set-enable-sota"> Enable SOTA</label>
       <label class="checkbox-label"><input type="checkbox" id="set-enable-cluster"> Enable DX Cluster</label>
       <div id="cluster-config" class="radio-sub hidden">
@@ -333,6 +362,16 @@
       <div id="rbn-config" class="radio-sub hidden">
         <span class="help-text" style="font-size:12px;">Shows where your CQ calls are being heard by RBN skimmers worldwide.</span>
         <span class="help-text" style="display:block;margin-top:4px;">RBN spots only appear while POTA CAT is open — historical spots are not retrieved.</span>
+      </div>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-wsjtx"> WSJT-X Integration</label>
+      <div id="wsjtx-config" class="radio-sub hidden">
+        <span class="help-text" style="font-size:12px;">Connect to WSJT-X via UDP. POTA activators are highlighted in the decode window and decodes appear in POTA CAT.</span>
+        <label>UDP Port:
+          <input type="number" id="set-wsjtx-port" value="2237" min="1024" max="65535" style="width:80px;">
+        </label>
+        <span class="help-text" style="display:block;margin-top:4px;">Must match WSJT-X Settings &rarr; Reporting &rarr; UDP Server port. Enable "Accept UDP requests" in WSJT-X.</span>
+        <label class="checkbox-label" style="margin-top:6px;"><input type="checkbox" id="set-wsjtx-highlight" checked> Highlight POTA activators in WSJT-X</label>
+        <label class="checkbox-label"><input type="checkbox" id="set-wsjtx-auto-log"> Auto-log WSJT-X QSOs to POTA CAT</label>
       </div>
     </fieldset>
     <fieldset class="source-toggles">
@@ -571,6 +610,28 @@
     <div class="dialog-buttons">
       <button type="button" id="log-cancel">Cancel</button>
       <button type="button" id="log-save" class="log-save-btn">Save QSO</button>
+    </div>
+  </dialog>
+
+  <!-- Recent QSOs dialog (F2) -->
+  <dialog id="recent-qsos-dialog">
+    <div class="log-dialog-header">
+      <h3>Recent QSOs</h3>
+      <button type="button" id="recent-qsos-close" class="log-dialog-x" title="Close">&times;</button>
+    </div>
+    <div id="recent-qsos-body">
+      <table id="recent-qsos-table">
+        <thead>
+          <tr>
+            <th>Callsign</th><th>Date</th><th>Time</th><th>Band</th><th>Mode</th><th>RST S</th><th>RST R</th><th>Notes</th>
+          </tr>
+        </thead>
+        <tbody id="recent-qsos-tbody"></tbody>
+      </table>
+      <p id="recent-qsos-empty" class="hidden" style="text-align:center;color:var(--text-tertiary);margin:20px 0;">No QSOs logged yet</p>
+    </div>
+    <div class="dialog-buttons">
+      <button type="button" id="recent-qsos-close-btn">Close</button>
     </div>
   </dialog>
 
