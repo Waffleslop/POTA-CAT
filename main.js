@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, dialog, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, dialog, Notification, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { execFile, spawn } = require('child_process');
@@ -1378,9 +1378,24 @@ function sendN3fjpTcp(qsoData, host, port) {
 
 // --- App lifecycle ---
 function createWindow() {
+  // Restore saved window bounds (with display sanity check)
+  let windowOpts = { width: 1100, height: 700 };
+  const saved = settings.windowBounds;
+  if (saved && saved.width > 200 && saved.height > 150) {
+    // Verify saved position is on a visible display
+    const displays = screen.getAllDisplays();
+    const onScreen = displays.some(d => {
+      const b = d.bounds;
+      return saved.x < b.x + b.width && saved.x + saved.width > b.x &&
+             saved.y < b.y + b.height && saved.y + saved.height > b.y;
+    });
+    if (onScreen) {
+      windowOpts = { x: saved.x, y: saved.y, width: saved.width, height: saved.height };
+    }
+  }
+
   win = new BrowserWindow({
-    width: 1100,
-    height: 700,
+    ...windowOpts,
     title: 'POTA CAT',
     frame: false,
     icon: path.join(__dirname, 'assets', 'icon.png'),
@@ -1390,6 +1405,11 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
+
+  // Restore maximized state after window is ready
+  if (settings.windowMaximized) {
+    win.maximize();
+  }
 
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
@@ -2146,6 +2166,15 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', async () => {
+  // Save window bounds before cleanup
+  if (win && !win.isDestroyed()) {
+    settings.windowMaximized = win.isMaximized();
+    if (!win.isMaximized() && !win.isMinimized()) {
+      settings.windowBounds = win.getBounds();
+    }
+    saveSettings(settings);
+  }
+
   // Send session duration telemetry before quitting — await so the request flushes
   const sessionSeconds = Math.round((Date.now() - sessionStartTime) / 1000);
   await sendTelemetry(sessionSeconds);

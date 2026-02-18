@@ -349,9 +349,61 @@ button:hover {
 main {
   position: relative;
   padding: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
   height: calc(100vh - 52px - 32px);
+}
+
+/* Split container for simultaneous table + map */
+#split-container {
+  display: flex;
+  height: 100%;
+  width: 100%;
+}
+
+#split-container.split-horizontal {
+  flex-direction: row;
+}
+
+#split-container.split-vertical {
+  flex-direction: column;
+}
+
+#table-pane {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
+  min-height: 0;
+}
+
+#map-pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#map-pane #map-container {
+  height: 100%;
+}
+
+#split-splitter {
+  flex-shrink: 0;
+  background: var(--border-primary);
+}
+
+#split-container.split-horizontal > #split-splitter {
+  width: 5px;
+  cursor: col-resize;
+}
+
+#split-container.split-vertical > #split-splitter {
+  height: 5px;
+  cursor: row-resize;
+}
+
+#split-splitter:hover {
+  background: var(--accent-red);
 }
 
 table {
@@ -508,6 +560,63 @@ th.no-sort:hover {
 
 .col-resize-handle:hover {
   background: var(--accent-red);
+}
+
+/* Column visibility — hide both th and td via table class */
+.hide-col-frequency [data-col="frequency"],
+.hide-col-mode [data-col="mode"],
+.hide-col-reference [data-col="reference"],
+.hide-col-parkName [data-col="parkName"],
+.hide-col-locationDesc [data-col="locationDesc"],
+.hide-col-distance [data-col="distance"],
+.hide-col-spotTime [data-col="spotTime"],
+.hide-col-skip [data-col="skip"] {
+  display: none;
+}
+
+/* Column context menu */
+#col-context-menu {
+  position: fixed;
+  z-index: 9999;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  padding: 4px 0;
+  box-shadow: 0 4px 12px var(--shadow-heavy);
+  min-width: 140px;
+}
+
+.col-ctx-title {
+  padding: 4px 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border-primary);
+  margin-bottom: 2px;
+}
+
+.col-ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.col-ctx-item:hover {
+  background: var(--bg-hover);
+}
+
+.col-ctx-item input[type="checkbox"] {
+  margin: 0;
+}
+
+/* Compact table mode (narrow pane in split view) */
+#spots-table.compact .log-btn {
+  padding: 2px 4px;
+  font-size: 10px;
 }
 
 thead th {
@@ -1446,6 +1555,8 @@ dialog input, dialog select {
 /* QSO Logging */
 .log-col {
   display: none;
+  width: 40px;
+  max-width: 40px;
 }
 
 .logging-enabled .log-col {
@@ -1463,13 +1574,13 @@ dialog input, dialog select {
 
 .log-cell {
   text-align: center;
-  overflow: visible;
+  overflow: hidden;
   text-overflow: clip;
 }
 
 .log-btn {
   font-size: 11px;
-  padding: 2px 8px;
+  padding: 2px 6px;
   border-radius: 3px;
   background: var(--tint-green);
   color: var(--accent-green);

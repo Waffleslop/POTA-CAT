@@ -4,7 +4,10 @@
 let allSpots = [];
 let sortCol = 'distance';
 let sortAsc = true;
-let currentView = 'table'; // 'table', 'map', 'dxcc', or 'rbn'
+let currentView = 'table'; // 'table', 'map', 'dxcc', or 'rbn' (for exclusive views)
+let showTable = true;
+let showMap = false;
+let splitOrientation = 'horizontal'; // 'horizontal' (side-by-side) or 'vertical' (stacked)
 
 // User preferences (loaded from settings)
 let distUnit = 'mi';    // 'mi' or 'km'
@@ -117,6 +120,10 @@ const spotsTable = document.getElementById('spots-table');
 const mapContainer = document.getElementById('map-container');
 const mapDiv = document.getElementById('map');
 const bandActivityBar = document.getElementById('band-activity-bar');
+const splitContainerEl = document.getElementById('split-container');
+const tablePaneEl = document.getElementById('table-pane');
+const mapPaneEl = document.getElementById('map-pane');
+const splitSplitterEl = document.getElementById('split-splitter');
 const viewTableBtn = document.getElementById('view-table-btn');
 const viewMapBtn = document.getElementById('view-map-btn');
 const viewDxccBtn = document.getElementById('view-dxcc-btn');
@@ -402,6 +409,29 @@ async function loadPrefs() {
     else { maxAgeMin = parseInt(settings.maxAgeMin, 10) || 5; }
   } catch { maxAgeMin = parseInt(settings.maxAgeMin, 10) || 5; }
   updateHeaders();
+
+  // Restore view state
+  splitOrientation = settings.splitOrientation || 'horizontal';
+  try {
+    const viewState = JSON.parse(localStorage.getItem(VIEW_STATE_KEY));
+    if (viewState) {
+      if (viewState.lastView === 'rbn' && enableRbn) {
+        setView('rbn');
+      } else if (viewState.lastView === 'dxcc' && enableDxcc) {
+        setView('dxcc');
+      } else {
+        showTable = viewState.showTable !== false;
+        showMap = viewState.showMap === true;
+        if (!showTable && !showMap) showTable = true;
+        currentView = showTable ? 'table' : 'map';
+        updateViewLayout();
+      }
+    } else {
+      updateViewLayout();
+    }
+  } catch {
+    updateViewLayout();
+  }
 }
 
 function updateHeaders() {
@@ -1316,6 +1346,134 @@ function sortSpots(spots) {
 }
 
 // --- Column Resizing ---
+// --- Column Visibility (right-click header to toggle) ---
+const HIDDEN_COLS_KEY = 'pota-cat-hidden-cols';
+const HIDEABLE_COLUMNS = [
+  { key: 'frequency', label: 'Freq (kHz)' },
+  { key: 'mode', label: 'Mode' },
+  { key: 'reference', label: 'Ref' },
+  { key: 'parkName', label: 'Name' },
+  { key: 'locationDesc', label: 'State' },
+  { key: 'distance', label: 'Distance' },
+  { key: 'spotTime', label: 'Age' },
+  { key: 'skip', label: 'Skip' },
+];
+
+let hiddenColumns = new Set();
+
+function loadHiddenColumns() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(HIDDEN_COLS_KEY));
+    if (Array.isArray(saved)) return new Set(saved);
+  } catch { /* ignore */ }
+  return new Set();
+}
+
+function saveHiddenColumns() {
+  localStorage.setItem(HIDDEN_COLS_KEY, JSON.stringify([...hiddenColumns]));
+}
+
+function applyHiddenColumns() {
+  for (const col of HIDEABLE_COLUMNS) {
+    spotsTable.classList.toggle('hide-col-' + col.key, hiddenColumns.has(col.key));
+  }
+}
+
+// Context menu
+const colContextMenu = document.getElementById('col-context-menu');
+
+function showColContextMenu(x, y) {
+  colContextMenu.innerHTML = '<div class="col-ctx-title">Show Columns</div>';
+  for (const col of HIDEABLE_COLUMNS) {
+    const item = document.createElement('label');
+    item.className = 'col-ctx-item';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = !hiddenColumns.has(col.key);
+    cb.addEventListener('change', () => {
+      if (cb.checked) {
+        hiddenColumns.delete(col.key);
+      } else {
+        hiddenColumns.add(col.key);
+      }
+      saveHiddenColumns();
+      applyHiddenColumns();
+    });
+    item.appendChild(cb);
+    item.appendChild(document.createTextNode(col.label));
+    colContextMenu.appendChild(item);
+  }
+  // Position within viewport
+  colContextMenu.classList.remove('hidden');
+  const menuW = colContextMenu.offsetWidth;
+  const menuH = colContextMenu.offsetHeight;
+  if (x + menuW > window.innerWidth) x = window.innerWidth - menuW - 4;
+  if (y + menuH > window.innerHeight) y = window.innerHeight - menuH - 4;
+  colContextMenu.style.left = x + 'px';
+  colContextMenu.style.top = y + 'px';
+}
+
+spotsTable.querySelector('thead').addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  showColContextMenu(e.clientX, e.clientY);
+});
+
+document.addEventListener('mousedown', (e) => {
+  if (!colContextMenu.contains(e.target)) {
+    colContextMenu.classList.add('hidden');
+  }
+});
+
+// Load on init
+hiddenColumns = loadHiddenColumns();
+applyHiddenColumns();
+
+// --- Compact mode for narrow table pane ---
+const COMPACT_THRESHOLD = 600; // px
+let isCompact = false;
+
+const HEADER_LABELS = {
+  callsign: { full: 'Callsign', compact: 'Call' },
+  frequency: { full: 'Freq (kHz)', compact: 'Freq' },
+  locationDesc: { full: 'State', compact: 'St' },
+  parkName: { full: 'Name', compact: 'Name' },
+};
+
+function updateCompactMode(width) {
+  const compact = width < COMPACT_THRESHOLD;
+  if (compact === isCompact) return;
+  isCompact = compact;
+  spotsTable.classList.toggle('compact', compact);
+  // Update header text
+  const ths = spotsTable.querySelectorAll('thead th[data-col]');
+  ths.forEach(th => {
+    const col = th.getAttribute('data-col');
+    const labels = HEADER_LABELS[col];
+    if (labels) {
+      // Preserve sort indicator — only update first text node
+      th.childNodes[0].textContent = compact ? labels.compact : labels.full;
+    }
+  });
+}
+
+const tableResizeObserver = new ResizeObserver((entries) => {
+  for (const entry of entries) {
+    updateCompactMode(entry.contentRect.width);
+  }
+});
+tableResizeObserver.observe(tablePaneEl);
+
+// Invalidate Leaflet map size when map pane resizes (maximize, splitter drag, window resize)
+let mapResizeRaf = null;
+const mapResizeObserver = new ResizeObserver(() => {
+  if (mapResizeRaf) cancelAnimationFrame(mapResizeRaf);
+  mapResizeRaf = requestAnimationFrame(() => {
+    if (map) map.invalidateSize();
+    mapResizeRaf = null;
+  });
+});
+mapResizeObserver.observe(mapPaneEl);
+
 // --- Column Resizing ---
 // Widths stored as percentages of table width so they always fit
 const COL_WIDTHS_KEY = 'pota-cat-col-pct-v6';
@@ -1961,13 +2119,29 @@ document.getElementById('recent-qsos-close-btn').addEventListener('click', () =>
 });
 
 // --- View Toggle ---
-function setView(view) {
-  currentView = view;
+// Table and Map are toggleable (both can be active = split view).
+// RBN and DXCC are exclusive views that hide the split container.
 
-  // Hide all views
-  spotsTable.classList.add('hidden');
-  noSpots.classList.add('hidden');
-  mapContainer.classList.add('hidden');
+function setView(view) {
+  // Called for exclusive views (rbn, dxcc) or to force a specific state
+  if (view === 'rbn' || view === 'dxcc') {
+    currentView = view;
+    showTable = false;
+    showMap = false;
+  } else if (view === 'table') {
+    currentView = 'table';
+    showTable = true;
+    showMap = false;
+  } else if (view === 'map') {
+    currentView = 'map';
+    showTable = false;
+    showMap = true;
+  }
+  updateViewLayout();
+}
+
+function updateViewLayout() {
+  // Hide exclusive views
   dxccView.classList.add('hidden');
   rbnView.classList.add('hidden');
 
@@ -1977,42 +2151,152 @@ function setView(view) {
   viewDxccBtn.classList.remove('active');
   viewRbnBtn.classList.remove('active');
 
-  if (view === 'table') {
-    spotsTable.classList.remove('hidden');
-    viewTableBtn.classList.add('active');
-    render();
-  } else if (view === 'map') {
-    mapContainer.classList.remove('hidden');
-    viewMapBtn.classList.add('active');
-    updateBandActivityVisibility();
-    if (!map) {
-      initMap();
-    }
-    setTimeout(() => {
-      map.invalidateSize();
-      render();
-    }, 0);
-  } else if (view === 'dxcc') {
+  if (currentView === 'dxcc') {
+    splitContainerEl.classList.add('hidden');
     dxccView.classList.remove('hidden');
     viewDxccBtn.classList.add('active');
     renderDxccMatrix();
-  } else if (view === 'rbn') {
+    updateParksStatsOverlay();
+    saveViewState();
+    return;
+  }
+
+  if (currentView === 'rbn') {
+    splitContainerEl.classList.add('hidden');
     rbnView.classList.remove('hidden');
     viewRbnBtn.classList.add('active');
-    if (!rbnMap) {
-      initRbnMap();
-    }
+    if (!rbnMap) initRbnMap();
     setTimeout(() => rbnMap.invalidateSize(), 0);
     renderRbnMarkers();
     renderRbnTable();
+    updateParksStatsOverlay();
+    saveViewState();
+    return;
   }
+
+  // Table/Map mode — show split container
+  splitContainerEl.classList.remove('hidden');
+
+  // Update orientation
+  splitContainerEl.classList.toggle('split-horizontal', splitOrientation === 'horizontal');
+  splitContainerEl.classList.toggle('split-vertical', splitOrientation === 'vertical');
+
+  // Reset splitter-drag overrides when not in split mode
+  if (!(showTable && showMap)) {
+    tablePaneEl.style.flex = '';
+    mapPaneEl.style.flex = '';
+  }
+
+  // Show/hide panes
+  tablePaneEl.classList.toggle('hidden', !showTable);
+  mapPaneEl.classList.toggle('hidden', !showMap);
+  splitSplitterEl.classList.toggle('hidden', !(showTable && showMap));
+
+  // Button states
+  if (showTable) viewTableBtn.classList.add('active');
+  if (showMap) viewMapBtn.classList.add('active');
+
+  // Init and resize map if visible
+  if (showMap) {
+    if (!map) initMap();
+    updateBandActivityVisibility();
+    setTimeout(() => {
+      if (map) map.invalidateSize();
+    }, 0);
+  }
+
+  render();
   updateParksStatsOverlay();
+  saveViewState();
 }
 
-viewTableBtn.addEventListener('click', () => setView('table'));
-viewMapBtn.addEventListener('click', () => setView('map'));
+const VIEW_STATE_KEY = 'pota-cat-view-state';
+
+function saveViewState() {
+  localStorage.setItem(VIEW_STATE_KEY, JSON.stringify({
+    lastView: currentView,
+    showTable,
+    showMap,
+  }));
+}
+
+viewTableBtn.addEventListener('click', () => {
+  if (currentView === 'rbn' || currentView === 'dxcc') {
+    // Switching from exclusive view → table only
+    currentView = 'table';
+    showTable = true;
+    showMap = false;
+  } else {
+    // Toggle table
+    if (!showTable) {
+      showTable = true;
+    } else if (showMap) {
+      // Can turn off table since map is on
+      showTable = false;
+    }
+    // else: table is the only view, do nothing
+    currentView = showTable && !showMap ? 'table' : (showMap && !showTable ? 'map' : 'table');
+  }
+  updateViewLayout();
+});
+
+viewMapBtn.addEventListener('click', () => {
+  if (currentView === 'rbn' || currentView === 'dxcc') {
+    // Switching from exclusive view → map only
+    currentView = 'map';
+    showTable = false;
+    showMap = true;
+  } else {
+    // Toggle map
+    if (!showMap) {
+      showMap = true;
+    } else if (showTable) {
+      // Can turn off map since table is on
+      showMap = false;
+    }
+    // else: map is the only view, do nothing
+    currentView = showTable && !showMap ? 'table' : (showMap && !showTable ? 'map' : 'table');
+  }
+  updateViewLayout();
+});
+
 viewRbnBtn.addEventListener('click', () => setView('rbn'));
 viewDxccBtn.addEventListener('click', () => setView('dxcc'));
+
+// --- Split splitter drag ---
+splitSplitterEl.addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  const isHoriz = splitOrientation === 'horizontal';
+  const startPos = isHoriz ? e.clientX : e.clientY;
+  const startTableSize = isHoriz ? tablePaneEl.offsetWidth : tablePaneEl.offsetHeight;
+  const startMapSize = isHoriz ? mapPaneEl.offsetWidth : mapPaneEl.offsetHeight;
+
+  const onMove = (ev) => {
+    const delta = (isHoriz ? ev.clientX : ev.clientY) - startPos;
+    const minSize = isHoriz ? 200 : 100;
+    const newTableSize = Math.max(minSize, startTableSize + delta);
+    const newMapSize = Math.max(minSize, startMapSize - delta);
+    // Use flex-grow ratios so the split scales proportionally on window resize
+    tablePaneEl.style.flex = newTableSize + ' 0 0px';
+    mapPaneEl.style.flex = newMapSize + ' 0 0px';
+    // Clear any leftover fixed dimensions
+    tablePaneEl.style.width = '';
+    tablePaneEl.style.height = '';
+    mapPaneEl.style.width = '';
+    mapPaneEl.style.height = '';
+    if (map) map.invalidateSize();
+  };
+
+  const onUp = () => {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    document.body.style.cursor = '';
+  };
+
+  document.body.style.cursor = isHoriz ? 'col-resize' : 'row-resize';
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+});
 
 // --- DXCC Matrix Rendering ---
 const DXCC_BANDS = ['160m', '80m', '60m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '6m'];
@@ -2096,7 +2380,7 @@ function render() {
   spotCountEl.textContent = `${filtered.length} spots`;
   updateParksStatsOverlay();
 
-  if (currentView === 'table') {
+  if (showTable) {
     tbody.innerHTML = '';
 
     if (filtered.length === 0) {
@@ -2164,9 +2448,10 @@ function render() {
       // Log button cell (first column, hidden unless logging enabled)
       const logTd = document.createElement('td');
       logTd.className = 'log-cell log-col';
+      logTd.setAttribute('data-col', 'log');
       const logButton = document.createElement('button');
       logButton.className = 'log-btn';
-      logButton.textContent = 'Log';
+      logButton.textContent = isCompact ? 'L' : 'Log';
       logButton.addEventListener('click', (e) => {
         e.stopPropagation();
         openLogPopup(s);
@@ -2178,6 +2463,7 @@ function render() {
       const isWatched = watchlist.has(s.callsign.toUpperCase());
       const callTd = document.createElement('td');
       callTd.className = 'callsign-cell';
+      callTd.setAttribute('data-col', 'callsign');
       if (isWatched) {
         const star = document.createElement('span');
         star.textContent = '\u2B50 ';
@@ -2198,6 +2484,7 @@ function render() {
 
       // Frequency cell — styled as clickable link
       const freqTd = document.createElement('td');
+      freqTd.setAttribute('data-col', 'frequency');
       const freqLink = document.createElement('span');
       freqLink.textContent = parseFloat(s.frequency).toFixed(1);
       freqLink.className = 'freq-link';
@@ -2209,18 +2496,19 @@ function render() {
       const parkDisplay = s.wwffReference ? s.parkName : s.parkName;
 
       const cells = [
-        { val: s.mode },
-        { val: refDisplay, wwff: !!s.wwffReference },
-        { val: parkDisplay },
-        { val: s.locationDesc },
-        { val: formatDistance(s.distance) },
-        { val: formatBearing(s.bearing), cls: 'bearing-col' },
-        { val: formatAge(s.spotTime) },
+        { val: s.mode, col: 'mode' },
+        { val: refDisplay, wwff: !!s.wwffReference, col: 'reference' },
+        { val: parkDisplay, col: 'parkName' },
+        { val: s.locationDesc, col: 'locationDesc' },
+        { val: formatDistance(s.distance), col: 'distance' },
+        { val: formatBearing(s.bearing), cls: 'bearing-col', col: 'bearing' },
+        { val: formatAge(s.spotTime), col: 'spotTime' },
       ];
 
       for (const cell of cells) {
         const td = document.createElement('td');
         td.textContent = cell.val;
+        if (cell.col) td.setAttribute('data-col', cell.col);
         if (cell.cls) td.className = cell.cls;
         if (cell.wwff) {
           const badge = document.createElement('span');
@@ -2234,6 +2522,7 @@ function render() {
       // Skip button (last cell)
       const skipTd = document.createElement('td');
       skipTd.className = 'skip-cell';
+      skipTd.setAttribute('data-col', 'skip');
       const skipButton = document.createElement('button');
       skipButton.className = 'skip-btn' + (isSkipped ? ' skipped' : '');
       skipButton.textContent = isSkipped ? 'Unskip' : 'Skip';
@@ -2266,7 +2555,8 @@ function render() {
         th.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
       }
     });
-  } else {
+  }
+  if (showMap) {
     updateMapMarkers(filtered);
     renderBandActivity();
   }
@@ -2620,6 +2910,7 @@ settingsBtn.addEventListener('click', async () => {
   setEnableSolar.checked = s.enableSolar === true;
   setEnableBandActivity.checked = s.enableBandActivity === true;
   setShowBearing.checked = s.showBearing === true;
+  document.getElementById('set-split-orientation').value = s.splitOrientation || 'horizontal';
   setEnableDxcc.checked = s.enableDxcc === true;
   setAdifPath.value = s.adifPath || '';
   adifPicker.classList.toggle('hidden', !s.enableDxcc);
@@ -2674,6 +2965,7 @@ settingsSave.addEventListener('click', async () => {
   const solarEnabled = setEnableSolar.checked;
   const bandActivityEnabled = setEnableBandActivity.checked;
   const showBearingEnabled = setShowBearing.checked;
+  const splitOrientationVal = document.getElementById('set-split-orientation').value;
   const dxccEnabled = setEnableDxcc.checked;
   const licenseClassVal = setLicenseClass.value;
   const hideOob = setHideOutOfBand.checked;
@@ -2736,6 +3028,7 @@ settingsSave.addEventListener('click', async () => {
     enableSolar: solarEnabled,
     enableBandActivity: bandActivityEnabled,
     showBearing: showBearingEnabled,
+    splitOrientation: splitOrientationVal,
     enableDxcc: dxccEnabled,
     licenseClass: licenseClassVal,
     hideOutOfBand: hideOob,
@@ -2784,6 +3077,9 @@ settingsSave.addEventListener('click', async () => {
   updateBandActivityVisibility();
   showBearing = showBearingEnabled;
   updateBearingVisibility();
+  splitOrientation = splitOrientationVal;
+  // Apply split orientation change immediately if in split view
+  if (showTable && showMap) updateViewLayout();
   enableLogging = loggingEnabled;
   defaultPower = defaultPowerVal;
   updateLoggingVisibility();
@@ -2897,7 +3193,7 @@ function updateParksStatsOverlay() {
   parksStatsToggleBtn.classList.toggle('hidden', !hasData);
 
   // Panel visibility: only when toggled open, has data, and on table/map view
-  if (!parksStatsOpen || !hasData || (currentView !== 'table' && currentView !== 'map')) {
+  if (!parksStatsOpen || !hasData || (!showTable && !showMap)) {
     parksStatsOverlay.classList.add('hidden');
     parksStatsToggleBtn.classList.remove('active');
     return;
@@ -2982,12 +3278,12 @@ window.api.onWsjtxDecode((decode) => {
   }
   wsjtxDecodes.push(decode);
   if (wsjtxDecodes.length > 50) wsjtxDecodes.shift();
-  if (currentView === 'table') render();
+  if (showTable || showMap) render();
 });
 
 window.api.onWsjtxClear(() => {
   wsjtxDecodes = [];
-  if (currentView === 'table') render();
+  if (showTable || showMap) render();
 });
 
 window.api.onWsjtxQsoLogged((qso) => {
@@ -3002,7 +3298,7 @@ window.api.onCatFrequency((hz) => {
   if (newKhz === radioFreqKhz) return;
   radioFreqKhz = newKhz;
   playTuneClick();
-  if (currentView === 'table') render();
+  if (showTable || showMap) render();
 });
 
 // --- CAT Log Panel ---
@@ -3072,7 +3368,7 @@ const HEATMAP_BANDS = ['160m', '80m', '60m', '40m', '30m', '20m', '17m', '15m', 
 const HEATMAP_CONTINENTS = ['EU', 'NA', 'SA', 'AS', 'AF', 'OC'];
 
 function updateBandActivityVisibility() {
-  if (enableBandActivity && currentView === 'map') {
+  if (enableBandActivity && showMap) {
     bandActivityBar.classList.remove('hidden');
   } else {
     bandActivityBar.classList.add('hidden');
@@ -3081,7 +3377,7 @@ function updateBandActivityVisibility() {
 }
 
 function renderBandActivity() {
-  if (!enableBandActivity || currentView !== 'map') return;
+  if (!enableBandActivity || !showMap) return;
 
   const now = Date.now();
   const oneHourAgo = now - 3600000;

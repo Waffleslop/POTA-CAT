@@ -107,25 +107,36 @@
   </div>
 
   <main>
-    <table id="spots-table">
-      <thead>
-        <tr>
-          <th class="no-sort log-col">Log</th>
-          <th data-sort="callsign">Callsign</th>
-          <th data-sort="frequency">Freq (kHz)</th>
-          <th data-sort="mode">Mode</th>
-          <th data-sort="reference">Ref</th>
-          <th data-sort="parkName">Name</th>
-          <th data-sort="locationDesc">State</th>
-          <th data-sort="distance" id="dist-header">Dist (mi)</th>
-          <th data-sort="bearing" class="bearing-col">Heading</th>
-          <th data-sort="spotTime" id="time-header">Age</th>
-          <th class="no-sort">Skip</th>
-        </tr>
-      </thead>
-      <tbody id="spots-body"></tbody>
-    </table>
-    <div id="no-spots" class="hidden">No spots match current filters</div>
+    <div id="split-container" class="split-horizontal">
+      <div id="table-pane">
+        <table id="spots-table">
+          <thead>
+            <tr>
+              <th class="no-sort log-col" data-col="log">Log</th>
+              <th data-sort="callsign" data-col="callsign">Callsign</th>
+              <th data-sort="frequency" data-col="frequency">Freq (kHz)</th>
+              <th data-sort="mode" data-col="mode">Mode</th>
+              <th data-sort="reference" data-col="reference">Ref</th>
+              <th data-sort="parkName" data-col="parkName">Name</th>
+              <th data-sort="locationDesc" data-col="locationDesc">State</th>
+              <th data-sort="distance" data-col="distance" id="dist-header">Dist (mi)</th>
+              <th data-sort="bearing" data-col="bearing" class="bearing-col">Heading</th>
+              <th data-sort="spotTime" data-col="spotTime" id="time-header">Age</th>
+              <th class="no-sort" data-col="skip">Skip</th>
+            </tr>
+          </thead>
+          <tbody id="spots-body"></tbody>
+        </table>
+        <div id="no-spots" class="hidden">No spots match current filters</div>
+      </div>
+      <div id="split-splitter" class="hidden"></div>
+      <div id="map-pane" class="hidden">
+        <div id="map-container">
+          <div id="map"></div>
+          <div id="band-activity-bar" class="hidden"></div>
+        </div>
+      </div>
+    </div>
     <div id="parks-stats-overlay" class="hidden">
       <div class="parks-stats-header">
         <span>POTA Stats</span>
@@ -136,10 +147,6 @@
       <div class="parks-stat"><span>Locations</span><strong id="parks-stats-locations">0</strong></div>
       <div class="parks-stats-divider"></div>
       <div class="parks-stat"><span>New on Air Now</span><strong id="parks-stats-new-now" class="stat-highlight">0</strong></div>
-    </div>
-    <div id="map-container" class="hidden">
-      <div id="map"></div>
-      <div id="band-activity-bar" class="hidden"></div>
     </div>
     <div id="dxcc-view" class="hidden">
       <div class="dxcc-header">
@@ -235,6 +242,10 @@
       </div>
     </div>
   </main>
+
+  <div id="col-context-menu" class="hidden">
+    <div class="col-ctx-title">Show Columns</div>
+  </div>
 
   <div id="cat-log-panel" class="hidden">
     <div class="cat-log-header">
@@ -426,6 +437,13 @@
       <span class="help-text" style="margin-left:12px;display:block;">Displayed on the Map view only</span>
       <label class="checkbox-label"><input type="checkbox" id="set-show-bearing"> Show Beam Heading</label>
       <span class="help-text" style="margin-left:12px;display:block;">Compass bearing from your QTH to each spot</span>
+      <label>Split Layout:
+        <select id="set-split-orientation">
+          <option value="horizontal">Side by side</option>
+          <option value="vertical">Stacked</option>
+        </select>
+      </label>
+      <span class="help-text" style="display:block;">Layout when both Table and Map views are active</span>
     </fieldset>
     <fieldset class="source-toggles">
       <legend>Beta</legend>
