@@ -1073,16 +1073,18 @@ function processLlotaSpots(raw) {
     const callsign = s.callsign || '';
 
     // No lat/lon in LLOTA API — resolve approximate location from cty.dat
-    let lat = null, lon = null, continent = '', locationDesc = '';
+    let lat = null, lon = null, continent = '', ctyName = '';
     if (ctyDb && callsign) {
       const entity = resolveCallsign(callsign, ctyDb);
       if (entity) {
         continent = entity.continent || '';
-        locationDesc = entity.name || '';
+        ctyName = entity.name || '';
         lat = entity.lat != null ? entity.lat : null;
         lon = entity.lon != null ? entity.lon : null;
       }
     }
+    // Prefer country_name from LLOTA API, fall back to cty.dat entity name
+    const locationDesc = s.country_name || ctyName;
 
     let distance = null;
     if (myPos && lat != null && lon != null) {
