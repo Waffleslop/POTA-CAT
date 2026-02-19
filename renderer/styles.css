@@ -129,6 +129,14 @@ body {
   color: #fff;
 }
 
+.platform-darwin .titlebar {
+  padding-left: 70px;
+}
+
+.platform-darwin .titlebar-controls {
+  display: none;
+}
+
 header {
   background: var(--bg-secondary);
   padding: 10px 16px;
@@ -1832,6 +1840,29 @@ dialog input, dialog select {
   color: #f0a500;
   border-color: #f0a500;
   animation: log-toast-fade-long 8s ease-in-out forwards;
+}
+
+.log-toast.sticky {
+  animation: log-toast-enter 0.3s ease-out forwards;
+  cursor: pointer;
+  padding-right: 28px;
+}
+
+.log-toast-dismiss {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  font-size: 16px;
+  opacity: 0.6;
+}
+
+.log-toast-dismiss:hover {
+  opacity: 1;
+}
+
+@keyframes log-toast-enter {
+  0% { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes log-toast-fade {

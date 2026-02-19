@@ -321,6 +321,29 @@ async function connectCat() {
 }
 
 // --- DX Cluster ---
+
+// Clean up RBN-style comments for the Name column (strip redundant mode, reorder fields)
+const CLUSTER_COMMENT_RE = /^(\S+)\s+(-?\d+)\s*dB\s+(?:(\d+)\s*WPM\s*)?(.*)$/i;
+const MODE_KEYWORDS = /^(?:CW|SSB|USB|LSB|FM|AM|FT[48]|RTTY|PSK\d*|JS8)\b/i;
+function formatClusterComment(comment) {
+  if (!comment) return '';
+  const m = comment.match(CLUSTER_COMMENT_RE);
+  if (m) {
+    // RBN-style: "CW 28 dB 29 WPM CQ" or "FT8 -12 dB CQ"
+    const snr = m[2] + ' dB';
+    const wpm = m[3] ? m[3] + ' WPM' : null;
+    const type = (m[4] || '').trim().toUpperCase();
+    const parts = [wpm, snr, type || null].filter(Boolean);
+    return parts.join(' \u00b7 ');  // middle dot separator
+  }
+  // Not RBN format — strip leading mode keyword if present (e.g. "CW JN80oj -> FK85")
+  const stripped = comment.replace(MODE_KEYWORDS, '').trim();
+  if (stripped && stripped !== comment) {
+    return stripped.replace(/->/g, '\u2192');  // arrow
+  }
+  return comment;
+}
+
 function sendClusterStatus(s) {
   if (win && !win.isDestroyed()) win.webContents.send('cluster-status', s);
 }
@@ -352,7 +375,7 @@ function connectCluster() {
       freqMHz: raw.freqMHz,
       mode: raw.mode,
       reference: '',
-      parkName: raw.comment || '',
+      parkName: formatClusterComment(raw.comment || ''),
       locationDesc: '',
       distance: null,
       lat: null,
@@ -1451,10 +1474,11 @@ function createWindow() {
     }
   }
 
+  const isMac = process.platform === 'darwin';
   win = new BrowserWindow({
     ...windowOpts,
     title: 'POTA CAT',
-    frame: false,
+    ...(isMac ? { titleBarStyle: 'hiddenInset' } : { frame: false }),
     icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

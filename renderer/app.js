@@ -3025,11 +3025,20 @@ function showLogToast(message, opts) {
   const existing = document.querySelector('.log-toast');
   if (existing) existing.remove();
   const toast = document.createElement('div');
-  toast.className = 'log-toast' + (opts && opts.warn ? ' warn' : '');
+  toast.className = 'log-toast' + (opts && opts.warn ? ' warn' : '') + (opts && opts.sticky ? ' sticky' : '');
   toast.textContent = message;
+  if (opts && opts.sticky) {
+    const dismiss = document.createElement('span');
+    dismiss.className = 'log-toast-dismiss';
+    dismiss.textContent = '\u00d7';
+    toast.appendChild(dismiss);
+    toast.addEventListener('click', () => toast.remove());
+  }
   document.body.appendChild(toast);
-  const duration = (opts && opts.duration) || 2200;
-  setTimeout(() => { if (toast.parentNode) toast.remove(); }, duration);
+  if (!(opts && opts.sticky)) {
+    const duration = (opts && opts.duration) || 2200;
+    setTimeout(() => { if (toast.parentNode) toast.remove(); }, duration);
+  }
 }
 
 // --- Events ---
@@ -3464,6 +3473,9 @@ window.api.onCatStatus(({ connected, error, wsjtxMode }) => {
   catStatusEl.title = connected
     ? (activeRigName ? `Connected to ${activeRigName}` : 'Connected')
     : (error || 'Disconnected');
+  if (!connected && error) {
+    showLogToast(`CAT: ${error}`, { warn: true, sticky: true });
+  }
 });
 
 // --- Update available listener ---
@@ -4121,9 +4133,13 @@ document.getElementById('hotkeys-link').addEventListener('click', (e) => {
 });
 
 // --- Titlebar controls ---
-document.getElementById('tb-min').addEventListener('click', () => window.api.minimize());
-document.getElementById('tb-max').addEventListener('click', () => window.api.maximize());
-document.getElementById('tb-close').addEventListener('click', () => window.api.close());
+if (window.api.platform === 'darwin') {
+  document.body.classList.add('platform-darwin');
+} else {
+  document.getElementById('tb-min').addEventListener('click', () => window.api.minimize());
+  document.getElementById('tb-max').addEventListener('click', () => window.api.maximize());
+  document.getElementById('tb-close').addEventListener('click', () => window.api.close());
+}
 
 // --- Welcome dialog (first run) ---
 const welcomeDialog = document.getElementById('welcome-dialog');
