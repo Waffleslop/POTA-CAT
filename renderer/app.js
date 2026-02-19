@@ -89,7 +89,18 @@ const noSpots = document.getElementById('no-spots');
 const catStatusEl = document.getElementById('cat-status');
 const spotCountEl = document.getElementById('spot-count');
 const lastRefreshEl = document.getElementById('last-refresh');
-const refreshBtn = document.getElementById('refresh-btn');
+const spotsDropdown = document.getElementById('spots-dropdown');
+const spotsBtn = document.getElementById('spots-btn');
+const spotsPota = document.getElementById('spots-pota');
+const spotsSota = document.getElementById('spots-sota');
+const spotsWwff = document.getElementById('spots-wwff');
+const spotsLlota = document.getElementById('spots-llota');
+const spotsCluster = document.getElementById('spots-cluster');
+const spotsRbn = document.getElementById('spots-rbn');
+const spotsHideWorked = document.getElementById('spots-hide-worked');
+const spotsHideParks = document.getElementById('spots-hide-parks');
+const spotsHideParksLabel = document.getElementById('spots-hide-parks-label');
+const spotsHideOob = document.getElementById('spots-hide-oob');
 const settingsBtn = document.getElementById('settings-btn');
 const settingsDialog = document.getElementById('settings-dialog');
 const settingsSave = document.getElementById('settings-save');
@@ -461,6 +472,8 @@ async function loadPrefs() {
   try {
     const viewState = JSON.parse(localStorage.getItem(VIEW_STATE_KEY));
     if (viewState) {
+      if (viewState.sortCol) { sortCol = viewState.sortCol; }
+      if (typeof viewState.sortAsc === 'boolean') { sortAsc = viewState.sortAsc; }
       if (viewState.lastView === 'rbn' && enableRbn) {
         setView('rbn');
       } else if (viewState.lastView === 'dxcc' && enableDxcc) {
@@ -1791,8 +1804,22 @@ function updateNightOverlay() {
   if (markerLayer) markerLayer.bringToFront();
 }
 
+const MAP_STATE_KEY = 'pota-cat-map-state';
+let _mapSaveTimer = null;
+
 function initMap() {
-  map = L.map('map', { zoomControl: true, worldCopyJump: true }).setView(DEFAULT_CENTER, 5);
+  // Restore saved map center/zoom or use defaults
+  let initCenter = DEFAULT_CENTER;
+  let initZoom = 5;
+  try {
+    const saved = JSON.parse(localStorage.getItem(MAP_STATE_KEY));
+    if (saved && Array.isArray(saved.center) && saved.center.length === 2 && typeof saved.zoom === 'number') {
+      initCenter = saved.center;
+      initZoom = saved.zoom;
+    }
+  } catch { /* use defaults */ }
+
+  map = L.map('map', { zoomControl: true, worldCopyJump: true }).setView(initCenter, initZoom);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors',
@@ -1811,6 +1838,18 @@ function initMap() {
   // Add day/night overlay and refresh every 60s
   updateNightOverlay();
   setInterval(updateNightOverlay, 60000);
+
+  // Persist map center/zoom (debounced)
+  map.on('moveend', () => {
+    clearTimeout(_mapSaveTimer);
+    _mapSaveTimer = setTimeout(() => {
+      const c = map.getCenter();
+      localStorage.setItem(MAP_STATE_KEY, JSON.stringify({
+        center: [c.lat, c.lng],
+        zoom: map.getZoom(),
+      }));
+    }, 500);
+  });
 }
 
 async function updateHomeMarker() {
@@ -2294,6 +2333,8 @@ function saveViewState() {
     lastView: currentView,
     showTable,
     showMap,
+    sortCol,
+    sortAsc,
   }));
 }
 
@@ -2988,7 +3029,80 @@ function showLogToast(message, opts) {
 
 // --- Events ---
 // Band/mode dropdowns already wired via initMultiDropdown()
-refreshBtn.addEventListener('click', () => window.api.refresh());
+// --- Spots dropdown panel ---
+spotsBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  document.querySelectorAll('.multi-dropdown.open').forEach((d) => {
+    if (d !== spotsDropdown) d.classList.remove('open');
+  });
+  const opening = !spotsDropdown.classList.contains('open');
+  spotsDropdown.classList.toggle('open');
+  if (opening) syncSpotsPanel();
+});
+
+function syncSpotsPanel() {
+  spotsPota.checked = enablePota;
+  spotsSota.checked = enableSota;
+  spotsWwff.checked = enableWwff;
+  spotsLlota.checked = enableLlota;
+  spotsCluster.checked = enableCluster;
+  spotsRbn.checked = enableRbn;
+  spotsHideWorked.checked = hideWorked;
+  spotsHideParks.checked = hideWorkedParks;
+  spotsHideOob.checked = hideOutOfBand;
+  spotsHideParksLabel.classList.toggle('hidden', workedParksSet.size === 0);
+}
+
+document.querySelector('.spots-dropdown-panel').addEventListener('click', (e) => e.stopPropagation());
+
+document.querySelector('.spots-dropdown-panel').addEventListener('change', async (e) => {
+  enablePota = spotsPota.checked;
+  enableSota = spotsSota.checked;
+  enableWwff = spotsWwff.checked;
+  enableLlota = spotsLlota.checked;
+  enableCluster = spotsCluster.checked;
+  enableRbn = spotsRbn.checked;
+
+  // DX Cluster and RBN require a callsign
+  if (enableCluster && !myCallsign) {
+    enableCluster = false;
+    spotsCluster.checked = false;
+    alert('DX Cluster requires a callsign. Please set your callsign in Settings first.');
+  }
+  if (enableRbn && !myCallsign) {
+    enableRbn = false;
+    spotsRbn.checked = false;
+    alert('RBN requires a callsign. Please set your callsign in Settings first.');
+  }
+  hideWorked = spotsHideWorked.checked;
+  hideWorkedParks = spotsHideParks.checked;
+  hideOutOfBand = spotsHideOob.checked;
+
+  // Sync Settings dialog checkboxes
+  setEnablePota.checked = enablePota;
+  setEnableSota.checked = enableSota;
+  setEnableWwff.checked = enableWwff;
+  setEnableLlota.checked = enableLlota;
+  setEnableCluster.checked = enableCluster;
+  setEnableRbn.checked = enableRbn;
+  setHideWorked.checked = hideWorked;
+  setHideWorkedParks.checked = hideWorkedParks;
+  setHideOutOfBand.checked = hideOutOfBand;
+
+  // Update UI visibility for cluster/RBN
+  updateClusterStatusVisibility();
+  updateRbnStatusVisibility();
+  updateRbnButton();
+
+  // Save and let main process handle connect/disconnect
+  await window.api.saveSettings({
+    enablePota, enableSota, enableWwff, enableLlota,
+    enableCluster, enableRbn,
+    hideWorked, hideWorkedParks, hideOutOfBand,
+  });
+
+  render();
+});
 
 // Column sorting
 document.querySelectorAll('thead th[data-sort]').forEach((th) => {
@@ -3000,6 +3114,7 @@ document.querySelectorAll('thead th[data-sort]').forEach((th) => {
       sortCol = col;
       sortAsc = col === 'distance' || col === 'bearing';
     }
+    saveViewState();
     render();
   });
 });
@@ -3120,9 +3235,21 @@ settingsSave.addEventListener('click', async () => {
   const qrzUsername = setQrzUsername.value.trim().toUpperCase();
   const qrzPassword = setQrzPassword.value;
   const qrzFullNameEnabled = setQrzFullName.checked;
-  const clusterEnabled = setEnableCluster.checked;
-  const rbnEnabled = setEnableRbn.checked;
   const myCallsign = setMyCallsign.value.trim().toUpperCase();
+  let clusterEnabled = setEnableCluster.checked;
+  let rbnEnabled = setEnableRbn.checked;
+
+  // DX Cluster and RBN require a callsign
+  if (clusterEnabled && !myCallsign) {
+    clusterEnabled = false;
+    setEnableCluster.checked = false;
+    alert('DX Cluster requires a callsign. Please enter your callsign above.');
+  }
+  if (rbnEnabled && !myCallsign) {
+    rbnEnabled = false;
+    setEnableRbn.checked = false;
+    alert('RBN requires a callsign. Please enter your callsign above.');
+  }
   const clusterHost = setClusterHost.value.trim() || 'w3lpl.net';
   const clusterPort = parseInt(setClusterPort.value, 10) || 7373;
   const wsjtxEnabled = setEnableWsjtx.checked;
@@ -3293,6 +3420,7 @@ settingsSave.addEventListener('click', async () => {
   updateDxccButton();
   updateHeaders();
   saveFilters();
+  syncSpotsPanel();
   settingsDialog.close();
   render();
   // Update home marker if map is initialized
@@ -3394,8 +3522,8 @@ window.api.onWorkedParks((entries) => {
 function updateParksStatsOverlay() {
   if (!parksStatsOverlay) return;
 
-  // Show/hide the toggle button based on whether CSV is loaded
-  const hasData = workedParksData.size > 0;
+  // Show/hide the toggle button based on whether CSV is loaded and POTA is enabled
+  const hasData = workedParksData.size > 0 && enablePota;
   parksStatsToggleBtn.classList.toggle('hidden', !hasData);
 
   // Panel visibility: only when toggled open, has data, and on table/map view

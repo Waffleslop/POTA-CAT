@@ -213,6 +213,62 @@ header {
   accent-color: var(--accent-red);
 }
 
+/* Spots dropdown panel */
+.spots-dropdown-panel {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10000;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 4px;
+  padding: 6px 0;
+  margin-top: 2px;
+  min-width: 180px;
+  box-shadow: 0 4px 12px var(--shadow-heavy);
+}
+
+.multi-dropdown.open .spots-dropdown-panel {
+  display: block;
+}
+
+.spots-panel-section-label {
+  padding: 4px 10px 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-tertiary);
+}
+
+.spots-panel-divider {
+  height: 1px;
+  background: var(--border-primary);
+  margin: 4px 10px;
+}
+
+.spots-toggle {
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+  margin-bottom: 0 !important;
+}
+
+.spots-toggle:hover {
+  background: var(--bg-hover);
+}
+
+.spots-toggle input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  accent-color: var(--accent-red);
+}
+
 .filters label {
   display: flex;
   align-items: center;

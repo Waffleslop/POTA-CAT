@@ -59,7 +59,23 @@
           <label class="multi-dropdown-item"><input type="checkbox" value="SA"> South America</label>
         </div>
       </div>
-      <button id="refresh-btn" title="Refresh spots now">Refresh</button>
+      <div class="multi-dropdown" id="spots-dropdown">
+        <button class="multi-dropdown-btn" type="button" id="spots-btn">Spots</button>
+        <div class="spots-dropdown-panel">
+          <div class="spots-panel-section-label">Spot Sources</div>
+          <label class="spots-toggle"><input type="checkbox" id="spots-pota"> <span style="color:#4ecca3">POTA</span></label>
+          <label class="spots-toggle"><input type="checkbox" id="spots-sota"> <span style="color:#f0a500">SOTA</span></label>
+          <label class="spots-toggle"><input type="checkbox" id="spots-wwff"> <span style="color:#26a69a">WWFF</span></label>
+          <label class="spots-toggle"><input type="checkbox" id="spots-llota"> <span style="color:#42a5f5">LLOTA</span></label>
+          <label class="spots-toggle"><input type="checkbox" id="spots-cluster"> <span style="color:#e040fb">DX Cluster</span></label>
+          <label class="spots-toggle"><input type="checkbox" id="spots-rbn"> <span style="color:#00bcd4">RBN</span></label>
+          <div class="spots-panel-divider"></div>
+          <div class="spots-panel-section-label">Filters</div>
+          <label class="spots-toggle"><input type="checkbox" id="spots-hide-worked"> Hide worked stations</label>
+          <label class="spots-toggle" id="spots-hide-parks-label"><input type="checkbox" id="spots-hide-parks"> Hide worked parks</label>
+          <label class="spots-toggle"><input type="checkbox" id="spots-hide-oob"> Hide out-of-band</label>
+        </div>
+      </div>
       <button id="scan-btn" title="Scan through spots">Scan</button>
       <button id="settings-btn" title="Settings">Settings</button>
       <div class="view-toggle">
@@ -263,6 +279,7 @@
   <!-- Settings dialog -->
   <dialog id="settings-dialog">
     <h3>Settings</h3>
+    <!-- 1. Station -->
     <fieldset class="source-toggles">
       <legend>Station</legend>
       <label>My Callsign: <input type="text" id="set-my-callsign" maxlength="10" placeholder="WB6ACU"></label>
@@ -286,12 +303,6 @@
           <option value="km">Kilometers</option>
         </select>
       </label>
-    </fieldset>
-    <fieldset class="source-toggles">
-      <legend>Spots</legend>
-      <label>Max Spot Age (minutes):
-        <input type="number" id="set-max-age" min="1" max="120" value="5">
-      </label>
       <label>License Class:
         <select id="set-license-class">
           <option value="none">None (no filtering)</option>
@@ -307,199 +318,8 @@
           </optgroup>
         </select>
       </label>
-      <label class="checkbox-label"><input type="checkbox" id="set-hide-out-of-band"> Hide out-of-band spots</label>
-      <label class="checkbox-label"><input type="checkbox" id="set-hide-worked"> Hide already-worked stations</label>
     </fieldset>
-    <fieldset class="source-toggles">
-      <legend>Tuning</legend>
-      <label>Scan Dwell Time (seconds):
-        <input type="number" id="set-scan-dwell" min="2" max="30" value="7">
-      </label>
-      <label>CW XIT Offset (Hz):
-        <input type="number" id="set-cw-xit" min="-999" max="999" step="10" value="0">
-      </label>
-      <label>CW Filter Width (Hz):
-        <input type="number" id="set-cw-filter" min="0" max="3000" step="50" value="0">
-      </label>
-      <label>SSB Filter Width (Hz):
-        <input type="number" id="set-ssb-filter" min="0" max="4000" step="100" value="0">
-      </label>
-      <label>Digital Filter Width (Hz):
-        <input type="number" id="set-digital-filter" min="0" max="5000" step="100" value="0">
-      </label>
-      <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Set to 0 to use the radio's default. Sent after every tune to keep your preferred filter.</span>
-      <label class="checkbox-label"><input type="checkbox" id="set-enable-split"> Enable split mode</label>
-      <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Send split on/off with each tune command (VFO A = RX, VFO B = TX)</span>
-      <label class="checkbox-label"><input type="checkbox" id="set-tune-click"> Tune confirmation sound</label>
-      <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Play a click when the radio confirms it has changed frequency</span>
-      <label class="checkbox-label"><input type="checkbox" id="set-enable-rotor"> PstRotator rotor control</label>
-      <div id="rotor-config" class="radio-sub hidden">
-        <span class="help-text" style="font-size:12px;">Sends beam heading to PstRotator via UDP when you tune to a spot.</span>
-        <label>Host:
-          <input type="text" id="set-rotor-host" placeholder="127.0.0.1" value="127.0.0.1" style="width:140px;">
-        </label>
-        <label>Port:
-          <input type="number" id="set-rotor-port" value="12040" min="1" max="65535" style="width:80px;">
-        </label>
-        <span class="help-text" style="display:block;margin-top:4px;">Default port is 12040. Use 12042, 12044, 12046 for additional rotators.</span>
-      </div>
-    </fieldset>
-    <fieldset class="source-toggles">
-      <legend>Watchlist</legend>
-      <label>Callsigns (comma-separated):
-        <input type="text" id="set-watchlist" placeholder="K3SBP, K4SWL, KI6NAZ">
-      </label>
-      <label class="checkbox-label"><input type="checkbox" id="set-notify-popup" checked> Pop-up notification</label>
-      <label class="checkbox-label"><input type="checkbox" id="set-notify-sound" checked> Sound notification</label>
-      <label>Notification duration (seconds):
-        <input type="number" id="set-notify-timeout" min="3" max="60" step="1" value="10">
-      </label>
-    </fieldset>
-    <fieldset class="source-toggles">
-      <legend>QSO Logging</legend>
-      <label class="checkbox-label"><input type="checkbox" id="set-enable-logging"> Enable QSO Logging</label>
-      <div id="logging-config" class="radio-sub hidden">
-        <label>ADIF Log File:
-          <div style="display:flex;gap:6px;margin-top:4px;">
-            <input type="text" id="set-adif-log-path" readonly style="flex:1;">
-            <button type="button" id="adif-log-browse-btn">Browse</button>
-          </div>
-          <span class="help-text" style="display:block;margin-top:4px;">Local backup of all QSOs logged from POTA CAT</span>
-        </label>
-        <div style="margin-top:10px;">
-          <strong style="display:block;margin-bottom:4px;">Import Log</strong>
-          <button type="button" id="adif-import-btn">Import Log</button>
-          <span id="adif-import-result" class="help-text" style="margin-left:8px;"></span>
-          <span class="help-text" style="display:block;margin-top:4px;">Import QSO history from ADIF (.adi) or Log4OM SQLite (.sqlite) files. They will be added to your POTA CAT logfile.</span>
-        </div>
-        <label style="margin-top:10px;">Default TX Power (W):
-          <input type="number" id="set-default-power" min="1" max="5000" value="100">
-        </label>
-        <label class="checkbox-label"><input type="checkbox" id="set-send-to-logbook"> Send Data to Logbook</label>
-        <div id="logbook-config" class="hidden" style="margin-left:12px;margin-top:4px;">
-          <label>Logbook:
-            <select id="set-logbook-type">
-              <option value="">Select...</option>
-              <option value="hrd">Ham Radio Deluxe</option>
-              <option value="log4om">Log4OM 2</option>
-              <option value="n3fjp">N3FJP</option>
-            </select>
-          </label>
-          <div id="logbook-instructions" class="hidden help-text" style="margin-top:6px;line-height:1.5;"></div>
-          <div id="logbook-port-config" class="hidden" style="margin-top:6px;">
-            <label>Host:
-              <input type="text" id="set-logbook-host" placeholder="127.0.0.1" value="127.0.0.1">
-            </label>
-            <label>Port:
-              <input type="number" id="set-logbook-port" min="1" max="65535">
-            </label>
-            <div id="logbook-help" class="help-text" style="margin-top:4px;"></div>
-          </div>
-        </div>
-      </div>
-    </fieldset>
-    <fieldset class="source-toggles">
-      <legend>Spot Sources</legend>
-      <label class="checkbox-label"><input type="checkbox" id="set-enable-pota" checked> Enable POTA</label>
-      <div id="pota-parks-picker" style="margin-top:6px;margin-left:12px;margin-bottom:8px;">
-        <label>POTA Parks Worked CSV:
-          <div style="display:flex;gap:6px;margin-top:4px;">
-            <input type="text" id="set-pota-parks-path" readonly placeholder="No file selected" style="flex:1;">
-            <button type="button" id="pota-parks-browse-btn">Browse</button>
-          </div>
-        </label>
-        <span class="help-text" style="display:block;margin-top:4px;">Go to pota.app/#/user/stats, under Hunted Parks, click "Export CSV"</span>
-        <label class="checkbox-label" style="margin-top:4px;"><input type="checkbox" id="set-hide-worked-parks"> Hide already-worked parks</label>
-      </div>
-      <label class="checkbox-label"><input type="checkbox" id="set-enable-sota"> Enable SOTA</label>
-      <label class="checkbox-label"><input type="checkbox" id="set-enable-wwff"> Enable WWFF</label>
-      <label class="checkbox-label"><input type="checkbox" id="set-enable-llota"> Enable LLOTA</label>
-      <label class="checkbox-label"><input type="checkbox" id="set-enable-cluster"> Enable DX Cluster</label>
-      <div id="cluster-config" class="radio-sub hidden">
-        <label>Cluster Host: <input type="text" id="set-cluster-host" value="w3lpl.net"></label>
-        <label>Cluster Port: <input type="number" id="set-cluster-port" value="7373" min="1" max="65535"></label>
-      </div>
-      <label class="checkbox-label"><input type="checkbox" id="set-enable-rbn"> Reverse Beacon Network</label>
-      <div id="rbn-config" class="radio-sub hidden">
-        <span class="help-text" style="font-size:12px;">Shows where your CQ calls are being heard by RBN skimmers worldwide.</span>
-        <span class="help-text" style="display:block;margin-top:4px;">RBN spots only appear while POTA CAT is open — historical spots are not retrieved.</span>
-      </div>
-      <label class="checkbox-label"><input type="checkbox" id="set-enable-wsjtx"> WSJT-X Integration</label>
-      <div id="wsjtx-config" class="radio-sub hidden">
-        <span class="help-text" style="font-size:12px;">Connect to WSJT-X via UDP. POTA activators are highlighted in the decode window and decodes appear in POTA CAT.</span>
-        <label>UDP Port:
-          <input type="number" id="set-wsjtx-port" value="2237" min="1024" max="65535" style="width:80px;">
-        </label>
-        <span class="help-text" style="display:block;margin-top:4px;">Must match WSJT-X Settings &rarr; Reporting &rarr; UDP Server port. Enable "Accept UDP requests" in WSJT-X.</span>
-        <label class="checkbox-label" style="margin-top:6px;"><input type="checkbox" id="set-wsjtx-highlight" checked> Highlight POTA activators in WSJT-X</label>
-        <label class="checkbox-label"><input type="checkbox" id="set-wsjtx-auto-log"> Auto-log WSJT-X QSOs to POTA CAT</label>
-      </div>
-    </fieldset>
-    <fieldset class="source-toggles">
-      <legend>SmartSDR Spots</legend>
-      <label class="checkbox-label">
-        <input type="checkbox" id="set-smartsdr-spots"> Push spots to SmartSDR panadapter
-      </label>
-      <div id="smartsdr-config" class="radio-sub hidden">
-        <label>Radio IP:
-          <input type="text" id="set-smartsdr-host" placeholder="127.0.0.1" style="width:140px;">
-        </label>
-        <span class="help-text">Connect to FlexRadio on port 4992</span>
-        <div style="margin-top:8px;">
-          <span style="font-size:12px;color:var(--text-secondary);">Sources to show on panadapter:</span>
-          <label class="checkbox-label"><input type="checkbox" id="set-smartsdr-pota" checked> POTA</label>
-          <label class="checkbox-label"><input type="checkbox" id="set-smartsdr-sota" checked> SOTA</label>
-          <label class="checkbox-label"><input type="checkbox" id="set-smartsdr-cluster" checked> DX Cluster</label>
-          <label class="checkbox-label"><input type="checkbox" id="set-smartsdr-rbn"> RBN</label>
-          <label class="checkbox-label"><input type="checkbox" id="set-smartsdr-wwff" checked> WWFF</label>
-          <label class="checkbox-label"><input type="checkbox" id="set-smartsdr-llota" checked> LLOTA</label>
-        </div>
-      </div>
-    </fieldset>
-    <fieldset class="source-toggles">
-      <legend>Display</legend>
-      <label class="switch-label">
-        <span>Dark Mode</span>
-        <div class="switch">
-          <input type="checkbox" id="set-light-mode">
-          <span class="switch-slider"></span>
-        </div>
-        <span>Light Mode</span>
-      </label>
-      <label class="checkbox-label"><input type="checkbox" id="set-enable-solar"> Solar Propagation</label>
-      <span class="help-text" style="margin-left:12px;margin-bottom:6px;display:block;">Shows SFI, K, and A indices in the status bar</span>
-      <label class="checkbox-label"><input type="checkbox" id="set-enable-band-activity"> Band Activity Heatmap</label>
-      <span class="help-text" style="margin-left:12px;display:block;">Displayed on the Map view only</span>
-      <label class="checkbox-label"><input type="checkbox" id="set-show-bearing"> Show Beam Heading</label>
-      <span class="help-text" style="margin-left:12px;display:block;">Compass bearing from your QTH to each spot</span>
-      <label class="checkbox-label"><input type="checkbox" id="set-enable-split-view" checked> Enable split view</label>
-      <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Show Table and Map side by side. When off, only one view is shown at a time.</span>
-      <div id="split-orientation-config">
-        <label>Split Layout:
-          <select id="set-split-orientation">
-            <option value="horizontal">Side by side</option>
-            <option value="vertical">Stacked</option>
-          </select>
-        </label>
-      </div>
-    </fieldset>
-    <fieldset class="source-toggles">
-      <legend>Beta</legend>
-      <label class="checkbox-label"><input type="checkbox" id="set-enable-dxcc"> DXCC Tracker</label>
-      <div id="adif-picker" class="hidden" style="margin-top:6px;margin-left:12px;">
-        <label style="margin-bottom:4px;">Log File:
-          <div style="display:flex;gap:6px;margin-top:4px;">
-            <input type="text" id="set-adif-path" readonly placeholder="No file selected" style="flex:1;">
-            <button type="button" id="adif-browse-btn">Browse</button>
-          </div>
-        </label>
-      </div>
-    </fieldset>
-    <fieldset class="source-toggles">
-      <legend>Privacy</legend>
-      <label class="checkbox-label"><input type="checkbox" id="set-enable-telemetry"> Share anonymous usage statistics</label>
-      <span class="help-text" style="margin-left:12px;display:block;">Helps improve POTA CAT. Only sends: a random ID, app version, OS, and session duration. No callsign, grid, settings, or frequencies are ever collected. You can opt out at any time.</span>
-    </fieldset>
+    <!-- 2. Radio -->
     <fieldset class="radio-config">
       <legend>Radio</legend>
       <div id="my-rigs-list"></div>
@@ -595,8 +415,212 @@
         </div>
       </div>
     </fieldset>
+    <!-- 3. Spot Sources -->
     <fieldset class="source-toggles">
-      <legend>Diagnostics</legend>
+      <legend>Spot Sources</legend>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-pota" checked> Enable POTA</label>
+      <div id="pota-parks-picker" style="margin-top:6px;margin-left:12px;margin-bottom:8px;">
+        <label>POTA Parks Worked CSV:
+          <div style="display:flex;gap:6px;margin-top:4px;">
+            <input type="text" id="set-pota-parks-path" readonly placeholder="No file selected" style="flex:1;">
+            <button type="button" id="pota-parks-browse-btn">Browse</button>
+          </div>
+        </label>
+        <span class="help-text" style="display:block;margin-top:4px;">Go to pota.app/#/user/stats, under Hunted Parks, click "Export CSV"</span>
+        <label class="checkbox-label" style="margin-top:4px;"><input type="checkbox" id="set-hide-worked-parks"> Hide already-worked parks</label>
+      </div>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-sota"> Enable SOTA</label>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-wwff"> Enable WWFF</label>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-llota"> Enable LLOTA</label>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-cluster"> Enable DX Cluster</label>
+      <div id="cluster-config" class="radio-sub hidden">
+        <label>Cluster Host: <input type="text" id="set-cluster-host" value="w3lpl.net"></label>
+        <label>Cluster Port: <input type="number" id="set-cluster-port" value="7373" min="1" max="65535"></label>
+      </div>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-rbn"> Reverse Beacon Network</label>
+      <div id="rbn-config" class="radio-sub hidden">
+        <span class="help-text" style="font-size:12px;">Shows where your CQ calls are being heard by RBN skimmers worldwide.</span>
+        <span class="help-text" style="display:block;margin-top:4px;">RBN spots only appear while POTA CAT is open — historical spots are not retrieved.</span>
+      </div>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-wsjtx"> WSJT-X Integration</label>
+      <div id="wsjtx-config" class="radio-sub hidden">
+        <span class="help-text" style="font-size:12px;">Connect to WSJT-X via UDP. POTA activators are highlighted in the decode window and decodes appear in POTA CAT.</span>
+        <label>UDP Port:
+          <input type="number" id="set-wsjtx-port" value="2237" min="1024" max="65535" style="width:80px;">
+        </label>
+        <span class="help-text" style="display:block;margin-top:4px;">Must match WSJT-X Settings &rarr; Reporting &rarr; UDP Server port. Enable "Accept UDP requests" in WSJT-X.</span>
+        <label class="checkbox-label" style="margin-top:6px;"><input type="checkbox" id="set-wsjtx-highlight" checked> Highlight POTA activators in WSJT-X</label>
+        <label class="checkbox-label"><input type="checkbox" id="set-wsjtx-auto-log"> Auto-log WSJT-X QSOs to POTA CAT</label>
+      </div>
+    </fieldset>
+    <!-- 4. Spot Filters (merged Spots + Watchlist) -->
+    <fieldset class="source-toggles">
+      <legend>Spot Filters</legend>
+      <label>Max Spot Age (minutes):
+        <input type="number" id="set-max-age" min="1" max="120" value="5">
+      </label>
+      <label class="checkbox-label"><input type="checkbox" id="set-hide-out-of-band"> Hide out-of-band spots</label>
+      <label class="checkbox-label"><input type="checkbox" id="set-hide-worked"> Hide already-worked stations</label>
+      <label>Watchlist Callsigns (comma-separated):
+        <input type="text" id="set-watchlist" placeholder="K3SBP, K4SWL, KI6NAZ">
+      </label>
+      <label class="checkbox-label"><input type="checkbox" id="set-notify-popup" checked> Pop-up notification</label>
+      <label class="checkbox-label"><input type="checkbox" id="set-notify-sound" checked> Sound notification</label>
+      <label>Notification duration (seconds):
+        <input type="number" id="set-notify-timeout" min="3" max="60" step="1" value="10">
+      </label>
+    </fieldset>
+    <!-- 5. Tuning (trimmed — PstRotator moved to Antenna) -->
+    <fieldset class="source-toggles">
+      <legend>Tuning</legend>
+      <label>Scan Dwell Time (seconds):
+        <input type="number" id="set-scan-dwell" min="2" max="30" value="7">
+      </label>
+      <label>CW XIT Offset (Hz):
+        <input type="number" id="set-cw-xit" min="-999" max="999" step="10" value="0">
+      </label>
+      <label>CW Filter Width (Hz):
+        <input type="number" id="set-cw-filter" min="0" max="3000" step="50" value="0">
+      </label>
+      <label>SSB Filter Width (Hz):
+        <input type="number" id="set-ssb-filter" min="0" max="4000" step="100" value="0">
+      </label>
+      <label>Digital Filter Width (Hz):
+        <input type="number" id="set-digital-filter" min="0" max="5000" step="100" value="0">
+      </label>
+      <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Set to 0 to use the radio's default. Sent after every tune to keep your preferred filter.</span>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-split"> Enable split mode</label>
+      <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Send split on/off with each tune command (VFO A = RX, VFO B = TX)</span>
+      <label class="checkbox-label"><input type="checkbox" id="set-tune-click"> Tune confirmation sound</label>
+      <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Play a click when the radio confirms it has changed frequency</span>
+    </fieldset>
+    <!-- 6. Antenna (beam heading + PstRotator) -->
+    <fieldset class="source-toggles">
+      <legend>Antenna</legend>
+      <label class="checkbox-label"><input type="checkbox" id="set-show-bearing"> Show Beam Heading</label>
+      <span class="help-text" style="margin-left:12px;display:block;">Compass bearing from your QTH to each spot</span>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-rotor"> PstRotator rotor control</label>
+      <div id="rotor-config" class="radio-sub hidden">
+        <span class="help-text" style="font-size:12px;">Sends beam heading to PstRotator via UDP when you tune to a spot.</span>
+        <label>Host:
+          <input type="text" id="set-rotor-host" placeholder="127.0.0.1" value="127.0.0.1" style="width:140px;">
+        </label>
+        <label>Port:
+          <input type="number" id="set-rotor-port" value="12040" min="1" max="65535" style="width:80px;">
+        </label>
+        <span class="help-text" style="display:block;margin-top:4px;">Default port is 12040. Use 12042, 12044, 12046 for additional rotators.</span>
+      </div>
+    </fieldset>
+    <!-- 7. Logging -->
+    <fieldset class="source-toggles">
+      <legend>Logging</legend>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-logging"> Enable QSO Logging</label>
+      <div id="logging-config" class="radio-sub hidden">
+        <label>ADIF Log File:
+          <div style="display:flex;gap:6px;margin-top:4px;">
+            <input type="text" id="set-adif-log-path" readonly style="flex:1;">
+            <button type="button" id="adif-log-browse-btn">Browse</button>
+          </div>
+          <span class="help-text" style="display:block;margin-top:4px;">Local backup of all QSOs logged from POTA CAT</span>
+        </label>
+        <div style="margin-top:10px;">
+          <strong style="display:block;margin-bottom:4px;">Import Log</strong>
+          <button type="button" id="adif-import-btn">Import Log</button>
+          <span id="adif-import-result" class="help-text" style="margin-left:8px;"></span>
+          <span class="help-text" style="display:block;margin-top:4px;">Import QSO history from ADIF (.adi) or Log4OM SQLite (.sqlite) files. They will be added to your POTA CAT logfile.</span>
+        </div>
+        <label style="margin-top:10px;">Default TX Power (W):
+          <input type="number" id="set-default-power" min="1" max="5000" value="100">
+        </label>
+        <label class="checkbox-label"><input type="checkbox" id="set-send-to-logbook"> Send Data to Logbook</label>
+        <div id="logbook-config" class="hidden" style="margin-left:12px;margin-top:4px;">
+          <label>Logbook:
+            <select id="set-logbook-type">
+              <option value="">Select...</option>
+              <option value="hrd">Ham Radio Deluxe</option>
+              <option value="log4om">Log4OM 2</option>
+              <option value="n3fjp">N3FJP</option>
+            </select>
+          </label>
+          <div id="logbook-instructions" class="hidden help-text" style="margin-top:6px;line-height:1.5;"></div>
+          <div id="logbook-port-config" class="hidden" style="margin-top:6px;">
+            <label>Host:
+              <input type="text" id="set-logbook-host" placeholder="127.0.0.1" value="127.0.0.1">
+            </label>
+            <label>Port:
+              <input type="number" id="set-logbook-port" min="1" max="65535">
+            </label>
+            <div id="logbook-help" class="help-text" style="margin-top:4px;"></div>
+          </div>
+        </div>
+      </div>
+    </fieldset>
+    <!-- 8. Display (trimmed — bearing moved to Antenna, SmartSDR absorbed) -->
+    <fieldset class="source-toggles">
+      <legend>Display</legend>
+      <label class="switch-label">
+        <span>Dark Mode</span>
+        <div class="switch">
+          <input type="checkbox" id="set-light-mode">
+          <span class="switch-slider"></span>
+        </div>
+        <span>Light Mode</span>
+      </label>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-solar"> Solar Propagation</label>
+      <span class="help-text" style="margin-left:12px;margin-bottom:6px;display:block;">Shows SFI, K, and A indices in the status bar</span>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-band-activity"> Band Activity Heatmap</label>
+      <span class="help-text" style="margin-left:12px;display:block;">Displayed on the Map view only</span>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-split-view" checked> Enable split view</label>
+      <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Show Table and Map side by side. When off, only one view is shown at a time.</span>
+      <div id="split-orientation-config">
+        <label>Split Layout:
+          <select id="set-split-orientation">
+            <option value="horizontal">Side by side</option>
+            <option value="vertical">Stacked</option>
+          </select>
+        </label>
+      </div>
+      <label class="checkbox-label">
+        <input type="checkbox" id="set-smartsdr-spots"> Push spots to SmartSDR panadapter
+      </label>
+      <div id="smartsdr-config" class="radio-sub hidden">
+        <label>Radio IP:
+          <input type="text" id="set-smartsdr-host" placeholder="127.0.0.1" style="width:140px;">
+        </label>
+        <span class="help-text">Connect to FlexRadio on port 4992</span>
+        <div style="margin-top:8px;">
+          <span style="font-size:12px;color:var(--text-secondary);">Sources to show on panadapter:</span>
+          <label class="checkbox-label"><input type="checkbox" id="set-smartsdr-pota" checked> POTA</label>
+          <label class="checkbox-label"><input type="checkbox" id="set-smartsdr-sota" checked> SOTA</label>
+          <label class="checkbox-label"><input type="checkbox" id="set-smartsdr-cluster" checked> DX Cluster</label>
+          <label class="checkbox-label"><input type="checkbox" id="set-smartsdr-rbn"> RBN</label>
+          <label class="checkbox-label"><input type="checkbox" id="set-smartsdr-wwff" checked> WWFF</label>
+          <label class="checkbox-label"><input type="checkbox" id="set-smartsdr-llota" checked> LLOTA</label>
+        </div>
+        <label style="margin-top:8px;">Max spot age (minutes):
+          <input type="number" id="set-smartsdr-max-age" min="0" max="120" value="15" style="width:60px;">
+        </label>
+        <span class="help-text" style="display:block;">0 = no limit (show all spots)</span>
+      </div>
+    </fieldset>
+    <!-- 9. DXCC Tracker -->
+    <fieldset class="source-toggles">
+      <legend>DXCC Tracker</legend>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-dxcc"> DXCC Tracker</label>
+      <div id="adif-picker" class="hidden" style="margin-top:6px;margin-left:12px;">
+        <label style="margin-bottom:4px;">Log File:
+          <div style="display:flex;gap:6px;margin-top:4px;">
+            <input type="text" id="set-adif-path" readonly placeholder="No file selected" style="flex:1;">
+            <button type="button" id="adif-browse-btn">Browse</button>
+          </div>
+        </label>
+      </div>
+    </fieldset>
+    <!-- 10. About (merged Privacy + Diagnostics) -->
+    <fieldset class="source-toggles">
+      <legend>About</legend>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-telemetry"> Share anonymous usage statistics</label>
+      <span class="help-text" style="margin-left:12px;display:block;">Helps improve POTA CAT. Only sends: a random ID, app version, OS, and session duration. No callsign, grid, settings, or frequencies are ever collected. You can opt out at any time.</span>
       <label class="checkbox-label"><input type="checkbox" id="set-verbose-log"> Verbose CAT log</label>
       <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Show a log button in the status bar with raw CAT commands and responses</span>
     </fieldset>
