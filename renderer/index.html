@@ -69,6 +69,7 @@
           <label class="spots-toggle"><input type="checkbox" id="spots-llota"> <span style="color:#42a5f5">LLOTA</span></label>
           <label class="spots-toggle"><input type="checkbox" id="spots-cluster"> <span style="color:#e040fb">DX Cluster</span></label>
           <label class="spots-toggle"><input type="checkbox" id="spots-rbn"> <span style="color:#00bcd4">RBN</span></label>
+          <label class="spots-toggle"><input type="checkbox" id="spots-pskr"> <span style="color:#ff6b6b">FreeDV</span></label>
           <div class="spots-panel-divider"></div>
           <div class="spots-panel-section-label">Filters</div>
           <label class="spots-toggle"><input type="checkbox" id="spots-hide-worked"> Hide worked stations</label>
@@ -283,7 +284,7 @@
     <fieldset class="source-toggles">
       <legend>Station</legend>
       <label>My Callsign: <input type="text" id="set-my-callsign" maxlength="10" placeholder="WB6ACU"></label>
-      <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Required for DX Cluster, Reverse Beacon Network, and QSO Logging</span>
+      <span class="help-text" style="margin-left:12px;margin-bottom:6px;display:block;">Required for DX Cluster, Reverse Beacon Network, and QSO Logging</span>
       <label>QTH Grid Square: <input type="text" id="set-grid" maxlength="6"></label>
       <label class="checkbox-label"><input type="checkbox" id="set-enable-qrz"> QRZ.com Callsign Lookup</label>
       <div id="qrz-config" class="radio-sub hidden">
@@ -488,11 +489,11 @@
       <label>Digital Filter Width (Hz):
         <input type="number" id="set-digital-filter" min="0" max="5000" step="100" value="0">
       </label>
-      <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Set to 0 to use the radio's default. Sent after every tune to keep your preferred filter.</span>
+      <span class="help-text" style="margin-left:12px;margin-bottom:6px;display:block;">Set to 0 to use the radio's default. Sent after every tune to keep your preferred filter.</span>
       <label class="checkbox-label"><input type="checkbox" id="set-enable-split"> Enable split mode</label>
-      <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Send split on/off with each tune command (VFO A = RX, VFO B = TX)</span>
+      <span class="help-text" style="margin-left:12px;margin-bottom:6px;display:block;">Send split on/off with each tune command (VFO A = RX, VFO B = TX)</span>
       <label class="checkbox-label"><input type="checkbox" id="set-tune-click"> Tune confirmation sound</label>
-      <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Play a click when the radio confirms it has changed frequency</span>
+      <span class="help-text" style="margin-left:12px;margin-bottom:6px;display:block;">Play a click when the radio confirms it has changed frequency</span>
     </fieldset>
     <!-- 6. Antenna (beam heading + PstRotator) -->
     <fieldset class="source-toggles">
@@ -537,6 +538,7 @@
           <label>Logbook:
             <select id="set-logbook-type">
               <option value="">Select...</option>
+              <option value="dxkeeper">DXLab DXKeeper</option>
               <option value="hrd">Ham Radio Deluxe</option>
               <option value="log4om">Log4OM 2</option>
               <option value="n3fjp">N3FJP</option>
@@ -571,7 +573,7 @@
       <label class="checkbox-label"><input type="checkbox" id="set-enable-band-activity"> Band Activity Heatmap</label>
       <span class="help-text" style="margin-left:12px;display:block;">Displayed on the Map view only</span>
       <label class="checkbox-label"><input type="checkbox" id="set-enable-split-view" checked> Enable split view</label>
-      <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Show Table and Map side by side. When off, only one view is shown at a time.</span>
+      <span class="help-text" style="margin-left:12px;margin-bottom:6px;display:block;">Show Table and Map side by side. When off, only one view is shown at a time.</span>
       <div id="split-orientation-config">
         <label>Split Layout:
           <select id="set-split-orientation">
@@ -622,7 +624,7 @@
       <label class="checkbox-label"><input type="checkbox" id="set-enable-telemetry"> Share anonymous usage statistics</label>
       <span class="help-text" style="margin-left:12px;display:block;">Helps improve POTA CAT. Only sends: a random ID, app version, OS, and session duration. No callsign, grid, settings, or frequencies are ever collected. You can opt out at any time.</span>
       <label class="checkbox-label"><input type="checkbox" id="set-verbose-log"> Verbose CAT log</label>
-      <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Show a log button in the status bar with raw CAT commands and responses</span>
+      <span class="help-text" style="margin-left:12px;margin-bottom:6px;display:block;">Show a log button in the status bar with raw CAT commands and responses</span>
     </fieldset>
     <div class="dialog-buttons">
       <button id="settings-save">Save</button>

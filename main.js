@@ -19,6 +19,7 @@ const { appendQso, buildAdifRecord, appendImportedQso } = require('./lib/adif-wr
 const { SmartSdrClient } = require('./lib/smartsdr');
 const { parsePotaParksCSV } = require('./lib/pota-parks');
 const { WsjtxClient } = require('./lib/wsjtx');
+const { PskrClient } = require('./lib/pskreporter');
 const { fetchSpots: fetchWwffSpots } = require('./lib/wwff');
 const { fetchSpots: fetchLlotaSpots } = require('./lib/llota');
 const { postWwffRespot } = require('./lib/wwff-respot');
@@ -66,6 +67,9 @@ let wsjtx = null;
 let wsjtxStatus = null; // last Status message from WSJT-X
 let wsjtxHighlightTimer = null; // throttle timer for highlight updates
 let donorCallsigns = new Set(); // supporter callsigns from potacat.com
+let pskr = null;
+let pskrSpots = [];       // streaming PSKReporter FreeDV spots (FIFO, max 500)
+let pskrFlushTimer = null; // throttle timer for PSKReporter → renderer updates
 
 // --- Watchlist notifications ---
 const recentNotifications = new Map(); // callsign → timestamp for dedup (5-min window)
@@ -101,7 +105,7 @@ function notifyWatchlistSpot({ callsign, frequency, mode, source, reference, loc
   const freqMHz = (parseFloat(frequency) / 1000).toFixed(3);
   let body = `${freqMHz} MHz`;
   if (mode) body += ` ${mode}`;
-  const sourceLabels = { pota: 'POTA', sota: 'SOTA', wwff: 'WWFF', llota: 'LLOTA', dxc: 'DX Cluster', rbn: 'RBN' };
+  const sourceLabels = { pota: 'POTA', sota: 'SOTA', wwff: 'WWFF', llota: 'LLOTA', dxc: 'DX Cluster', rbn: 'RBN', pskr: 'FreeDV' };
   const label = sourceLabels[source] || source;
   if (reference) {
     body += ` \u2014 ${label} ${reference}`;
@@ -684,6 +688,113 @@ function disconnectRbn() {
   sendRbnStatus({ connected: false });
 }
 
+// --- PSKReporter FreeDV integration ---
+function sendPskrStatus(s) {
+  if (win && !win.isDestroyed()) win.webContents.send('pskr-status', s);
+}
+
+function connectPskr() {
+  if (pskr) {
+    pskr.disconnect();
+    pskr.removeAllListeners();
+    pskr = null;
+  }
+  pskrSpots = [];
+
+  if (!settings.enablePskr) {
+    sendPskrStatus({ connected: false });
+    return;
+  }
+
+  pskr = new PskrClient();
+  const myPos = gridToLatLon(settings.grid);
+  const myEntity = (ctyDb && settings.myCallsign) ? resolveCallsign(settings.myCallsign, ctyDb) : null;
+
+  pskr.on('spot', (raw) => {
+    const spot = {
+      source: 'pskr',
+      callsign: raw.callsign,
+      frequency: raw.frequency,
+      freqMHz: raw.freqMHz,
+      mode: raw.mode,
+      reference: '',
+      parkName: `heard by ${raw.spotter}${raw.snr != null ? ` (${raw.snr} dB)` : ''}`,
+      locationDesc: '',
+      distance: null,
+      lat: null,
+      lon: null,
+      band: raw.band,
+      spotTime: raw.spotTime,
+    };
+
+    // Resolve DXCC entity for location + approximate coordinates
+    if (ctyDb) {
+      const entity = resolveCallsign(raw.callsign, ctyDb);
+      if (entity) {
+        spot.locationDesc = entity.name;
+        spot.continent = entity.continent || '';
+        if (entity.lat != null && entity.lon != null) {
+          spot.lat = entity.lat;
+          spot.lon = entity.lon;
+          if (myPos && entity !== myEntity) {
+            spot.distance = Math.round(haversineDistanceMiles(myPos.lat, myPos.lon, entity.lat, entity.lon));
+            spot.bearing = Math.round(bearing(myPos.lat, myPos.lon, entity.lat, entity.lon));
+          }
+        }
+      }
+    }
+
+    // Watchlist notification
+    const watchSet = parseWatchlist(settings.watchlist);
+    if (watchSet.has(raw.callsign.toUpperCase())) {
+      notifyWatchlistSpot({
+        callsign: raw.callsign,
+        frequency: raw.frequency,
+        mode: raw.mode,
+        source: 'pskr',
+        reference: '',
+        locationDesc: spot.locationDesc,
+      });
+    }
+
+    // Dedupe: keep latest per callsign+band
+    const idx = pskrSpots.findIndex(s => s.callsign === spot.callsign && s.band === spot.band);
+    if (idx !== -1) pskrSpots.splice(idx, 1);
+    pskrSpots.push(spot);
+    if (pskrSpots.length > 500) {
+      pskrSpots = pskrSpots.slice(-500);
+    }
+
+    // Throttle: flush to renderer at most once every 2s
+    if (!pskrFlushTimer) {
+      pskrFlushTimer = setTimeout(() => {
+        pskrFlushTimer = null;
+        sendMergedSpots();
+      }, 2000);
+    }
+  });
+
+  pskr.on('status', (s) => {
+    sendPskrStatus(s);
+  });
+
+  pskr.connect();
+}
+
+function disconnectPskr() {
+  if (pskrFlushTimer) {
+    clearTimeout(pskrFlushTimer);
+    pskrFlushTimer = null;
+  }
+  if (pskr) {
+    pskr.disconnect();
+    pskr.removeAllListeners();
+    pskr = null;
+  }
+  pskrSpots = [];
+  sendPskrStatus({ connected: false });
+}
+
 // --- WSJT-X integration ---
 function sendWsjtxStatus(s) {
   if (win && !win.isDestroyed()) win.webContents.send('wsjtx-status', s);
@@ -895,6 +1006,7 @@ function pushSpotsToSmartSdr(spots) {
     if (spot.source === 'rbn' && !settings.smartSdrRbn) continue;
     if (spot.source === 'wwff' && settings.smartSdrWwff === false) continue;
     if (spot.source === 'llota' && settings.smartSdrLlota === false) continue;
+    if (spot.source === 'pskr' && settings.smartSdrPskr === false) continue;
     // Age filter — skip spots older than the configured max age (0 = no limit)
     if (maxAgeMs > 0 && spot.spotTime) {
       const t = spot.spotTime.endsWith('Z') ? spot.spotTime : spot.spotTime + 'Z';
@@ -1180,7 +1292,7 @@ let lastPotaSotaSpots = []; // cache of last fetched POTA+SOTA+WWFF+LLOTA spots
 
 function sendMergedSpots() {
   if (!win || win.isDestroyed()) return;
-  const merged = [...lastPotaSotaSpots, ...clusterSpots, ...rbnWatchSpots];
+  const merged = [...lastPotaSotaSpots, ...clusterSpots, ...rbnWatchSpots, ...pskrSpots];
   win.webContents.send('spots', merged);
   pushSpotsToSmartSdr(merged);
   // Trigger QRZ lookups for new callsigns (async, non-blocking)
@@ -1406,6 +1518,9 @@ function forwardToLogbook(qsoData) {
   if (type === 'n3fjp') {
     return sendN3fjpTcp(qsoData, host, port || 1100);
   }
+  if (type === 'dxkeeper') {
+    return sendDxkeeperTcp(qsoData, host, port || 52001);
+  }
   return Promise.resolve();
 }
 
@@ -1452,6 +1567,38 @@ function sendN3fjpTcp(qsoData, host, port) {
     });
     sock.on('error', (err) => {
       reject(new Error(`N3FJP: ${err.message}`));
+    });
+  });
+}
+
+/**
+ * Send a QSO to DXLab DXKeeper via TCP externallog command.
+ * Format: <command:11>externallog<parameters:N><ExternalLogADIF:M>...ADIF...<EOR><DeduceMissing:1>Y<QueryCallbook:1>Y
+ * DXKeeper uses a single-connection model — open, send, close.
+ */
+function sendDxkeeperTcp(qsoData, host, port) {
+  return new Promise((resolve, reject) => {
+    const net = require('net');
+    const record = buildAdifRecord(qsoData);
+    const options = '<DeduceMissing:1>Y<QueryCallbook:1>Y';
+    const adifTag = `<ExternalLogADIF:${Buffer.byteLength(record, 'utf-8')}>${record}`;
+    const params = `${adifTag}${options}`;
+    const cmd = `<command:11>externallog<parameters:${Buffer.byteLength(params, 'utf-8')}>${params}`;
+
+    const sock = net.createConnection({ host, port }, () => {
+      sock.write(cmd, 'utf-8', () => {
+        sock.end();
+        resolve();
+      });
+    });
+
+    sock.setTimeout(5000);
+    sock.on('timeout', () => {
+      sock.destroy();
+      reject(new Error('DXKeeper connection timed out'));
+    });
+    sock.on('error', (err) => {
+      reject(new Error(`DXKeeper: ${err.message}`));
     });
   });
 }
@@ -1779,6 +1926,7 @@ app.whenReady().then(() => {
   if (settings.enableRbn) connectRbn();
   connectSmartSdr(); // connects if smartSdrSpots or WSJT-X+Flex
   if (settings.enableWsjtx) connectWsjtx();
+  if (settings.enablePskr) connectPskr();
   // Configure QRZ client from saved credentials
   if (settings.enableQrz && settings.qrzUsername && settings.qrzPassword) {
     qrz.configure(settings.qrzUsername, settings.qrzPassword);
@@ -1912,6 +2060,8 @@ app.whenReady().then(() => {
     const wsjtxChanged = newSettings.enableWsjtx !== settings.enableWsjtx ||
       newSettings.wsjtxPort !== settings.wsjtxPort;
 
+    const pskrChanged = newSettings.enablePskr !== settings.enablePskr;
+
     settings = { ...settings, ...newSettings };
     saveSettings(settings);
     // Only reconnect CAT if WSJT-X is not managing the radio
@@ -1954,6 +2104,15 @@ app.whenReady().then(() => {
         updateWsjtxHighlights();
       } else {
         wsjtx.clearHighlights();
+      }
+    }
+
+    // Reconnect PSKReporter if settings changed
+    if (pskrChanged) {
+      if (settings.enablePskr) {
+        connectPskr();
+      } else {
+        disconnectPskr();
       }
     }
 
