@@ -318,12 +318,20 @@
       <label>CW XIT Offset (Hz):
         <input type="number" id="set-cw-xit" min="-999" max="999" step="10" value="0">
       </label>
+      <label>CW Filter Width (Hz):
+        <input type="number" id="set-cw-filter" min="0" max="3000" step="50" value="0">
+      </label>
+      <label>SSB Filter Width (Hz):
+        <input type="number" id="set-ssb-filter" min="0" max="4000" step="100" value="0">
+      </label>
+      <label>Digital Filter Width (Hz):
+        <input type="number" id="set-digital-filter" min="0" max="5000" step="100" value="0">
+      </label>
+      <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Set to 0 to use the radio's default. Sent after every tune to keep your preferred filter.</span>
       <label class="checkbox-label"><input type="checkbox" id="set-enable-split"> Enable split mode</label>
       <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Send split on/off with each tune command (VFO A = RX, VFO B = TX)</span>
       <label class="checkbox-label"><input type="checkbox" id="set-tune-click"> Tune confirmation sound</label>
       <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Play a click when the radio confirms it has changed frequency</span>
-      <label class="checkbox-label"><input type="checkbox" id="set-verbose-log"> Verbose CAT log</label>
-      <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Show a log button in the status bar with raw CAT commands and responses</span>
     </fieldset>
     <fieldset class="source-toggles">
       <legend>Watchlist</legend>
@@ -453,13 +461,16 @@
       <span class="help-text" style="margin-left:12px;display:block;">Displayed on the Map view only</span>
       <label class="checkbox-label"><input type="checkbox" id="set-show-bearing"> Show Beam Heading</label>
       <span class="help-text" style="margin-left:12px;display:block;">Compass bearing from your QTH to each spot</span>
-      <label>Split Layout:
-        <select id="set-split-orientation">
-          <option value="horizontal">Side by side</option>
-          <option value="vertical">Stacked</option>
-        </select>
-      </label>
-      <span class="help-text" style="display:block;">Layout when both Table and Map views are active</span>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-split-view" checked> Enable split view</label>
+      <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Show Table and Map side by side. When off, only one view is shown at a time.</span>
+      <div id="split-orientation-config">
+        <label>Split Layout:
+          <select id="set-split-orientation">
+            <option value="horizontal">Side by side</option>
+            <option value="vertical">Stacked</option>
+          </select>
+        </label>
+      </div>
     </fieldset>
     <fieldset class="source-toggles">
       <legend>Beta</legend>
@@ -572,6 +583,11 @@
           <button type="button" id="rig-cancel-btn">Cancel</button>
         </div>
       </div>
+    </fieldset>
+    <fieldset class="source-toggles">
+      <legend>Diagnostics</legend>
+      <label class="checkbox-label"><input type="checkbox" id="set-verbose-log"> Verbose CAT log</label>
+      <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Show a log button in the status bar with raw CAT commands and responses</span>
     </fieldset>
     <div class="dialog-buttons">
       <button id="settings-save">Save</button>

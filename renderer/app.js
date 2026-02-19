@@ -8,6 +8,7 @@ let currentView = 'table'; // 'table', 'map', 'dxcc', or 'rbn' (for exclusive vi
 let showTable = true;
 let showMap = false;
 let splitOrientation = 'horizontal'; // 'horizontal' (side-by-side) or 'vertical' (stacked)
+let enableSplitView = true; // allow Table+Map simultaneously
 
 // User preferences (loaded from settings)
 let distUnit = 'mi';    // 'mi' or 'km'
@@ -103,6 +104,9 @@ const setEnableSota = document.getElementById('set-enable-sota');
 const setEnableWwff = document.getElementById('set-enable-wwff');
 const setEnableLlota = document.getElementById('set-enable-llota');
 const setCwXit = document.getElementById('set-cw-xit');
+const setCwFilter = document.getElementById('set-cw-filter');
+const setSsbFilter = document.getElementById('set-ssb-filter');
+const setDigitalFilter = document.getElementById('set-digital-filter');
 const setNotifyPopup = document.getElementById('set-notify-popup');
 const setNotifySound = document.getElementById('set-notify-sound');
 const setNotifyTimeout = document.getElementById('set-notify-timeout');
@@ -112,6 +116,8 @@ const setHideWorked = document.getElementById('set-hide-worked');
 const setTuneClick = document.getElementById('set-tune-click');
 const setEnableSplit = document.getElementById('set-enable-split');
 const setVerboseLog = document.getElementById('set-verbose-log');
+const setEnableSplitView = document.getElementById('set-enable-split-view');
+const splitOrientationConfig = document.getElementById('split-orientation-config');
 const continentFilterEl = document.getElementById('continent-filter');
 const scanBtn = document.getElementById('scan-btn');
 const hamlibConfig = document.getElementById('hamlib-config');
@@ -446,6 +452,7 @@ async function loadPrefs() {
 
   // Restore view state
   splitOrientation = settings.splitOrientation || 'horizontal';
+  enableSplitView = settings.enableSplitView !== false;
   try {
     const viewState = JSON.parse(localStorage.getItem(VIEW_STATE_KEY));
     if (viewState) {
@@ -1126,6 +1133,11 @@ setEnableRbn.addEventListener('change', () => {
 // WSJT-X checkbox toggles config visibility
 setEnableWsjtx.addEventListener('change', () => {
   wsjtxConfig.classList.toggle('hidden', !setEnableWsjtx.checked);
+});
+
+// Split view checkbox toggles orientation config visibility
+setEnableSplitView.addEventListener('change', () => {
+  splitOrientationConfig.classList.toggle('hidden', !setEnableSplitView.checked);
 });
 
 // SmartSDR checkbox toggles config visibility
@@ -2280,6 +2292,11 @@ viewTableBtn.addEventListener('click', () => {
     currentView = 'table';
     showTable = true;
     showMap = false;
+  } else if (!enableSplitView) {
+    // No split — switch to table only
+    showTable = true;
+    showMap = false;
+    currentView = 'table';
   } else {
     // Toggle table
     if (!showTable) {
@@ -2300,6 +2317,11 @@ viewMapBtn.addEventListener('click', () => {
     currentView = 'map';
     showTable = false;
     showMap = true;
+  } else if (!enableSplitView) {
+    // No split — switch to map only
+    showTable = false;
+    showMap = true;
+    currentView = 'map';
   } else {
     // Toggle map
     if (!showMap) {
@@ -2943,6 +2965,9 @@ settingsBtn.addEventListener('click', async () => {
   setMaxAge.value = s.maxAgeMin || 5;
   setScanDwell.value = s.scanDwell || 7;
   setCwXit.value = s.cwXit || 0;
+  setCwFilter.value = s.cwFilterWidth || 0;
+  setSsbFilter.value = s.ssbFilterWidth || 0;
+  setDigitalFilter.value = s.digitalFilterWidth || 0;
   setWatchlist.value = s.watchlist || '';
   setNotifyPopup.checked = s.notifyPopup !== false;
   setNotifySound.checked = s.notifySound !== false;
@@ -2991,6 +3016,8 @@ settingsBtn.addEventListener('click', async () => {
   setEnableSolar.checked = s.enableSolar === true;
   setEnableBandActivity.checked = s.enableBandActivity === true;
   setShowBearing.checked = s.showBearing === true;
+  setEnableSplitView.checked = s.enableSplitView !== false;
+  splitOrientationConfig.classList.toggle('hidden', !setEnableSplitView.checked);
   document.getElementById('set-split-orientation').value = s.splitOrientation || 'horizontal';
   setEnableDxcc.checked = s.enableDxcc === true;
   setAdifPath.value = s.adifPath || '';
@@ -3027,6 +3054,9 @@ settingsSave.addEventListener('click', async () => {
   const maxAgeVal = parseInt(setMaxAge.value, 10) || 5;
   const dwellVal = parseInt(setScanDwell.value, 10) || 7;
   const cwXitVal = parseInt(setCwXit.value, 10) || 0;
+  const cwFilterVal = parseInt(setCwFilter.value, 10) || 0;
+  const ssbFilterVal = parseInt(setSsbFilter.value, 10) || 0;
+  const digitalFilterVal = parseInt(setDigitalFilter.value, 10) || 0;
   const notifyPopupEnabled = setNotifyPopup.checked;
   const notifySoundEnabled = setNotifySound.checked;
   const notifyTimeoutVal = parseInt(setNotifyTimeout.value, 10) || 10;
@@ -3050,6 +3080,7 @@ settingsSave.addEventListener('click', async () => {
   const solarEnabled = setEnableSolar.checked;
   const bandActivityEnabled = setEnableBandActivity.checked;
   const showBearingEnabled = setShowBearing.checked;
+  const enableSplitViewVal = setEnableSplitView.checked;
   const splitOrientationVal = document.getElementById('set-split-orientation').value;
   const dxccEnabled = setEnableDxcc.checked;
   const licenseClassVal = setLicenseClass.value;
@@ -3094,6 +3125,9 @@ settingsSave.addEventListener('click', async () => {
     maxAgeMin: maxAgeVal,
     scanDwell: dwellVal,
     cwXit: cwXitVal,
+    cwFilterWidth: cwFilterVal,
+    ssbFilterWidth: ssbFilterVal,
+    digitalFilterWidth: digitalFilterVal,
     watchlist: watchlistRaw,
     notifyPopup: notifyPopupEnabled,
     notifySound: notifySoundEnabled,
@@ -3118,6 +3152,7 @@ settingsSave.addEventListener('click', async () => {
     enableSolar: solarEnabled,
     enableBandActivity: bandActivityEnabled,
     showBearing: showBearingEnabled,
+    enableSplitView: enableSplitViewVal,
     splitOrientation: splitOrientationVal,
     enableDxcc: dxccEnabled,
     licenseClass: licenseClassVal,
@@ -3168,9 +3203,14 @@ settingsSave.addEventListener('click', async () => {
   updateBandActivityVisibility();
   showBearing = showBearingEnabled;
   updateBearingVisibility();
+  enableSplitView = enableSplitViewVal;
   splitOrientation = splitOrientationVal;
-  // Apply split orientation change immediately if in split view
-  if (showTable && showMap) updateViewLayout();
+  // If split view was just disabled and both are showing, switch to table only
+  if (!enableSplitView && showTable && showMap) {
+    showMap = false;
+    currentView = 'table';
+  }
+  if (showTable || showMap) updateViewLayout();
   qrzFullName = qrzFullNameEnabled;
   enableLogging = loggingEnabled;
   defaultPower = defaultPowerVal;
