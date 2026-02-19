@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('api', {
   getRecentQsos: () => ipcRenderer.invoke('get-recent-qsos'),
   getDefaultLogPath: () => ipcRenderer.invoke('get-default-log-path'),
   chooseLogFile: (currentPath) => ipcRenderer.invoke('choose-log-file', currentPath),
+  onQrzData: (cb) => ipcRenderer.on('qrz-data', (_e, data) => cb(data)),
   minimize: () => ipcRenderer.send('win-minimize'),
   maximize: () => ipcRenderer.send('win-maximize'),
   close: () => ipcRenderer.send('win-close'),

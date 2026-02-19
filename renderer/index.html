@@ -114,6 +114,7 @@
             <tr>
               <th class="no-sort log-col" data-col="log">Log</th>
               <th data-sort="callsign" data-col="callsign">Callsign</th>
+              <th data-col="operator" class="operator-col">Operator</th>
               <th data-sort="frequency" data-col="frequency">Freq (kHz)</th>
               <th data-sort="mode" data-col="mode">Mode</th>
               <th data-sort="reference" data-col="reference">Ref</th>
@@ -266,6 +267,18 @@
       <label>My Callsign: <input type="text" id="set-my-callsign" maxlength="10" placeholder="WB6ACU"></label>
       <span class="help-text" style="margin-top:-8px;margin-bottom:8px;display:block;">Required for DX Cluster, Reverse Beacon Network, and QSO Logging</span>
       <label>QTH Grid Square: <input type="text" id="set-grid" maxlength="6"></label>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-qrz"> QRZ.com Callsign Lookup</label>
+      <div id="qrz-config" class="radio-sub hidden">
+        <span class="help-text" style="font-size:12px;">Shows operator name in the spot table. Uses the QRZ XML API — a free QRZ account works.</span>
+        <label>QRZ Username (callsign):
+          <input type="text" id="set-qrz-username" maxlength="10" placeholder="K3SBP" style="text-transform:uppercase;">
+        </label>
+        <label>QRZ Password:
+          <input type="password" id="set-qrz-password" placeholder="Your QRZ password">
+        </label>
+        <label class="checkbox-label"><input type="checkbox" id="set-qrz-full-name"> Show first and last name</label>
+        <span class="help-text" style="display:block;margin-top:4px;">Credentials are stored locally and only sent to xmldata.qrz.com</span>
+      </div>
       <label>Distance Unit:
         <select id="set-dist-unit">
           <option value="mi">Miles</option>

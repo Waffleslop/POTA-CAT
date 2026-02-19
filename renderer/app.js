@@ -43,6 +43,30 @@ let dxccData = null;  // { entities: [...] } from main process
 let enableWsjtx = false;
 let wsjtxDecodes = []; // recent decodes from WSJT-X (FIFO, max 50)
 let wsjtxState = null; // last WSJT-X status (freq, mode, etc.)
+const qrzData = new Map(); // callsign → { fname, name, addr2, state, country }
+let qrzFullName = false; // show first+last or just first
+
+/** Clean up QRZ name: title-case, drop trailing single-letter initial */
+function cleanQrzName(raw) {
+  if (!raw) return '';
+  const parts = raw.trim().split(/\s+/);
+  // Drop trailing single-letter initial (e.g. "Larry P" → "Larry", "Larry P." → "Larry")
+  // But keep leading single letter (e.g. "J Doug" stays)
+  if (parts.length > 1 && /^[A-Za-z]\.?$/.test(parts[parts.length - 1])) {
+    parts.pop();
+  }
+  // Title-case each part: first letter upper, rest lower
+  return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
+}
+
+/** Build display name from QRZ info, respecting full-name setting */
+function qrzDisplayName(info) {
+  if (!info) return '';
+  const first = cleanQrzName(info.fname);
+  if (!qrzFullName) return first || cleanQrzName(info.name);
+  const last = cleanQrzName(info.name);
+  return [first, last].filter(Boolean).join(' ');
+}
 
 // --- Scan state ---
 // --- Radio frequency tracking ---
@@ -204,6 +228,11 @@ const logbookHelp = document.getElementById('logbook-help');
 const setEnableTelemetry = document.getElementById('set-enable-telemetry');
 const setLightMode = document.getElementById('set-light-mode');
 setLightMode.addEventListener('change', () => applyTheme(setLightMode.checked));
+const setEnableQrz = document.getElementById('set-enable-qrz');
+const qrzConfig = document.getElementById('qrz-config');
+const setQrzUsername = document.getElementById('set-qrz-username');
+const setQrzPassword = document.getElementById('set-qrz-password');
+const setQrzFullName = document.getElementById('set-qrz-full-name');
 const setSmartSdrSpots = document.getElementById('set-smartsdr-spots');
 const smartSdrConfig = document.getElementById('smartsdr-config');
 const setSmartSdrHost = document.getElementById('set-smartsdr-host');
@@ -380,6 +409,7 @@ async function loadPrefs() {
   enableSolar = settings.enableSolar === true;   // default false
   enableBandActivity = settings.enableBandActivity === true; // default false
   updateSolarVisibility();
+  qrzFullName = settings.qrzFullName === true;
   enableLogging = settings.enableLogging === true;
   defaultPower = parseInt(settings.defaultPower, 10) || 100;
   updateLoggingVisibility();
@@ -1078,6 +1108,11 @@ radioTypeBtns.forEach((btn) => {
 });
 
 // Cluster checkbox toggles cluster config visibility
+// QRZ checkbox toggles QRZ config visibility
+setEnableQrz.addEventListener('change', () => {
+  qrzConfig.classList.toggle('hidden', !setEnableQrz.checked);
+});
+
 setEnableCluster.addEventListener('change', () => {
   clusterConfig.classList.toggle('hidden', !setEnableCluster.checked);
 });
@@ -1352,6 +1387,7 @@ function sortSpots(spots) {
 // --- Column Visibility (right-click header to toggle) ---
 const HIDDEN_COLS_KEY = 'pota-cat-hidden-cols';
 const HIDEABLE_COLUMNS = [
+  { key: 'operator', label: 'Operator' },
   { key: 'frequency', label: 'Freq (kHz)' },
   { key: 'mode', label: 'Mode' },
   { key: 'reference', label: 'Ref' },
@@ -1437,6 +1473,7 @@ let isCompact = false;
 
 const HEADER_LABELS = {
   callsign: { full: 'Callsign', compact: 'Call' },
+  operator: { full: 'Operator', compact: 'Op' },
   frequency: { full: 'Freq (kHz)', compact: 'Freq' },
   locationDesc: { full: 'State', compact: 'St' },
   parkName: { full: 'Name', compact: 'Name' },
@@ -1479,9 +1516,9 @@ mapResizeObserver.observe(mapPaneEl);
 
 // --- Column Resizing ---
 // Widths stored as percentages of table width so they always fit
-const COL_WIDTHS_KEY = 'pota-cat-col-pct-v6';
-// Log, Callsign, Freq, Mode, Ref, Name, State, Dist, Heading, Age, Skip
-const DEFAULT_COL_PCT = [4, 10, 8, 5, 8, 22, 10, 7, 5, 7, 6];
+const COL_WIDTHS_KEY = 'pota-cat-col-pct-v7';
+// Log, Callsign, Operator, Freq, Mode, Ref, Name, State, Dist, Heading, Age, Skip
+const DEFAULT_COL_PCT = [4, 9, 8, 7, 5, 7, 19, 9, 6, 5, 6, 5];
 
 function loadColWidths() {
   try {
@@ -1907,9 +1944,12 @@ function updateMapMarkers(filtered) {
     const newBadge = mapNewPark ? ' <span style="background:#4ecca3;color:#000;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;">NEW</span>' : '';
     const wwffBadge = s.wwffReference ? ` <span style="background:#26a69a;color:#000;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;">WWFF</span>` : '';
     const wwffRefLine = s.wwffReference ? `<br><b>${s.wwffReference}</b> ${s.wwffParkName || ''} <span style="color:#26a69a;font-size:11px;">[WWFF]</span>` : '';
+    const qrzOp = qrzData.get(s.callsign.toUpperCase().split('/')[0]);
+    const opName = qrzDisplayName(qrzOp);
+    const opLine = opName ? `<span style="color:#b0bec5;font-size:11px;">${opName}</span><br>` : '';
     const popupContent = `
       <b>${watched ? '\u2B50 ' : ''}<a href="#" class="popup-qrz" data-call="${s.callsign}">${s.callsign}</a></b> <span style="color:${sourceColor};font-size:11px;">[${sourceLabel}]</span>${newBadge}${wwffBadge}<br>
-      ${parseFloat(s.frequency).toFixed(1)} kHz &middot; ${s.mode}<br>
+      ${opLine}${parseFloat(s.frequency).toFixed(1)} kHz &middot; ${s.mode}<br>
       <b>${s.reference}</b> ${s.parkName}${wwffRefLine}<br>
       ${distStr}<br>
       <button class="tune-btn" data-freq="${s.frequency}" data-mode="${s.mode}">Tune</button>${logBtnHtml}
@@ -2493,6 +2533,17 @@ function render() {
       callTd.appendChild(callLink);
       tr.appendChild(callTd);
 
+      // Operator name cell (from QRZ lookup)
+      const operatorTd = document.createElement('td');
+      operatorTd.setAttribute('data-col', 'operator');
+      operatorTd.className = 'operator-col';
+      const qrzInfo = qrzData.get(s.callsign.toUpperCase().split('/')[0]);
+      if (qrzInfo) {
+        operatorTd.textContent = qrzDisplayName(qrzInfo);
+        operatorTd.title = [qrzInfo.fname, qrzInfo.name].filter(Boolean).join(' ');
+      }
+      tr.appendChild(operatorTd);
+
       // Frequency cell — styled as clickable link
       const freqTd = document.createElement('td');
       freqTd.setAttribute('data-col', 'frequency');
@@ -2893,6 +2944,11 @@ settingsBtn.addEventListener('click', async () => {
   setEnableSota.checked = s.enableSota === true;
   setEnableWwff.checked = s.enableWwff === true;
   setEnableLlota.checked = s.enableLlota === true;
+  setEnableQrz.checked = s.enableQrz === true;
+  setQrzUsername.value = s.qrzUsername || '';
+  setQrzPassword.value = s.qrzPassword || '';
+  setQrzFullName.checked = s.qrzFullName === true;
+  qrzConfig.classList.toggle('hidden', !s.enableQrz);
   setEnableCluster.checked = s.enableCluster === true;
   setEnableRbn.checked = s.enableRbn === true;
   setMyCallsign.value = s.myCallsign || '';
@@ -2965,6 +3021,10 @@ settingsSave.addEventListener('click', async () => {
   const sotaEnabled = setEnableSota.checked;
   const wwffEnabled = setEnableWwff.checked;
   const llotaEnabled = setEnableLlota.checked;
+  const qrzEnabled = setEnableQrz.checked;
+  const qrzUsername = setQrzUsername.value.trim().toUpperCase();
+  const qrzPassword = setQrzPassword.value;
+  const qrzFullNameEnabled = setQrzFullName.checked;
   const clusterEnabled = setEnableCluster.checked;
   const rbnEnabled = setEnableRbn.checked;
   const myCallsign = setMyCallsign.value.trim().toUpperCase();
@@ -3029,6 +3089,10 @@ settingsSave.addEventListener('click', async () => {
     enableSota: sotaEnabled,
     enableWwff: wwffEnabled,
     enableLlota: llotaEnabled,
+    enableQrz: qrzEnabled,
+    qrzUsername: qrzUsername,
+    qrzPassword: qrzPassword,
+    qrzFullName: qrzFullNameEnabled,
     enableCluster: clusterEnabled,
     enableRbn: rbnEnabled,
     enableWsjtx: wsjtxEnabled,
@@ -3094,6 +3158,7 @@ settingsSave.addEventListener('click', async () => {
   splitOrientation = splitOrientationVal;
   // Apply split orientation change immediately if in split view
   if (showTable && showMap) updateViewLayout();
+  qrzFullName = qrzFullNameEnabled;
   enableLogging = loggingEnabled;
   defaultPower = defaultPowerVal;
   updateLoggingVisibility();
@@ -3187,6 +3252,13 @@ window.api.onWorkedCallsigns((list) => {
 });
 
 // --- Worked parks listener ---
+window.api.onQrzData((data) => {
+  for (const [cs, info] of Object.entries(data)) {
+    qrzData.set(cs.toUpperCase(), info);
+  }
+  render(); // re-render to show operator names
+});
+
 window.api.onWorkedParks((entries) => {
   workedParksSet = new Set();
   workedParksData = new Map();

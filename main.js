@@ -1,6 +1,10 @@
 const { app, BrowserWindow, ipcMain, Menu, dialog, Notification, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
+
+// Prevent EPIPE crashes when stdout/stderr pipe is closed
+process.stdout?.on('error', () => {});
+process.stderr?.on('error', () => {});
 const { execFile, spawn } = require('child_process');
 const { fetchSpots: fetchPotaSpots } = require('./lib/pota');
 const { fetchSpots: fetchSotaSpots, fetchSummitCoordsBatch, summitCache, loadAssociations, getAssociationName } = require('./lib/sota');
@@ -18,6 +22,10 @@ const { WsjtxClient } = require('./lib/wsjtx');
 const { fetchSpots: fetchWwffSpots } = require('./lib/wwff');
 const { fetchSpots: fetchLlotaSpots } = require('./lib/llota');
 const { postWwffRespot } = require('./lib/wwff-respot');
+const { QrzClient } = require('./lib/qrz');
+
+// --- QRZ.com callsign lookup ---
+let qrz = new QrzClient();
 
 // --- cty.dat database (loaded once at startup) ---
 let ctyDb = null;
@@ -253,7 +261,7 @@ function sendCatFrequency(hz) {
 function sendCatLog(msg) {
   const ts = new Date().toISOString().slice(11, 23);
   const line = `[CAT ${ts}] ${msg}`;
-  console.log(line);
+  try { console.log(line); } catch { /* EPIPE if stdout closed */ }
   if (win && !win.isDestroyed()) win.webContents.send('cat-log', line);
 }
 
@@ -1010,10 +1018,13 @@ function processWwffSpots(raw) {
       distance = Math.round(haversineDistanceMiles(myPos.lat, myPos.lon, lat, lon));
     }
 
-    let continent = '';
+    let continent = '', wwffLocationDesc = '';
     if (ctyDb && callsign) {
       const entity = resolveCallsign(callsign, ctyDb);
-      if (entity) continent = entity.continent || '';
+      if (entity) {
+        continent = entity.continent || '';
+        wwffLocationDesc = entity.name || '';
+      }
     }
 
     let spotBearing = null;
@@ -1035,7 +1046,7 @@ function processWwffSpots(raw) {
       mode: (s.mode || '').toUpperCase(),
       reference: s.reference || '',
       parkName: s.reference_name || '',
-      locationDesc: '',
+      locationDesc: wwffLocationDesc,
       distance,
       bearing: spotBearing,
       lat: (lat != null && !isNaN(lat)) ? lat : null,
@@ -1062,11 +1073,12 @@ function processLlotaSpots(raw) {
     const callsign = s.callsign || '';
 
     // No lat/lon in LLOTA API — resolve approximate location from cty.dat
-    let lat = null, lon = null, continent = '';
+    let lat = null, lon = null, continent = '', locationDesc = '';
     if (ctyDb && callsign) {
       const entity = resolveCallsign(callsign, ctyDb);
       if (entity) {
         continent = entity.continent || '';
+        locationDesc = entity.name || '';
         lat = entity.lat != null ? entity.lat : null;
         lon = entity.lon != null ? entity.lon : null;
       }
@@ -1098,7 +1110,7 @@ function processLlotaSpots(raw) {
       mode: (s.mode || '').toUpperCase(),
       reference: s.reference || '',
       parkName: s.reference_name || '',
-      locationDesc: '',
+      locationDesc,
       distance,
       bearing: spotBearing,
       lat,
@@ -1121,6 +1133,21 @@ function sendMergedSpots() {
   const merged = [...lastPotaSotaSpots, ...clusterSpots, ...rbnWatchSpots];
   win.webContents.send('spots', merged);
   pushSpotsToSmartSdr(merged);
+  // Trigger QRZ lookups for new callsigns (async, non-blocking)
+  if (qrz.configured && settings.enableQrz) {
+    const callsigns = [...new Set(merged.map(s => s.callsign))];
+    qrz.batchLookup(callsigns).then(results => {
+      if (!win || win.isDestroyed()) return;
+      // Convert Map to plain object for IPC
+      const data = {};
+      for (const [cs, info] of results) {
+        if (info) data[cs] = info;
+      }
+      if (Object.keys(data).length > 0) {
+        win.webContents.send('qrz-data', data);
+      }
+    }).catch(() => { /* ignore QRZ errors */ });
+  }
 }
 
 async function refreshSpots() {
@@ -1640,6 +1667,10 @@ app.whenReady().then(() => {
   if (settings.enableRbn) connectRbn();
   connectSmartSdr(); // connects if smartSdrSpots or WSJT-X+Flex
   if (settings.enableWsjtx) connectWsjtx();
+  // Configure QRZ client from saved credentials
+  if (settings.enableQrz && settings.qrzUsername && settings.qrzPassword) {
+    qrz.configure(settings.qrzUsername, settings.qrzPassword);
+  }
 
   // Window control IPC
   ipcMain.on('win-minimize', () => { if (win) win.minimize(); });
@@ -1798,6 +1829,11 @@ app.whenReady().then(() => {
     // Reload worked parks if CSV path changed
     if (potaParksPathChanged) {
       loadWorkedParks();
+    }
+
+    // Reconfigure QRZ client if credentials changed
+    if (newSettings.enableQrz) {
+      qrz.configure(newSettings.qrzUsername || '', newSettings.qrzPassword || '');
     }
 
     return settings;

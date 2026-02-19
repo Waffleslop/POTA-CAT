@@ -562,7 +562,18 @@ th.no-sort:hover {
   background: var(--accent-red);
 }
 
+/* Operator column */
+.operator-col {
+  color: var(--text-tertiary, #b0bec5);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
 /* Column visibility — hide both th and td via table class */
+.hide-col-operator [data-col="operator"],
 .hide-col-frequency [data-col="frequency"],
 .hide-col-mode [data-col="mode"],
 .hide-col-reference [data-col="reference"],
