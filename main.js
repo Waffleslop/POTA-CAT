@@ -863,6 +863,8 @@ function pushSpotsToSmartSdr(spots) {
   if (now - lastSmartSdrPush < 5000) return;
   lastSmartSdrPush = now;
 
+  const maxAgeMs = (settings.smartSdrMaxAge != null ? settings.smartSdrMaxAge : 15) * 60000;
+
   for (const spot of spots) {
     if (spot.source === 'pota' && settings.smartSdrPota === false) continue;
     if (spot.source === 'sota' && settings.smartSdrSota === false) continue;
@@ -870,6 +872,12 @@ function pushSpotsToSmartSdr(spots) {
     if (spot.source === 'rbn' && !settings.smartSdrRbn) continue;
     if (spot.source === 'wwff' && settings.smartSdrWwff === false) continue;
     if (spot.source === 'llota' && settings.smartSdrLlota === false) continue;
+    // Age filter — skip spots older than the configured max age (0 = no limit)
+    if (maxAgeMs > 0 && spot.spotTime) {
+      const t = spot.spotTime.endsWith('Z') ? spot.spotTime : spot.spotTime + 'Z';
+      const age = now - new Date(t).getTime();
+      if (age > maxAgeMs) continue;
+    }
     smartSdr.addSpot(spot);
   }
   // Remove spots no longer in the list (instead of clear+re-add which causes flashing)
@@ -1606,6 +1614,44 @@ function postPotaRespot(spotData) {
   });
 }
 
+function postLlotaRespot(spotData) {
+  const https = require('https');
+  const payload = JSON.stringify({
+    callsign: spotData.activator,
+    frequency: spotData.frequency,
+    mode: spotData.mode,
+    reference: spotData.reference,
+    comments: spotData.comments || '',
+  });
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'llota.app',
+      path: '/api/public/spots/spot',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+        'X-API-Key': 'aagh6LeK5eirash5hei4zei7ShaeDahl4roM0Ool',
+      },
+      timeout: 10000,
+    }, (res) => {
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve();
+        } else {
+          reject(new Error(`HTTP ${res.statusCode}: ${body.slice(0, 200)}`));
+        }
+      });
+    });
+    req.on('error', (err) => reject(err));
+    req.on('timeout', () => { req.destroy(); reject(new Error('Request timed out')); });
+    req.write(payload);
+    req.end();
+  });
+}
+
 function sendTelemetry(sessionSeconds) {
   if (!settings || !settings.enableTelemetry) return Promise.resolve();
   if (!settings.telemetryId) {
@@ -2222,7 +2268,23 @@ app.whenReady().then(() => {
         }
       }
 
-      const didRespot = (qsoData.respot && qsoData.sig === 'POTA') || qsoData.wwffRespot;
+      // Re-spot on LLOTA if requested
+      if (qsoData.llotaRespot && qsoData.llotaReference) {
+        try {
+          await postLlotaRespot({
+            activator: qsoData.callsign,
+            frequency: qsoData.frequency,
+            reference: qsoData.llotaReference,
+            mode: qsoData.mode,
+            comments: qsoData.respotComment || '',
+          });
+        } catch (respotErr) {
+          console.error('LLOTA re-spot failed:', respotErr.message);
+          return { success: true, llotaRespotError: respotErr.message };
+        }
+      }
+
+      const didRespot = (qsoData.respot && qsoData.sig === 'POTA') || qsoData.wwffRespot || qsoData.llotaRespot;
       return { success: true, resposted: didRespot || false };
     } catch (err) {
       return { success: false, error: err.message };

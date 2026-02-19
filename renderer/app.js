@@ -253,6 +253,7 @@ const setSmartSdrCluster = document.getElementById('set-smartsdr-cluster');
 const setSmartSdrRbn = document.getElementById('set-smartsdr-rbn');
 const setSmartSdrWwff = document.getElementById('set-smartsdr-wwff');
 const setSmartSdrLlota = document.getElementById('set-smartsdr-llota');
+const setSmartSdrMaxAge = document.getElementById('set-smartsdr-max-age');
 const logDialog = document.getElementById('log-dialog');
 const logCallsign = document.getElementById('log-callsign');
 const logFrequency = document.getElementById('log-frequency');
@@ -2750,17 +2751,20 @@ function openLogPopup(spot) {
 
   logComment.value = '';
 
-  // Re-spot section: show for POTA and/or WWFF spots when myCallsign is set
+  // Re-spot section: show for POTA, WWFF, and/or LLOTA spots when myCallsign is set
   const respotSection = document.getElementById('log-respot-section');
   const respotCheckbox = document.getElementById('log-respot');
   const respotComment = document.getElementById('log-respot-comment');
   const respotCommentLabel = document.getElementById('log-respot-comment-label');
   // WWFF respot checkbox (dynamically create/remove)
   let wwffRespotCheckbox = document.getElementById('log-wwff-respot');
+  // LLOTA respot checkbox (dynamically create/remove)
+  let llotaRespotCheckbox = document.getElementById('log-llota-respot');
   const isPota = spot.source === 'pota' && spot.reference;
   const isWwff = spot.source === 'wwff' && spot.reference;
+  const isLlota = spot.source === 'llota' && spot.reference;
   const isDualPark = spot.source === 'pota' && spot.wwffReference;
-  if (isPota || isWwff || isDualPark) {
+  if (isPota || isWwff || isDualPark || isLlota) {
     respotSection.classList.remove('hidden');
     // Label the POTA checkbox appropriately
     if (isPota || isDualPark) {
@@ -2768,7 +2772,7 @@ function openLogPopup(spot) {
       respotCheckbox.parentElement.style.display = '';
       respotCheckbox.parentElement.querySelector('span') && (respotCheckbox.parentElement.childNodes[1].textContent = isDualPark ? ' Re-spot on POTA' : ' Re-spot on POTA');
     } else {
-      // Pure WWFF spot — hide POTA checkbox
+      // Non-POTA spot — hide POTA checkbox
       respotCheckbox.checked = false;
       respotCheckbox.parentElement.style.display = 'none';
     }
@@ -2794,17 +2798,44 @@ function openLogPopup(spot) {
       wwffRespotCheckbox.parentElement.style.display = 'none';
       wwffRespotCheckbox.checked = false;
     }
+    // Show/create LLOTA respot checkbox for LLOTA spots
+    if (isLlota) {
+      if (!llotaRespotCheckbox) {
+        const label = document.createElement('label');
+        label.className = 'checkbox-label';
+        label.style.marginTop = '4px';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.id = 'log-llota-respot';
+        cb.checked = true;
+        label.appendChild(cb);
+        label.appendChild(document.createTextNode(' Re-spot on LLOTA'));
+        respotCheckbox.parentElement.parentElement.insertBefore(label, respotCommentLabel);
+        llotaRespotCheckbox = cb;
+      } else {
+        llotaRespotCheckbox.checked = true;
+        llotaRespotCheckbox.parentElement.style.display = '';
+      }
+    } else if (llotaRespotCheckbox) {
+      llotaRespotCheckbox.parentElement.style.display = 'none';
+      llotaRespotCheckbox.checked = false;
+    }
     respotComment.value = respotTemplate;
-    const anyChecked = () => respotCheckbox.checked || (wwffRespotCheckbox && wwffRespotCheckbox.checked);
+    const anyChecked = () => respotCheckbox.checked || (wwffRespotCheckbox && wwffRespotCheckbox.checked) || (llotaRespotCheckbox && llotaRespotCheckbox.checked);
     respotCommentLabel.style.display = anyChecked() ? '' : 'none';
     const updateCommentVis = () => { respotCommentLabel.style.display = anyChecked() ? '' : 'none'; };
     respotCheckbox.onchange = updateCommentVis;
     if (wwffRespotCheckbox) wwffRespotCheckbox.onchange = updateCommentVis;
+    if (llotaRespotCheckbox) llotaRespotCheckbox.onchange = updateCommentVis;
   } else {
     respotSection.classList.add('hidden');
     if (wwffRespotCheckbox) {
       wwffRespotCheckbox.parentElement.style.display = 'none';
       wwffRespotCheckbox.checked = false;
+    }
+    if (llotaRespotCheckbox) {
+      llotaRespotCheckbox.parentElement.style.display = 'none';
+      llotaRespotCheckbox.checked = false;
     }
   }
 
@@ -2875,8 +2906,10 @@ logSaveBtn.addEventListener('click', async () => {
   const respotComment = document.getElementById('log-respot-comment');
   const respotSection = document.getElementById('log-respot-section');
   const wwffRespotCheckbox = document.getElementById('log-wwff-respot');
+  const llotaRespotCheckbox = document.getElementById('log-llota-respot');
   const wantsRespot = !respotSection.classList.contains('hidden') && respotCheckbox.checked;
   const wantsWwffRespot = !respotSection.classList.contains('hidden') && wwffRespotCheckbox && wwffRespotCheckbox.checked;
+  const wantsLlotaRespot = !respotSection.classList.contains('hidden') && llotaRespotCheckbox && llotaRespotCheckbox.checked;
 
   // Persist re-spot preference and template
   if (!respotSection.classList.contains('hidden')) {
@@ -2905,7 +2938,9 @@ logSaveBtn.addEventListener('click', async () => {
     respot: wantsRespot,
     wwffRespot: wantsWwffRespot,
     wwffReference: wantsWwffRespot ? wwffRef : '',
-    respotComment: (wantsRespot || wantsWwffRespot) ? commentText : '',
+    llotaRespot: wantsLlotaRespot,
+    llotaReference: wantsLlotaRespot && currentLogSpot && currentLogSpot.source === 'llota' ? currentLogSpot.reference : '',
+    respotComment: (wantsRespot || wantsWwffRespot || wantsLlotaRespot) ? commentText : '',
   };
 
   logSaveBtn.disabled = true;
@@ -2922,8 +2957,10 @@ logSaveBtn.addEventListener('click', async () => {
         showLogToast(`Logged ${callsign} to ADIF, but POTA re-spot failed: ${result.respotError}`, { warn: true, duration: 8000 });
       } else if (result.wwffRespotError) {
         showLogToast(`Logged ${callsign} to ADIF, but WWFF re-spot failed: ${result.wwffRespotError}`, { warn: true, duration: 8000 });
+      } else if (result.llotaRespotError) {
+        showLogToast(`Logged ${callsign} to ADIF, but LLOTA re-spot failed: ${result.llotaRespotError}`, { warn: true, duration: 8000 });
       } else if (result.resposted) {
-        const sources = [wantsRespot && 'POTA', wantsWwffRespot && 'WWFF'].filter(Boolean).join(' & ');
+        const sources = [wantsRespot && 'POTA', wantsWwffRespot && 'WWFF', wantsLlotaRespot && 'LLOTA'].filter(Boolean).join(' & ');
         showLogToast(`Logged ${callsign} — re-spotted on ${sources || 'POTA'}`);
       } else {
         showLogToast(`Logged ${callsign}`);
@@ -3046,6 +3083,7 @@ settingsBtn.addEventListener('click', async () => {
   setSmartSdrRbn.checked = s.smartSdrRbn === true;
   setSmartSdrWwff.checked = s.smartSdrWwff !== false;
   setSmartSdrLlota.checked = s.smartSdrLlota !== false;
+  setSmartSdrMaxAge.value = s.smartSdrMaxAge != null ? s.smartSdrMaxAge : 15;
   smartSdrConfig.classList.toggle('hidden', !s.smartSdrSpots);
   setEnableTelemetry.checked = s.enableTelemetry === true;
   setLightMode.checked = s.lightMode === true;
@@ -3116,6 +3154,7 @@ settingsSave.addEventListener('click', async () => {
   const smartSdrRbnEnabled = setSmartSdrRbn.checked;
   const smartSdrWwffEnabled = setSmartSdrWwff.checked;
   const smartSdrLlotaEnabled = setSmartSdrLlota.checked;
+  const smartSdrMaxAgeVal = parseInt(setSmartSdrMaxAge.value, 10) || 0;
   const adifPath = setAdifPath.value.trim() || '';
   const potaParksPath = setPotaParksPath.value.trim() || '';
   const hideWorkedParksEnabled = setHideWorkedParks.checked;
@@ -3201,6 +3240,7 @@ settingsSave.addEventListener('click', async () => {
     smartSdrRbn: smartSdrRbnEnabled,
     smartSdrWwff: smartSdrWwffEnabled,
     smartSdrLlota: smartSdrLlotaEnabled,
+    smartSdrMaxAge: smartSdrMaxAgeVal,
   });
   distUnit = setDistUnit.value;
   maxAgeMin = maxAgeVal;
