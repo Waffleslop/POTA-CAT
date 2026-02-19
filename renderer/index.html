@@ -270,14 +270,14 @@
       <label>QTH Grid Square: <input type="text" id="set-grid" maxlength="6"></label>
       <label class="checkbox-label"><input type="checkbox" id="set-enable-qrz"> QRZ.com Callsign Lookup</label>
       <div id="qrz-config" class="radio-sub hidden">
-        <span class="help-text" style="font-size:12px;">Shows operator name in the spot table. Uses the QRZ XML API — a free QRZ account works.</span>
+        <span class="help-text" style="font-size:12px;">Looks up operator first names from QRZ.com and shows them in the Operator column. Uses the QRZ XML API — a free QRZ account works.</span>
         <label>QRZ Username (callsign):
           <input type="text" id="set-qrz-username" maxlength="10" placeholder="K3SBP" style="text-transform:uppercase;">
         </label>
         <label>QRZ Password:
           <input type="password" id="set-qrz-password" placeholder="Your QRZ password">
         </label>
-        <label class="checkbox-label"><input type="checkbox" id="set-qrz-full-name"> Show first and last name</label>
+        <label class="checkbox-label"><input type="checkbox" id="set-qrz-full-name"> Show full name (first + last) instead of first name only</label>
         <span class="help-text" style="display:block;margin-top:4px;">Credentials are stored locally and only sent to xmldata.qrz.com</span>
       </div>
       <label>Distance Unit:
