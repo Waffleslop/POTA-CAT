@@ -581,7 +581,8 @@ th.no-sort:hover {
 .hide-col-locationDesc [data-col="locationDesc"],
 .hide-col-distance [data-col="distance"],
 .hide-col-spotTime [data-col="spotTime"],
-.hide-col-skip [data-col="skip"] {
+.hide-col-skip [data-col="skip"],
+.hide-col-comments [data-col="comments"] {
   display: none;
 }
 
@@ -839,6 +840,24 @@ dialog input, dialog select {
 
 .spot-llota {
   border-left: 3px solid #42a5f5;
+}
+
+.potacat-respot {
+  border-left: 3px solid #e94560 !important;
+}
+
+.donor-paw {
+  margin-left: 4px;
+  cursor: default;
+  font-size: 12px;
+}
+
+[data-col="comments"] {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
 }
 
 /* Settings source toggles */

@@ -12,7 +12,7 @@ const { CatClient, RigctldClient, listSerialPorts } = require('./lib/cat');
 const { gridToLatLon, haversineDistanceMiles, bearing } = require('./lib/grid');
 const { freqToBand } = require('./lib/bands');
 const { loadCtyDat, resolveCallsign, getAllEntities } = require('./lib/cty');
-const { parseAdifFile, parseWorkedCallsigns, parseAllQsos } = require('./lib/adif');
+const { parseAdifFile, parseWorkedCallsigns, parseAllQsos, parseSqliteFile, parseSqliteConfirmed, isSqliteFile } = require('./lib/adif');
 const { DxClusterClient } = require('./lib/dxcluster');
 const { RbnClient } = require('./lib/rbn');
 const { appendQso, buildAdifRecord, appendImportedQso } = require('./lib/adif-writer');
@@ -65,6 +65,7 @@ let workedParks = new Map(); // reference → park data from POTA parks CSV
 let wsjtx = null;
 let wsjtxStatus = null; // last Status message from WSJT-X
 let wsjtxHighlightTimer = null; // throttle timer for highlight updates
+let donorCallsigns = new Set(); // supporter callsigns from potacat.com
 
 // --- Watchlist notifications ---
 const recentNotifications = new Map(); // callsign → timestamp for dedup (5-min window)
@@ -936,6 +937,7 @@ function processPotaSpots(raw) {
       band: freqToBand(freqMHz),
       spotTime: s.spotTime || '',
       continent,
+      comments: s.comments || '',
     };
   });
   // Dedupe: keep latest spot per callsign
@@ -1241,10 +1243,12 @@ async function refreshSpots() {
 }
 
 // --- DXCC data builder ---
-function buildDxccData() {
+async function buildDxccData() {
   if (!ctyDb || !settings.adifPath) return null;
   try {
-    const qsos = parseAdifFile(settings.adifPath);
+    const qsos = isSqliteFile(settings.adifPath)
+      ? await parseSqliteConfirmed(settings.adifPath)
+      : parseAdifFile(settings.adifPath);
 
     // Build confirmation map: entityIndex → { band → Set<mode> }
     const confirmMap = new Map();
@@ -1300,8 +1304,8 @@ function buildDxccData() {
   }
 }
 
-function sendDxccData() {
-  const data = buildDxccData();
+async function sendDxccData() {
+  const data = await buildDxccData();
   if (data && win && !win.isDestroyed()) {
     win.webContents.send('dxcc-data', data);
   }
@@ -1468,7 +1472,28 @@ function createWindow() {
     loadWorkedCallsigns();
     // Load worked parks from POTA CSV
     loadWorkedParks();
+    // Fetch donor list (async, non-blocking)
+    fetchDonorList();
   });
+}
+
+// --- Donor list ---
+function fetchDonorList() {
+  const https = require('https');
+  const req = https.get('https://donors.potacat.com/d/a7f3e9b1c4d2', (res) => {
+    let body = '';
+    res.on('data', (chunk) => { body += chunk; });
+    res.on('end', () => {
+      try {
+        const arr = JSON.parse(body);
+        donorCallsigns = new Set(arr.map(b64 => Buffer.from(b64, 'base64').toString('utf-8')));
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('donor-callsigns', [...donorCallsigns]);
+        }
+      } catch { /* silently ignore parse errors */ }
+    });
+  });
+  req.on('error', () => { /* silently ignore — no internet is fine */ });
 }
 
 // --- Update check ---
@@ -1844,9 +1869,9 @@ app.whenReady().then(() => {
   // --- DXCC Tracker IPC ---
   ipcMain.handle('choose-adif-file', async () => {
     const result = await dialog.showOpenDialog(win, {
-      title: 'Select ADIF File',
+      title: 'Select Log File',
       filters: [
-        { name: 'ADIF Files', extensions: ['adi', 'adif'] },
+        { name: 'Log Files', extensions: ['adi', 'adif', 'sqlite', 'db'] },
         { name: 'All Files', extensions: ['*'] },
       ],
       properties: ['openFile'],
@@ -1868,16 +1893,16 @@ app.whenReady().then(() => {
     return result.filePaths[0];
   });
 
-  ipcMain.handle('parse-adif', () => {
-    return buildDxccData();
+  ipcMain.handle('parse-adif', async () => {
+    return await buildDxccData();
   });
 
-  // --- ADIF Import IPC ---
+  // --- Log Import IPC ---
   ipcMain.handle('import-adif', async () => {
     const result = await dialog.showOpenDialog(win, {
-      title: 'Import ADIF File(s)',
+      title: 'Import Log File(s)',
       filters: [
-        { name: 'ADIF Files', extensions: ['adi', 'adif'] },
+        { name: 'Log Files', extensions: ['adi', 'adif', 'sqlite', 'db'] },
         { name: 'All Files', extensions: ['*'] },
       ],
       properties: ['openFile', 'multiSelections'],
@@ -1891,7 +1916,9 @@ app.whenReady().then(() => {
 
     for (const filePath of result.filePaths) {
       try {
-        const qsos = parseAllQsos(filePath);
+        const qsos = isSqliteFile(filePath)
+          ? await parseSqliteFile(filePath)
+          : parseAllQsos(filePath);
         for (const qso of qsos) {
           appendImportedQso(logPath, qso);
           uniqueCalls.add(qso.call.toUpperCase());

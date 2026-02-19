@@ -22,7 +22,8 @@
       "renderer/**/*",
       "assets/icon.png",
       "assets/cty.dat",
-      "node_modules/leaflet/**/*"
+      "node_modules/leaflet/**/*",
+      "node_modules/sql.js/**/*"
     ],
     "win": {
       "target": [
@@ -63,6 +64,7 @@
   },
   "dependencies": {
     "leaflet": "^1.9.4",
-    "serialport": "^13.0.0"
+    "serialport": "^13.0.0",
+    "sql.js": "^1.14.0"
   }
 }

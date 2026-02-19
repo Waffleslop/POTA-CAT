@@ -31,6 +31,7 @@ let tuneClick = false;
 let enableSplit = false;
 let activeRigName = ''; // name of the currently active rig profile
 let workedCallsigns = new Set(); // uppercase callsigns from QSO log
+let donorCallsigns = new Set(); // supporter callsigns from potacat.com
 let hideWorked = false;
 let workedParksSet = new Set(); // park references from CSV for fast lookup
 let workedParksData = new Map(); // reference → full park data for stats
@@ -1395,6 +1396,7 @@ const HIDEABLE_COLUMNS = [
   { key: 'locationDesc', label: 'State' },
   { key: 'distance', label: 'Distance' },
   { key: 'spotTime', label: 'Age' },
+  { key: 'comments', label: 'Comments' },
   { key: 'skip', label: 'Skip' },
 ];
 
@@ -1405,7 +1407,8 @@ function loadHiddenColumns() {
     const saved = JSON.parse(localStorage.getItem(HIDDEN_COLS_KEY));
     if (Array.isArray(saved)) return new Set(saved);
   } catch { /* ignore */ }
-  return new Set();
+  // Default: hide comments column on fresh install
+  return new Set(['comments']);
 }
 
 function saveHiddenColumns() {
@@ -1516,9 +1519,9 @@ mapResizeObserver.observe(mapPaneEl);
 
 // --- Column Resizing ---
 // Widths stored as percentages of table width so they always fit
-const COL_WIDTHS_KEY = 'pota-cat-col-pct-v7';
-// Log, Callsign, Operator, Freq, Mode, Ref, Name, State, Dist, Heading, Age, Skip
-const DEFAULT_COL_PCT = [4, 9, 8, 7, 5, 7, 19, 9, 6, 5, 6, 5];
+const COL_WIDTHS_KEY = 'pota-cat-col-pct-v8';
+// Log, Callsign, Operator, Freq, Mode, Ref, Name, State, Dist, Heading, Age, Comments, Skip
+const DEFAULT_COL_PCT = [4, 8, 7, 6, 5, 6, 16, 8, 6, 5, 5, 10, 4];
 
 function loadColWidths() {
   try {
@@ -2456,6 +2459,7 @@ function render() {
       if (s.source === 'rbn') tr.classList.add('spot-rbn');
       if (s.source === 'wwff') tr.classList.add('spot-wwff');
       if (s.source === 'llota') tr.classList.add('spot-llota');
+      if (s.comments && /POTA.?CAT/i.test(s.comments)) tr.classList.add('potacat-respot');
 
       // License privilege check
       if (isOutOfPrivilege(parseFloat(s.frequency), s.mode, licenseClass)) {
@@ -2531,6 +2535,13 @@ function render() {
         window.api.openExternal(`https://www.qrz.com/db/${encodeURIComponent(s.callsign.split('/')[0])}`);
       });
       callTd.appendChild(callLink);
+      if (donorCallsigns.has(s.callsign.toUpperCase())) {
+        const paw = document.createElement('span');
+        paw.className = 'donor-paw';
+        paw.title = 'POTA CAT Supporter';
+        paw.textContent = '\uD83D\uDC3E';
+        callTd.appendChild(paw);
+      }
       tr.appendChild(callTd);
 
       // Operator name cell (from QRZ lookup)
@@ -2565,6 +2576,7 @@ function render() {
         { val: formatDistance(s.distance), col: 'distance' },
         { val: formatBearing(s.bearing), cls: 'bearing-col', col: 'bearing' },
         { val: formatAge(s.spotTime), col: 'spotTime' },
+        { val: s.comments || '', col: 'comments' },
       ];
 
       for (const cell of cells) {
@@ -2572,6 +2584,7 @@ function render() {
         td.textContent = cell.val;
         if (cell.col) td.setAttribute('data-col', cell.col);
         if (cell.cls) td.className = cell.cls;
+        if (cell.col === 'comments' && cell.val) td.title = cell.val;
         if (cell.wwff) {
           const badge = document.createElement('span');
           badge.textContent = 'WWFF';
@@ -3248,6 +3261,12 @@ window.api.onUpdateAvailable(({ version, url, headline }) => {
 // --- Worked callsigns listener ---
 window.api.onWorkedCallsigns((list) => {
   workedCallsigns = new Set(list);
+  render();
+});
+
+// --- Donor callsigns listener ---
+window.api.onDonorCallsigns((list) => {
+  donorCallsigns = new Set(list.map(cs => cs.toUpperCase()));
   render();
 });
 

@@ -123,6 +123,7 @@
               <th data-sort="distance" data-col="distance" id="dist-header">Dist (mi)</th>
               <th data-sort="bearing" data-col="bearing" class="bearing-col">Heading</th>
               <th data-sort="spotTime" data-col="spotTime" id="time-header">Age</th>
+              <th data-sort="comments" data-col="comments">Comments</th>
               <th class="no-sort" data-col="skip">Skip</th>
             </tr>
           </thead>
@@ -186,7 +187,7 @@
           <tbody id="dxcc-matrix-body"></tbody>
         </table>
       </div>
-      <div id="dxcc-placeholder" class="hidden">No ADIF file loaded. Go to Settings to select your ADIF export.</div>
+      <div id="dxcc-placeholder" class="hidden">No log file loaded. Go to Settings to select your ADIF or SQLite export.</div>
     </div>
     <div id="rbn-view" class="hidden">
       <div class="rbn-header">
@@ -347,10 +348,10 @@
           <span class="help-text" style="display:block;margin-top:4px;">Local backup of all QSOs logged from POTA CAT</span>
         </label>
         <div style="margin-top:10px;">
-          <strong style="display:block;margin-bottom:4px;">Import LoTW, POTA, QRZ, or other ADIF</strong>
-          <button type="button" id="adif-import-btn">Import ADIF</button>
+          <strong style="display:block;margin-bottom:4px;">Import Log</strong>
+          <button type="button" id="adif-import-btn">Import Log</button>
           <span id="adif-import-result" class="help-text" style="margin-left:8px;"></span>
-          <span class="help-text" style="display:block;margin-top:4px;">Import your logs from other services. They will be added to your POTA CAT logfile. You can then hide previously worked spots, or use them for DXCC hunting (coming soon).</span>
+          <span class="help-text" style="display:block;margin-top:4px;">Import QSO history from ADIF (.adi) or Log4OM SQLite (.sqlite) files. They will be added to your POTA CAT logfile.</span>
         </div>
         <label style="margin-top:10px;">Default TX Power (W):
           <input type="number" id="set-default-power" min="1" max="5000" value="100">
@@ -464,7 +465,7 @@
       <legend>Beta</legend>
       <label class="checkbox-label"><input type="checkbox" id="set-enable-dxcc"> DXCC Tracker</label>
       <div id="adif-picker" class="hidden" style="margin-top:6px;margin-left:12px;">
-        <label style="margin-bottom:4px;">ADIF File:
+        <label style="margin-bottom:4px;">Log File:
           <div style="display:flex;gap:6px;margin-top:4px;">
             <input type="text" id="set-adif-path" readonly placeholder="No file selected" style="flex:1;">
             <button type="button" id="adif-browse-btn">Browse</button>
@@ -756,7 +757,7 @@
       <div class="welcome-import-row">
         <div class="welcome-import-info">
           <div style="font-weight:bold;">QSO History</div>
-          <div class="help-text">ADIF from LoTW, QRZ, POTA, or any logger</div>
+          <div class="help-text">ADIF or Log4OM SQLite from LoTW, QRZ, POTA, or any logger</div>
         </div>
         <button type="button" id="welcome-import-adif" class="welcome-import-btn">Browse</button>
         <span id="welcome-adif-result" class="welcome-import-result"></span>
