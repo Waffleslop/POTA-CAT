@@ -57,16 +57,22 @@ export default {
         const key = `user:${id}`;
         const existing = await env.TELEMETRY.get(key, { type: 'json' });
 
-        const record = existing || { version: '', os: '', lastSeen: '', totalSessions: 0, totalSeconds: 0 };
+        const record = existing || { version: '', os: '', lastSeen: '', totalSessions: 0, totalSeconds: 0, currentSessionSeconds: 0 };
         record.version = version || record.version;
         record.os = os || record.os;
         record.lastSeen = new Date().toISOString();
         if (sessionSeconds && typeof sessionSeconds === 'number' && sessionSeconds > 0) {
-          // Close ping — add duration only, don't double-count sessions
-          record.totalSeconds += Math.min(sessionSeconds, 86400); // cap at 24h per session
+          // Heartbeat or close ping — add only the delta since last ping
+          const capped = Math.min(sessionSeconds, 259200); // cap at 72h per session
+          const prev = record.currentSessionSeconds || 0;
+          if (capped > prev) {
+            record.totalSeconds += capped - prev;
+            record.currentSessionSeconds = capped;
+          }
         } else {
-          // Launch ping — count the session
+          // Launch ping — count the session, reset current session tracker
           record.totalSessions += 1;
+          record.currentSessionSeconds = 0;
         }
 
         // Store with 90-day TTL — inactive users auto-disappear

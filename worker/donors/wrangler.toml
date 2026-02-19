@@ -1,0 +1,14 @@
+name = "pota-cat-donors"
+main = "index.js"
+compatibility_date = "2024-01-01"
+account_id = "3dc9c47e0ae659e8eeed97bc7f6eeaf4"
+workers_dev = true
+
+route = { pattern = "donors.potacat.com/*", zone_name = "potacat.com" }
+
+kv_namespaces = [
+  { binding = "DONORS", id = "2dd0c0b057fc4a6e9f54f6110ac0fa5f" }
+]
+
+[triggers]
+crons = ["0 6 * * *"]
