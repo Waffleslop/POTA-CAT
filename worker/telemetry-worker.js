@@ -8,6 +8,8 @@
  *   - App version
  *   - Operating system (win32, darwin, linux)
  *   - Session duration (seconds)
+ *   - Aggregate QSO counts (total + per source)
+ *   - Aggregate re-spot counts (per source)
  *
  * What we do NOT collect:
  *   - Callsigns, grid squares, IP addresses
@@ -24,9 +26,18 @@
  *   value: JSON { version, os, lastSeen, totalSessions, totalSeconds }
  *   TTL: 90 days (inactive users auto-expire)
  *
- *   key: "global:respots"
- *   value: number (total POTA re-spots made via POTA CAT, no TTL)
+ *   key: "global:respots"          — legacy total (kept for backwards compat)
+ *   key: "global:respots:{source}" — per-source respot counts (pota, wwff, llota)
+ *   key: "global:qsos"             — total QSOs logged
+ *   key: "global:qsos:{source}"    — per-source QSO counts (pota, sota, wwff, llota)
  */
+
+const VALID_SOURCES = ['pota', 'sota', 'wwff', 'llota'];
+
+async function incrementCounter(env, key) {
+  const current = parseInt(await env.TELEMETRY.get(key) || '0', 10);
+  await env.TELEMETRY.put(key, String(current + 1));
+}
 
 export default {
   async fetch(request, env) {
@@ -84,11 +95,45 @@ export default {
       }
     }
 
-    // POST /respot — app pings after a successful POTA re-spot
+    // POST /qso — app pings after logging a QSO
+    // Body: { "source": "pota" } (optional — if missing, just increments total)
+    if (request.method === 'POST' && url.pathname === '/qso') {
+      try {
+        let source = null;
+        try {
+          const body = await request.json();
+          if (body.source && VALID_SOURCES.includes(body.source)) {
+            source = body.source;
+          }
+        } catch { /* no body or invalid JSON — just count total */ }
+
+        await incrementCounter(env, 'global:qsos');
+        if (source) {
+          await incrementCounter(env, `global:qsos:${source}`);
+        }
+        return new Response('ok', { status: 200, headers: corsHeaders });
+      } catch {
+        return new Response('Server error', { status: 500, headers: corsHeaders });
+      }
+    }
+
+    // POST /respot — app pings after a successful re-spot
+    // Body: { "source": "pota" } (optional — if missing, increments legacy total only)
     if (request.method === 'POST' && url.pathname === '/respot') {
       try {
-        const current = parseInt(await env.TELEMETRY.get('global:respots') || '0', 10);
-        await env.TELEMETRY.put('global:respots', String(current + 1));
+        let source = null;
+        try {
+          const body = await request.json();
+          if (body.source && VALID_SOURCES.includes(body.source)) {
+            source = body.source;
+          }
+        } catch { /* no body — legacy client, just count total */ }
+
+        // Always increment legacy total for backwards compat
+        await incrementCounter(env, 'global:respots');
+        if (source) {
+          await incrementCounter(env, `global:respots:${source}`);
+        }
         return new Response('ok', { status: 200, headers: corsHeaders });
       } catch {
         return new Response('Server error', { status: 500, headers: corsHeaders });
@@ -120,14 +165,27 @@ export default {
       const weekAgo = Date.now() - 7 * 86400000;
       const activeLastWeek = users.filter(u => new Date(u.lastSeen).getTime() > weekAgo).length;
 
+      // Aggregate counters
       const totalRespots = parseInt(await env.TELEMETRY.get('global:respots') || '0', 10);
+      const totalQsos = parseInt(await env.TELEMETRY.get('global:qsos') || '0', 10);
+
+      // Per-source breakdowns
+      const qsos = {};
+      const respots = {};
+      for (const src of VALID_SOURCES) {
+        qsos[src] = parseInt(await env.TELEMETRY.get(`global:qsos:${src}`) || '0', 10);
+        respots[src] = parseInt(await env.TELEMETRY.get(`global:respots:${src}`) || '0', 10);
+      }
 
       const stats = {
         totalUsers: users.length,
         activeLastWeek,
         totalSessions,
         totalHours: Math.round(totalSeconds / 3600),
+        totalQsos,
+        qsos,
         totalRespots,
+        respots,
         versions: versionCounts,
         platforms: osCounts,
       };

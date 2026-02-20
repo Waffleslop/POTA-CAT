@@ -1909,20 +1909,25 @@ function sendTelemetry(sessionSeconds) {
   });
 }
 
-function trackRespot() {
+function trackTelemetryEvent(endpoint, source) {
+  if (!settings || !settings.enableTelemetry) return;
   const https = require('https');
-  const url = new URL('https://telemetry.potacat.com/respot');
+  const payload = source ? JSON.stringify({ source }) : '';
   const req = https.request({
-    hostname: url.hostname,
-    path: url.pathname,
+    hostname: 'telemetry.potacat.com',
+    path: endpoint,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {}) },
     timeout: 5000,
   });
   req.on('error', () => {});
   req.on('timeout', () => req.destroy());
+  if (payload) req.write(payload);
   req.end();
 }
+
+function trackQso(source) { trackTelemetryEvent('/qso', source); }
+function trackRespot(source) { trackTelemetryEvent('/respot', source); }
 
 // --- Rig profile migration ---
 function describeTargetForMigration(target) {
@@ -2454,6 +2459,10 @@ app.whenReady().then(() => {
       const logPath = settings.adifLogPath || path.join(app.getPath('userData'), 'potacat_qso_log.adi');
       appendQso(logPath, qsoData);
 
+      // Track QSO in telemetry (fire-and-forget)
+      const qsoSource = (qsoData.sig || '').toLowerCase();
+      trackQso(['pota', 'sota', 'wwff', 'llota'].includes(qsoSource) ? qsoSource : null);
+
       // Update worked callsigns set and notify renderer
       if (qsoData.callsign) {
         workedCallsigns.add(qsoData.callsign.toUpperCase());
@@ -2484,7 +2493,7 @@ app.whenReady().then(() => {
             comments: qsoData.respotComment || '',
           });
           // Track re-spot in telemetry (fire-and-forget)
-          trackRespot();
+          trackRespot('pota');
         } catch (respotErr) {
           console.error('POTA re-spot failed:', respotErr.message);
           return { success: true, respotError: respotErr.message };
@@ -2502,6 +2511,7 @@ app.whenReady().then(() => {
             mode: qsoData.mode,
             comments: qsoData.respotComment || '',
           });
+          trackRespot('wwff');
         } catch (respotErr) {
           console.error('WWFF re-spot failed:', respotErr.message);
           return { success: true, wwffRespotError: respotErr.message };
@@ -2518,6 +2528,7 @@ app.whenReady().then(() => {
             mode: qsoData.mode,
             comments: qsoData.respotComment || '',
           });
+          trackRespot('llota');
         } catch (respotErr) {
           console.error('LLOTA re-spot failed:', respotErr.message);
           return { success: true, llotaRespotError: respotErr.message };
