@@ -1,8 +1,8 @@
-// Convert SVG icon to PNG at multiple sizes
+// Convert logo to PNG at multiple sizes
 const sharp = require('sharp');
 const path = require('path');
 
-const src = path.join(__dirname, '..', 'assets', 'icon.svg');
+const src = path.join(__dirname, '..', 'potacat-logo.jpg');
 const outDir = path.join(__dirname, '..', 'assets');
 
 async function main() {
