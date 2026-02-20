@@ -1712,6 +1712,42 @@ const llotaIcon = L.divIcon({
   popupAnchor: [1, -34],
 });
 
+// Green teardrop pin for POTA spots
+const potaIcon = L.divIcon({
+  className: '',
+  html: '<svg width="25" height="41" viewBox="0 0 25 41" xmlns="http://www.w3.org/2000/svg">' +
+    '<path d="M12.5 0C5.6 0 0 5.6 0 12.5C0 21.9 12.5 41 12.5 41S25 21.9 25 12.5C25 5.6 19.4 0 12.5 0Z" fill="#4ecca3" stroke="#3ba882" stroke-width="1"/>' +
+    '<circle cx="12.5" cy="12.5" r="5.5" fill="#fff" opacity="0.4"/>' +
+    '</svg>',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+});
+
+// Purple teardrop pin for DX Cluster spots
+const dxcIcon = L.divIcon({
+  className: '',
+  html: '<svg width="25" height="41" viewBox="0 0 25 41" xmlns="http://www.w3.org/2000/svg">' +
+    '<path d="M12.5 0C5.6 0 0 5.6 0 12.5C0 21.9 12.5 41 12.5 41S25 21.9 25 12.5C25 5.6 19.4 0 12.5 0Z" fill="#e040fb" stroke="#ab00d9" stroke-width="1"/>' +
+    '<circle cx="12.5" cy="12.5" r="5.5" fill="#fff" opacity="0.4"/>' +
+    '</svg>',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+});
+
+// Coral teardrop pin for PSKReporter/FreeDV spots
+const pskrIcon = L.divIcon({
+  className: '',
+  html: '<svg width="25" height="41" viewBox="0 0 25 41" xmlns="http://www.w3.org/2000/svg">' +
+    '<path d="M12.5 0C5.6 0 0 5.6 0 12.5C0 21.9 12.5 41 12.5 41S25 21.9 25 12.5C25 5.6 19.4 0 12.5 0Z" fill="#ff6b6b" stroke="#d84343" stroke-width="1"/>' +
+    '<circle cx="12.5" cy="12.5" r="5.5" fill="#fff" opacity="0.4"/>' +
+    '</svg>',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+});
+
 // Bright red teardrop pin with gold star for DX expeditions
 const expeditionIcon = L.divIcon({
   className: '',
@@ -1740,6 +1776,9 @@ let map = null;
 let markerLayer = null;
 let homeMarker = null;
 let nightLayer = null;
+let mainHomePos = null; // { lat, lon } for tune arc drawing
+let tuneArcLayers = []; // polylines showing arc from QTH to tuned station
+let tuneArcFreq = null; // frequency string of the spot the arc points to
 
 // RBN state
 let rbnSpots = [];
@@ -1906,6 +1945,7 @@ async function updateHomeMarker() {
   const grid = settings.grid || 'FN20jb';
   const pos = gridToLatLonLocal(grid);
   if (!pos) return;
+  mainHomePos = { lat: pos.lat, lon: pos.lon };
 
   // Remove old home markers
   if (homeMarker) {
@@ -1927,6 +1967,42 @@ async function updateHomeMarker() {
   );
 
   map.setView([pos.lat, pos.lon], map.getZoom());
+}
+
+function clearTuneArc() {
+  for (const l of tuneArcLayers) map.removeLayer(l);
+  tuneArcLayers = [];
+  tuneArcFreq = null;
+}
+
+function tuneArcColor(source) {
+  if (source === 'sota') return '#f0a500';
+  if (source === 'dxc') return '#e040fb';
+  if (source === 'rbn') return '#00bcd4';
+  if (source === 'wwff') return '#26a69a';
+  if (source === 'llota') return '#42a5f5';
+  if (source === 'pskr') return '#ff6b6b';
+  return '#4ecca3'; // pota / default
+}
+
+function showTuneArc(lat, lon, freq, source) {
+  if (!map || !mainHomePos || lat == null || lon == null) return;
+  clearTuneArc();
+  tuneArcFreq = freq || null;
+  const color = tuneArcColor(source);
+  const arcPoints = greatCircleArc(mainHomePos.lat, mainHomePos.lon, lat, lon, 50);
+  for (const offset of [-360, 0, 360]) {
+    const offsetPoints = arcPoints.map(([a, b]) => [a, b + offset]);
+    tuneArcLayers.push(
+      L.polyline(offsetPoints, {
+        color,
+        weight: 2,
+        opacity: 0.7,
+        dashArray: '6 4',
+        interactive: false,
+      }).addTo(map)
+    );
+  }
 }
 
 // Lightweight Maidenhead conversion for the renderer (no require of Node module)
@@ -2040,6 +2116,12 @@ function updateMapMarkers(filtered) {
 
   markerLayer.clearLayers();
 
+  // Clear tune arc if the tuned spot no longer exists
+  if (tuneArcFreq && !filtered.some(s => s.frequency === tuneArcFreq)) {
+    clearTuneArc();
+    tuneArcFreq = null;
+  }
+
   const unit = distUnit === 'km' ? 'km' : 'mi';
 
   for (const s of filtered) {
@@ -2066,26 +2148,25 @@ function updateMapMarkers(filtered) {
       ${opLine}${parseFloat(s.frequency).toFixed(1)} kHz &middot; ${s.mode}<br>
       <b>${s.reference}</b> ${s.parkName}${wwffRefLine}<br>
       ${distStr}<br>
-      <button class="tune-btn" data-freq="${s.frequency}" data-mode="${s.mode}" data-bearing="${s.bearing != null ? s.bearing : ''}">Tune</button>${logBtnHtml}
+      <button class="tune-btn" data-freq="${s.frequency}" data-mode="${s.mode}" data-bearing="${s.bearing != null ? s.bearing : ''}" data-lat="${s.lat != null ? s.lat : ''}" data-lon="${s.lon != null ? s.lon : ''}" data-source="${s.source || ''}">Tune</button>${logBtnHtml}
     `;
 
-    // Out-of-privilege gets grey/red pin, SOTA gets orange, POTA gets default blue
+    // Pin color matches source: POTA green, SOTA orange, DXC purple, etc.
     const oop = isOutOfPrivilege(parseFloat(s.frequency), s.mode, licenseClass);
     const worked = workedCallsigns.has(s.callsign.toUpperCase());
     const isExpedition = expeditionCallsigns.has(s.callsign.toUpperCase());
+    const sourceIcon = s.source === 'sota' ? sotaIcon
+      : s.source === 'rbn' ? rbnIcon
+      : s.source === 'wwff' ? wwffIcon
+      : s.source === 'llota' ? llotaIcon
+      : s.source === 'dxc' ? dxcIcon
+      : s.source === 'pskr' ? pskrIcon
+      : potaIcon;
     const markerOptions = isExpedition
       ? { icon: expeditionIcon, zIndexOffset: 500 }
       : oop
         ? { icon: oopIcon, opacity: 0.4 }
-        : s.source === 'sota'
-          ? { icon: sotaIcon, ...(worked ? { opacity: 0.5 } : {}) }
-          : s.source === 'rbn'
-            ? { icon: rbnIcon, ...(worked ? { opacity: 0.5 } : {}) }
-            : s.source === 'wwff'
-              ? { icon: wwffIcon, ...(worked ? { opacity: 0.5 } : {}) }
-              : s.source === 'llota'
-                ? { icon: llotaIcon, ...(worked ? { opacity: 0.5 } : {}) }
-                : worked ? { opacity: 0.5 } : {};
+        : { icon: sourceIcon, ...(worked ? { opacity: 0.5 } : {}) };
 
     // Plot marker at canonical position and one world-copy in each direction
     for (const offset of [-360, 0, 360]) {
@@ -2106,6 +2187,8 @@ function bindPopupClickHandlers(mapInstance) {
       btn.addEventListener('click', () => {
         const b = btn.dataset.bearing;
         window.api.tune(btn.dataset.freq, btn.dataset.mode, b ? parseInt(b, 10) : undefined);
+        const lat = parseFloat(btn.dataset.lat), lon = parseFloat(btn.dataset.lon);
+        if (!isNaN(lat) && !isNaN(lon)) showTuneArc(lat, lon, btn.dataset.freq, btn.dataset.source);
       });
     });
     container.querySelectorAll('.popup-qrz').forEach((link) => {
@@ -2194,6 +2277,7 @@ function scanStep() {
 
   const spot = list[scanIndex];
   window.api.tune(spot.frequency, spot.mode, spot.bearing);
+  if (map && spot.lat != null && spot.lon != null) showTuneArc(spot.lat, spot.lon, spot.frequency, spot.source);
   render();
 
   scanTimer = setTimeout(() => {
@@ -2627,6 +2711,7 @@ function render() {
       tr.addEventListener('click', () => {
         if (scanning) stopScan(); // clicking a row stops scan
         window.api.tune(s.frequency, s.mode, s.bearing);
+        if (map && s.lat != null && s.lon != null) showTuneArc(s.lat, s.lon, s.frequency, s.source);
       });
 
       // Log button cell (first column, hidden unless logging enabled)
