@@ -6,7 +6,7 @@ let sortCol = 'distance';
 let sortAsc = true;
 
 // Expose for DevTools console debugging
-window._debug = { get spots() { return allSpots; }, get qrz() { return qrzData; }, render() { render(); } };
+window._debug = { get spots() { return allSpots; }, get qrz() { return qrzData; }, get expeditions() { return expeditionCallsigns; }, render() { render(); } };
 let currentView = 'table'; // 'table', 'map', 'dxcc', or 'rbn' (for exclusive views)
 let showTable = true;
 let showMap = false;
@@ -37,6 +37,7 @@ let enableSplit = false;
 let activeRigName = ''; // name of the currently active rig profile
 let workedCallsigns = new Set(); // uppercase callsigns from QSO log
 let donorCallsigns = new Set(); // supporter callsigns from potacat.com
+let expeditionCallsigns = new Set(); // active DX expeditions from Club Log
 let hideWorked = false;
 let workedParksSet = new Set(); // park references from CSV for fast lookup
 let workedParksData = new Map(); // reference → full park data for stats
@@ -1431,6 +1432,11 @@ function getFiltered() {
 // --- Sorting ---
 function sortSpots(spots) {
   return spots.slice().sort((a, b) => {
+    // Pin DX expeditions to the top
+    const aExp = expeditionCallsigns.has(a.callsign.toUpperCase()) ? 1 : 0;
+    const bExp = expeditionCallsigns.has(b.callsign.toUpperCase()) ? 1 : 0;
+    if (aExp !== bExp) return bExp - aExp;
+
     let va = a[sortCol];
     let vb = b[sortCol];
     if (va == null && vb == null) return 0;
@@ -1700,6 +1706,18 @@ const llotaIcon = L.divIcon({
   html: '<svg width="25" height="41" viewBox="0 0 25 41" xmlns="http://www.w3.org/2000/svg">' +
     '<path d="M12.5 0C5.6 0 0 5.6 0 12.5C0 21.9 12.5 41 12.5 41S25 21.9 25 12.5C25 5.6 19.4 0 12.5 0Z" fill="#42a5f5" stroke="#1e88e5" stroke-width="1"/>' +
     '<circle cx="12.5" cy="12.5" r="5.5" fill="#fff" opacity="0.4"/>' +
+    '</svg>',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+});
+
+// Bright red teardrop pin with gold star for DX expeditions
+const expeditionIcon = L.divIcon({
+  className: '',
+  html: '<svg width="25" height="41" viewBox="0 0 25 41" xmlns="http://www.w3.org/2000/svg">' +
+    '<path d="M12.5 0C5.6 0 0 5.6 0 12.5C0 21.9 12.5 41 12.5 41S25 21.9 25 12.5C25 5.6 19.4 0 12.5 0Z" fill="#ff1744" stroke="#d50000" stroke-width="1"/>' +
+    '<polygon points="12.5,5 14.5,10.5 20,10.5 15.5,14 17.5,19.5 12.5,16 7.5,19.5 9.5,14 5,10.5 10.5,10.5" fill="#ffd600" stroke="#ff9800" stroke-width="0.5"/>' +
     '</svg>',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
@@ -2037,13 +2055,14 @@ function updateMapMarkers(filtered) {
       : '';
     const mapNewPark = workedParksSet.size > 0 && (s.source === 'pota' || s.source === 'wwff') && s.reference && !workedParksSet.has(s.reference);
     const newBadge = mapNewPark ? ' <span style="background:#4ecca3;color:#000;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;">NEW</span>' : '';
+    const expeditionBadge = expeditionCallsigns.has(s.callsign.toUpperCase()) ? ' <span style="background:#ff1744;color:#fff;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;">DXP</span>' : '';
     const wwffBadge = s.wwffReference ? ` <span style="background:#26a69a;color:#000;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;">WWFF</span>` : '';
     const wwffRefLine = s.wwffReference ? `<br><b>${s.wwffReference}</b> ${s.wwffParkName || ''} <span style="color:#26a69a;font-size:11px;">[WWFF]</span>` : '';
     const qrzOp = qrzData.get(s.callsign.toUpperCase().split('/')[0]);
     const opName = qrzDisplayName(qrzOp);
     const opLine = opName ? `<span style="color:#b0bec5;font-size:11px;">${opName}</span><br>` : '';
     const popupContent = `
-      <b>${watched ? '\u2B50 ' : ''}<a href="#" class="popup-qrz" data-call="${s.callsign}">${s.callsign}</a></b> <span style="color:${sourceColor};font-size:11px;">[${sourceLabel}]</span>${newBadge}${wwffBadge}<br>
+      <b>${watched ? '\u2B50 ' : ''}<a href="#" class="popup-qrz" data-call="${s.callsign}">${s.callsign}</a></b> <span style="color:${sourceColor};font-size:11px;">[${sourceLabel}]</span>${expeditionBadge}${newBadge}${wwffBadge}<br>
       ${opLine}${parseFloat(s.frequency).toFixed(1)} kHz &middot; ${s.mode}<br>
       <b>${s.reference}</b> ${s.parkName}${wwffRefLine}<br>
       ${distStr}<br>
@@ -2053,17 +2072,20 @@ function updateMapMarkers(filtered) {
     // Out-of-privilege gets grey/red pin, SOTA gets orange, POTA gets default blue
     const oop = isOutOfPrivilege(parseFloat(s.frequency), s.mode, licenseClass);
     const worked = workedCallsigns.has(s.callsign.toUpperCase());
-    const markerOptions = oop
-      ? { icon: oopIcon, opacity: 0.4 }
-      : s.source === 'sota'
-        ? { icon: sotaIcon, ...(worked ? { opacity: 0.5 } : {}) }
-        : s.source === 'rbn'
-          ? { icon: rbnIcon, ...(worked ? { opacity: 0.5 } : {}) }
-          : s.source === 'wwff'
-            ? { icon: wwffIcon, ...(worked ? { opacity: 0.5 } : {}) }
-            : s.source === 'llota'
-              ? { icon: llotaIcon, ...(worked ? { opacity: 0.5 } : {}) }
-              : worked ? { opacity: 0.5 } : {};
+    const isExpedition = expeditionCallsigns.has(s.callsign.toUpperCase());
+    const markerOptions = isExpedition
+      ? { icon: expeditionIcon, zIndexOffset: 500 }
+      : oop
+        ? { icon: oopIcon, opacity: 0.4 }
+        : s.source === 'sota'
+          ? { icon: sotaIcon, ...(worked ? { opacity: 0.5 } : {}) }
+          : s.source === 'rbn'
+            ? { icon: rbnIcon, ...(worked ? { opacity: 0.5 } : {}) }
+            : s.source === 'wwff'
+              ? { icon: wwffIcon, ...(worked ? { opacity: 0.5 } : {}) }
+              : s.source === 'llota'
+                ? { icon: llotaIcon, ...(worked ? { opacity: 0.5 } : {}) }
+                : worked ? { opacity: 0.5 } : {};
 
     // Plot marker at canonical position and one world-copy in each direction
     for (const offset of [-360, 0, 360]) {
@@ -2565,6 +2587,7 @@ function render() {
       if (s.source === 'wwff') tr.classList.add('spot-wwff');
       if (s.source === 'llota') tr.classList.add('spot-llota');
       if (s.source === 'pskr') tr.classList.add('spot-pskr');
+      if (expeditionCallsigns.has(s.callsign.toUpperCase())) tr.classList.add('spot-expedition');
       if (s.comments && /POTA.?CAT/i.test(s.comments)) tr.classList.add('potacat-respot');
 
       // License privilege check
@@ -2652,6 +2675,13 @@ function render() {
         paw.title = 'POTA CAT Supporter';
         paw.textContent = '\uD83D\uDC3E';
         callTd.appendChild(paw);
+      }
+      if (expeditionCallsigns.has(s.callsign.toUpperCase())) {
+        const dxp = document.createElement('span');
+        dxp.className = 'expedition-badge';
+        dxp.title = 'DX Expedition (Club Log)';
+        dxp.textContent = 'DXP';
+        callTd.appendChild(dxp);
       }
       tr.appendChild(callTd);
 
@@ -3559,6 +3589,12 @@ window.api.onWorkedCallsigns((list) => {
 // --- Donor callsigns listener ---
 window.api.onDonorCallsigns((list) => {
   donorCallsigns = new Set(list.map(cs => cs.toUpperCase()));
+  render();
+});
+
+// --- DX Expedition callsigns listener ---
+window.api.onExpeditionCallsigns((list) => {
+  expeditionCallsigns = new Set(list.map(cs => cs.toUpperCase()));
   render();
 });
 

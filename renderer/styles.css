@@ -906,6 +906,10 @@ dialog input, dialog select {
   border-left: 3px solid #42a5f5;
 }
 
+.spot-pskr {
+  border-left: 3px solid #ff6b6b;
+}
+
 .potacat-respot {
   border-left: 3px solid #e94560 !important;
 }
@@ -914,6 +918,23 @@ dialog input, dialog select {
   margin-left: 4px;
   cursor: default;
   font-size: 12px;
+}
+
+.spot-expedition {
+  border-left: 3px solid #ff1744;
+  background: rgba(255, 23, 68, 0.08);
+}
+
+.expedition-badge {
+  margin-left: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 3px;
+  border-radius: 3px;
+  background: #ff9800;
+  color: #1a1a2e;
+  vertical-align: middle;
+  cursor: default;
 }
 
 [data-col="comments"] {
@@ -943,7 +964,7 @@ dialog input, dialog select {
   flex-direction: row !important;
   align-items: center;
   gap: 6px;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .checkbox-label input[type="checkbox"] {

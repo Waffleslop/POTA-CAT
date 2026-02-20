@@ -67,6 +67,7 @@ let wsjtx = null;
 let wsjtxStatus = null; // last Status message from WSJT-X
 let wsjtxHighlightTimer = null; // throttle timer for highlight updates
 let donorCallsigns = new Set(); // supporter callsigns from potacat.com
+let expeditionCallsigns = new Set(); // active DX expeditions from Club Log
 let pskr = null;
 let pskrSpots = [];       // streaming PSKReporter FreeDV spots (FIFO, max 500)
 let pskrFlushTimer = null; // throttle timer for PSKReporter → renderer updates
@@ -776,6 +777,11 @@ function connectPskr() {
 
   pskr.on('status', (s) => {
     sendPskrStatus({ ...s, spotCount: pskrSpots.length });
+    // Flush spots immediately on connect (don't wait for 2s throttle)
+    if (s.connected && pskrSpots.length > 0) {
+      if (pskrFlushTimer) { clearTimeout(pskrFlushTimer); pskrFlushTimer = null; }
+      sendMergedSpots();
+    }
   });
 
   pskr.on('log', (msg) => {
@@ -1688,6 +1694,9 @@ function createWindow() {
     loadWorkedParks();
     // Fetch donor list (async, non-blocking)
     fetchDonorList();
+    // Fetch active DX expeditions from Club Log
+    fetchExpeditions();
+    setInterval(fetchExpeditions, 3600000); // refresh every hour
   });
 }
 
@@ -1708,6 +1717,34 @@ function fetchDonorList() {
     });
   });
   req.on('error', () => { /* silently ignore — no internet is fine */ });
+}
+
+// --- DX Expeditions (Club Log) ---
+function fetchExpeditions() {
+  const https = require('https');
+  const req = https.get('https://clublog.org/expeditions.php?api=1', (res) => {
+    let body = '';
+    res.on('data', (chunk) => { body += chunk; });
+    res.on('end', () => {
+      try {
+        const arr = JSON.parse(body);
+        // Each entry is [callsign, lastQsoDateTime, qsoCount]
+        // Only include expeditions active in the last 7 days
+        const cutoff = Date.now() - 7 * 24 * 3600000;
+        expeditionCallsigns = new Set();
+        for (const entry of arr) {
+          const lastQso = new Date(entry[1] + 'Z').getTime();
+          if (lastQso >= cutoff) {
+            expeditionCallsigns.add(entry[0].toUpperCase());
+          }
+        }
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('expedition-callsigns', [...expeditionCallsigns]);
+        }
+      } catch { /* silently ignore parse errors */ }
+    });
+  });
+  req.on('error', () => { /* silently ignore */ });
 }
 
 // --- Update check ---
