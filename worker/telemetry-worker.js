@@ -1,5 +1,5 @@
 /**
- * POTA CAT — Anonymous Telemetry Worker
+ * POTACAT — Anonymous Telemetry Worker
  *
  * Cloudflare Worker + KV backend for opt-in usage statistics.
  *

@@ -1,5 +1,5 @@
 {
-  "name": "pota-cat",
+  "name": "potacat",
   "version": "0.9.8",
   "description": "POTA activator lookup with FlexRadio CAT control",
   "main": "main.js",
@@ -12,8 +12,8 @@
     "release": "node scripts/release.js"
   },
   "build": {
-    "appId": "com.waffleslop.pota-cat",
-    "productName": "POTA CAT",
+    "appId": "com.waffleslop.potacat",
+    "productName": "POTACAT",
     "icon": "assets/icon.png",
     "files": [
       "main.js",
@@ -37,7 +37,7 @@
       "perMachine": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "POTA CAT",
+      "shortcutName": "POTACAT",
       "include": "build/installer.nsh"
     },
     "portable": {

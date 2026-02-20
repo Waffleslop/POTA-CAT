@@ -18,8 +18,8 @@ const tag = `v${version}`;
 const distDir = path.join(__dirname, '..', 'dist');
 
 // Find installer and portable .exe
-const installerName = `POTA CAT Setup ${version}.exe`;
-const portableName = `POTA CAT-${version}-portable.exe`;
+const installerName = `POTACAT Setup ${version}.exe`;
+const portableName = `POTACAT-${version}-portable.exe`;
 const installerPath = path.join(distDir, installerName);
 const portablePath = path.join(distDir, portableName);
 
@@ -59,9 +59,9 @@ function main() {
 2. Run the installer — Windows SmartScreen may show **"Windows protected your PC"**
    - Click **More info** then **Run anyway**
    - This is normal for unsigned open-source apps
-3. POTA CAT will launch automatically after install
+3. POTACAT will launch automatically after install
 
-> POTA CAT is open source and not code-signed. Windows SmartScreen and Defender
+> POTACAT is open source and not code-signed. Windows SmartScreen and Defender
 > may flag it on first run. This is expected. You can verify the download using
 > the SHA-256 checksum below.
 

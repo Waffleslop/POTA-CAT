@@ -1,4 +1,4 @@
-name = "pota-cat-donors"
+name = "potacat-donors"
 main = "index.js"
 compatibility_date = "2024-01-01"
 account_id = "3dc9c47e0ae659e8eeed97bc7f6eeaf4"

@@ -1,4 +1,4 @@
-# POTA CAT
+# POTACAT
 
 A desktop app for hunting [Parks on the Air (POTA)](https://pota.app) activators with a FlexRadio. Shows real-time activator spots in a filterable table or on an interactive map, and tunes your radio with one click via SmartSDR CAT.
 
@@ -52,11 +52,11 @@ Outputs go to the `dist/` folder.
 
 ## CAT / FlexRadio Setup
 
-POTA CAT talks to your Flex through SmartSDR's built-in CAT server. In SmartSDR:
+POTACAT talks to your Flex through SmartSDR's built-in CAT server. In SmartSDR:
 
 1. Open **Settings > CAT**
 2. Enable CAT on the slice you want to control (Slice A defaults to TCP port 5002)
-3. In POTA CAT, select the matching slice from the CAT dropdown
+3. In POTACAT, select the matching slice from the CAT dropdown
 
 The app sends standard CAT commands (`FA` for frequency, `MD` for mode) over TCP to localhost.
 

@@ -886,7 +886,7 @@ function connectWsjtx() {
     try {
       // Ensure log file exists with header
       if (!fs.existsSync(logPath)) {
-        fs.writeFileSync(logPath, 'POTA CAT ADIF Log\n<EOH>\n');
+        fs.writeFileSync(logPath, 'POTACAT ADIF Log\n<EOH>\n');
       }
       fs.appendFileSync(logPath, adif + '\n');
       // Reload worked callsigns
@@ -1547,7 +1547,7 @@ function sendHrdUdp(qsoData, host, port) {
   return new Promise((resolve, reject) => {
     const dgram = require('dgram');
     const record = buildAdifRecord(qsoData);
-    const adifText = `<adif_ver:5>3.1.4\n<programid:8>POTA CAT\n<EOH>\n${record}\n`;
+    const adifText = `<adif_ver:5>3.1.4\n<programid:7>POTACAT\n<EOH>\n${record}\n`;
     const message = Buffer.from(adifText, 'utf-8');
 
     const client = dgram.createSocket('udp4');
@@ -1640,7 +1640,7 @@ function createWindow() {
   const isMac = process.platform === 'darwin';
   win = new BrowserWindow({
     ...windowOpts,
-    title: 'POTA CAT',
+    title: 'POTACAT',
     ...(isMac ? { titleBarStyle: 'hiddenInset' } : { frame: false }),
     icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
@@ -1754,7 +1754,7 @@ function checkForUpdates() {
   const options = {
     hostname: 'api.github.com',
     path: '/repos/Waffleslop/POTA-CAT/releases/latest',
-    headers: { 'User-Agent': 'POTA-CAT/' + currentVersion },
+    headers: { 'User-Agent': 'POTACAT/' + currentVersion },
     timeout: 10000,
   };
   const req = https.get(options, (res) => {
@@ -1809,7 +1809,7 @@ function postPotaRespot(spotData) {
     frequency: spotData.frequency,
     reference: spotData.reference,
     mode: spotData.mode,
-    source: 'POTA CAT',
+    source: 'POTACAT',
     comments: spotData.comments,
   });
   return new Promise((resolve, reject) => {

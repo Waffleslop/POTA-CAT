@@ -44,7 +44,7 @@ let workedParksData = new Map(); // reference → full park data for stats
 let hideWorkedParks = false;
 let showBearing = false;
 let respotDefault = true; // default: re-spot on POTA after logging
-let respotTemplate = 'Thanks for {rst}. 73s {mycallsign} via POTA CAT'; // re-spot comment template
+let respotTemplate = 'Thanks for {rst}. 73s {mycallsign} via POTACAT'; // re-spot comment template
 let myCallsign = '';
 let dxccData = null;  // { entities: [...] } from main process
 let enableWsjtx = false;
@@ -1210,11 +1210,11 @@ setSendToLogbook.addEventListener('change', () => {
 const LOGBOOK_DEFAULTS = {
   log4om: {
     fileWatch: true,
-    instructions: 'In Log4OM 2: Settings > Program Configuration > Software Integration > ADIF Functions. In the ADIF Monitor tab, check "Enable ADIF monitor". Click the folder icon next to "ADIF file" and select the same ADIF log file used in POTA CAT. Press the green + button to add it to the list, then press "Save and apply". Log4OM will automatically import new QSOs as they are saved.',
+    instructions: 'In Log4OM 2: Settings > Program Configuration > Software Integration > ADIF Functions. In the ADIF Monitor tab, check "Enable ADIF monitor". Click the folder icon next to "ADIF file" and select the same ADIF log file used in POTACAT. Press the green + button to add it to the list, then press "Save and apply". Log4OM will automatically import new QSOs as they are saved.',
   },
   dxkeeper: { port: 52001, help: 'In DXKeeper: Configuration > Defaults tab > Network Service panel. The default base port is 52000 (DXKeeper listens on base + 1 = 52001). DXKeeper must be running to receive QSOs. QSOs will be logged with missing fields auto-deduced from callbook/entity databases.' },
   n3fjp: { port: 1100, help: 'In N3FJP: Settings > Application Program Interface > check "TCP API Enabled". Set the port to 1100 (default). N3FJP must be running to receive QSOs.' },
-  hrd: { port: 2333, help: 'In HRD Logbook: Tools > Configure > QSO Forwarding. Under UDP Receive, check "Receive QSO notifications using UDP9/ADIF from other logging programs (eg. WSJT-X)". Set the receive port to 2333 and select your target database. POTA CAT and WSJT-X can both send to this port simultaneously.' },
+  hrd: { port: 2333, help: 'In HRD Logbook: Tools > Configure > QSO Forwarding. Under UDP Receive, check "Receive QSO notifications using UDP9/ADIF from other logging programs (eg. WSJT-X)". Set the receive port to 2333 and select your target database. POTACAT and WSJT-X can both send to this port simultaneously.' },
 };
 
 function updateLogbookPortConfig() {
@@ -2672,7 +2672,7 @@ function render() {
       if (donorCallsigns.has(s.callsign.toUpperCase())) {
         const paw = document.createElement('span');
         paw.className = 'donor-paw';
-        paw.title = 'POTA CAT Supporter';
+        paw.title = 'POTACAT Supporter';
         paw.textContent = '\uD83D\uDC3E';
         callTd.appendChild(paw);
       }
@@ -3565,7 +3565,7 @@ window.api.onUpdateAvailable(({ version, url, headline }) => {
 
   message.textContent = headline
     ? `v${version}: ${headline}`
-    : `POTA CAT v${version} is available!`;
+    : `POTACAT v${version} is available!`;
   updateLink.addEventListener('click', (e) => {
     e.preventDefault();
     window.api.openExternal(url);

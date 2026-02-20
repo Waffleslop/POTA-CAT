@@ -1,6 +1,6 @@
 # Rig Setup Instructions
 
-Tested radio configurations for POTA CAT. If your rig isn't listed, try **Serial CAT (Kenwood)** first — many radios support FA/MD commands — then fall back to **Hamlib**.
+Tested radio configurations for POTACAT. If your rig isn't listed, try **Serial CAT (Kenwood)** first — many radios support FA/MD commands — then fall back to **Hamlib**.
 
 ---
 
@@ -64,4 +64,4 @@ Tested radio configurations for POTA CAT. If your rig isn't listed, try **Serial
 - **Verbose CAT log** (Settings → Tuning) shows raw commands and rigctld stderr — enable it when troubleshooting.
 - Only one program can hold a COM port at a time. Close WSJT-X, fldigi, HRD, etc. before connecting.
 - If Hamlib test fails with "connection closed" or "exited with code null", check the verbose log for rigctld's stderr output — it usually contains the real error.
-- The bundled Hamlib is v4.6.5. If your rig requires a newer version, set `"rigctldPath"` in `settings.json` (in your AppData/pota-cat folder) to point to a newer `rigctld.exe`.
+- The bundled Hamlib is v4.6.5. If your rig requires a newer version, set `"rigctldPath"` in `settings.json` (in your AppData/potacat folder) to point to a newer `rigctld.exe`.

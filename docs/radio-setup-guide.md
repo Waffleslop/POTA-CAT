@@ -1,6 +1,6 @@
 # Radio Setup Guide
 
-POTA CAT supports four ways to connect to your radio. Choose the one that matches your setup.
+POTACAT supports four ways to connect to your radio. Choose the one that matches your setup.
 
 ---
 
@@ -8,7 +8,7 @@ POTA CAT supports four ways to connect to your radio. Choose the one that matche
 
 **Best for:** FlexRadio 6000/8000 series running SmartSDR
 
-POTA CAT connects directly to SmartSDR's built-in CAT server over TCP. No additional software or cables are needed — just a network connection to your Flex.
+POTACAT connects directly to SmartSDR's built-in CAT server over TCP. No additional software or cables are needed — just a network connection to your Flex.
 
 ### Setup
 
@@ -28,11 +28,11 @@ SmartSDR exposes Kenwood-compatible CAT control on TCP ports 5002–5005, one pe
 | C     | 5004 |
 | D     | 5005 |
 
-POTA CAT connects to `127.0.0.1` on the selected port. If SmartSDR is running on a different computer, use the **IP Radio (TCP CAT)** option instead and enter the Flex's IP address.
+POTACAT connects to `127.0.0.1` on the selected port. If SmartSDR is running on a different computer, use the **IP Radio (TCP CAT)** option instead and enter the Flex's IP address.
 
 ### SmartSDR Panadapter Spots
 
-If you enable **Push spots to SmartSDR panadapter** in Settings, POTA CAT will also connect to the FlexRadio API on port 4992 and display spot markers directly on your panadapter. You can choose which spot sources (POTA, SOTA, DX Cluster, RBN) appear on the panadapter.
+If you enable **Push spots to SmartSDR panadapter** in Settings, POTACAT will also connect to the FlexRadio API on port 4992 and display spot markers directly on your panadapter. You can choose which spot sources (POTA, SOTA, DX Cluster, RBN) appear on the panadapter.
 
 ---
 
@@ -75,7 +75,7 @@ This option sends standard Kenwood CAT commands (`FA`, `MD`) directly over a ser
 
 ### Supported Commands
 
-POTA CAT uses only two CAT commands:
+POTACAT uses only two CAT commands:
 
 - `FA` — Get/set VFO A frequency (11-digit Hz value)
 - `MD` — Set mode (CW, USB, LSB, FM, DIGU, DIGL)
@@ -87,7 +87,7 @@ Any radio that responds to `FA;` with a frequency like `FA00014060000;` will wor
 Many USB serial interfaces (including built-in USB on QRP radios) use the DTR and RTS control lines. Some radios interpret DTR as a PTT signal — when the serial port opens, the OS asserts DTR by default, which keys your transmitter.
 
 **Check "Disable DTR/RTS on connect" if:**
-- Your radio transmits unexpectedly when POTA CAT connects
+- Your radio transmits unexpectedly when POTACAT connects
 - You use a QRPLabs QMX or QDX
 - You use a Digirig, SignaLink, or similar USB audio/serial interface
 - Your radio resets or behaves erratically when the serial port opens
@@ -137,9 +137,9 @@ Elecraft radios support Kenwood CAT commands. Serial CAT works well for basic fr
 
 **Best for:** Icom, Yaesu, and other radios that don't speak Kenwood CAT protocol
 
-This option uses [Hamlib](https://hamlib.github.io/) (rigctld) to translate between POTA CAT and your radio's native protocol. Hamlib supports over 200 radio models from all major manufacturers.
+This option uses [Hamlib](https://hamlib.github.io/) (rigctld) to translate between POTACAT and your radio's native protocol. Hamlib supports over 200 radio models from all major manufacturers.
 
-POTA CAT bundles Hamlib 4.6.5 for Windows — no separate installation needed.
+POTACAT bundles Hamlib 4.6.5 for Windows — no separate installation needed.
 
 ### Setup
 
@@ -154,7 +154,7 @@ POTA CAT bundles Hamlib 4.6.5 for Windows — no separate installation needed.
 
 ### How It Works
 
-When you select a Hamlib rig, POTA CAT:
+When you select a Hamlib rig, POTACAT:
 
 1. Spawns a `rigctld` process with your rig model, serial port, and baud rate
 2. Connects to rigctld over TCP (localhost port 4532)
@@ -195,7 +195,7 @@ Some radios need the DTR/RTS lines managed carefully. Try toggling the **Disable
 
 ### Only One Program Per COM Port
 
-Serial ports can only be used by one program at a time. If POTA CAT can't connect, make sure you've closed any other software using the same port: WSJT-X, fldigi, N3FJP, HRD, PuTTY, etc.
+Serial ports can only be used by one program at a time. If POTACAT can't connect, make sure you've closed any other software using the same port: WSJT-X, fldigi, N3FJP, HRD, PuTTY, etc.
 
 ### Finding Your COM Port
 

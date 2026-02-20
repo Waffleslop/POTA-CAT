@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://*.tile.openstreetmap.org; connect-src 'self' https://*.tile.openstreetmap.org;">
-  <title>POTA CAT</title>
+  <title>POTACAT</title>
   <link rel="stylesheet" href="../node_modules/leaflet/dist/leaflet.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="titlebar">
-    <div class="titlebar-title">POTA CAT</div>
+    <div class="titlebar-title">POTACAT</div>
     <div class="titlebar-controls">
       <button class="titlebar-btn" id="tb-min" title="Minimize">&#x2014;</button>
       <button class="titlebar-btn" id="tb-max" title="Maximize">&#x25A1;</button>
@@ -121,7 +121,7 @@
     <span id="update-message"></span>
     <a href="#" id="update-link">Download</a>
     <span class="update-sep">&middot;</span>
-    <a href="#" id="support-link">Support POTA CAT</a>
+    <a href="#" id="support-link">Support POTACAT</a>
     <button id="update-dismiss" title="Dismiss">&times;</button>
   </div>
 
@@ -443,17 +443,17 @@
       <label class="checkbox-label"><input type="checkbox" id="set-enable-rbn"> Reverse Beacon Network</label>
       <div id="rbn-config" class="radio-sub hidden">
         <span class="help-text" style="font-size:12px;">Shows where your CQ calls are being heard by RBN skimmers worldwide.</span>
-        <span class="help-text" style="display:block;margin-top:4px;">RBN spots only appear while POTA CAT is open — historical spots are not retrieved.</span>
+        <span class="help-text" style="display:block;margin-top:4px;">RBN spots only appear while POTACAT is open — historical spots are not retrieved.</span>
       </div>
       <label class="checkbox-label"><input type="checkbox" id="set-enable-wsjtx"> WSJT-X Integration</label>
       <div id="wsjtx-config" class="radio-sub hidden">
-        <span class="help-text" style="font-size:12px;">Connect to WSJT-X via UDP. POTA activators are highlighted in the decode window and decodes appear in POTA CAT.</span>
+        <span class="help-text" style="font-size:12px;">Connect to WSJT-X via UDP. POTA activators are highlighted in the decode window and decodes appear in POTACAT.</span>
         <label>UDP Port:
           <input type="number" id="set-wsjtx-port" value="2237" min="1024" max="65535" style="width:80px;">
         </label>
         <span class="help-text" style="display:block;margin-top:4px;">Must match WSJT-X Settings &rarr; Reporting &rarr; UDP Server port. Enable "Accept UDP requests" in WSJT-X.</span>
         <label class="checkbox-label" style="margin-top:6px;"><input type="checkbox" id="set-wsjtx-highlight" checked> Highlight POTA activators in WSJT-X</label>
-        <label class="checkbox-label"><input type="checkbox" id="set-wsjtx-auto-log"> Auto-log WSJT-X QSOs to POTA CAT</label>
+        <label class="checkbox-label"><input type="checkbox" id="set-wsjtx-auto-log"> Auto-log WSJT-X QSOs to POTACAT</label>
       </div>
       <label class="checkbox-label"><input type="checkbox" id="set-enable-pskr"> FreeDV (PSKReporter)</label>
       <div id="pskr-config" class="radio-sub hidden">
@@ -528,13 +528,13 @@
             <input type="text" id="set-adif-log-path" readonly style="flex:1;">
             <button type="button" id="adif-log-browse-btn">Browse</button>
           </div>
-          <span class="help-text" style="display:block;margin-top:4px;">Local backup of all QSOs logged from POTA CAT</span>
+          <span class="help-text" style="display:block;margin-top:4px;">Local backup of all QSOs logged from POTACAT</span>
         </label>
         <div style="margin-top:10px;">
           <strong style="display:block;margin-bottom:4px;">Import Log</strong>
           <button type="button" id="adif-import-btn">Import Log</button>
           <span id="adif-import-result" class="help-text" style="margin-left:8px;"></span>
-          <span class="help-text" style="display:block;margin-top:4px;">Import QSO history from ADIF (.adi) or Log4OM SQLite (.sqlite) files. They will be added to your POTA CAT logfile.</span>
+          <span class="help-text" style="display:block;margin-top:4px;">Import QSO history from ADIF (.adi) or Log4OM SQLite (.sqlite) files. They will be added to your POTACAT logfile.</span>
         </div>
         <label style="margin-top:10px;">Default TX Power (W):
           <input type="number" id="set-default-power" min="1" max="5000" value="100">
@@ -629,7 +629,7 @@
     <fieldset class="source-toggles">
       <legend>About</legend>
       <label class="checkbox-label"><input type="checkbox" id="set-enable-telemetry"> Share anonymous usage statistics</label>
-      <span class="help-text" style="margin-left:12px;display:block;">Helps improve POTA CAT. Only sends: a random ID, app version, OS, and session duration. No callsign, grid, settings, or frequencies are ever collected. You can opt out at any time.</span>
+      <span class="help-text" style="margin-left:12px;display:block;">Helps improve POTACAT. Only sends: a random ID, app version, OS, and session duration. No callsign, grid, settings, or frequencies are ever collected. You can opt out at any time.</span>
       <label class="checkbox-label"><input type="checkbox" id="set-verbose-log"> Verbose CAT log</label>
       <span class="help-text" style="margin-left:12px;margin-bottom:6px;display:block;">Show a log button in the status bar with raw CAT commands and responses</span>
     </fieldset>
@@ -721,7 +721,7 @@
       </label>
       <label id="log-respot-comment-label" style="display:block;margin-top:6px;">
         Re-spot comment:
-        <input type="text" id="log-respot-comment" placeholder="Thanks for {rst}. 73s {mycallsign} via POTA CAT">
+        <input type="text" id="log-respot-comment" placeholder="Thanks for {rst}. 73s {mycallsign} via POTACAT">
         <span class="help-text">Use {rst} to automatically fill in the signal report you sent</span>
       </label>
     </div>
@@ -777,7 +777,7 @@
 
   <!-- Welcome dialog (first run) -->
   <dialog id="welcome-dialog">
-    <h3>Welcome to POTA CAT</h3>
+    <h3>Welcome to POTACAT</h3>
     <p class="welcome-text">Let's get you set up. You can configure your radio any time in Settings.</p>
     <label class="welcome-field">Callsign: <input type="text" id="welcome-callsign" maxlength="10" placeholder="WB6ACU" style="text-transform:uppercase;"></label>
     <span class="help-text" style="margin-top:-4px;margin-bottom:8px;display:block;">Required for DX Cluster login and QSO logging</span>
@@ -847,13 +847,13 @@
     <label class="checkbox-label welcome-telemetry"><input type="checkbox" id="welcome-telemetry" checked> Share anonymous usage statistics</label>
     <span class="help-text" style="margin-left:12px;margin-top:-4px;display:block;">No callsign, grid, or personal data is collected. You can opt out any time in Settings.</span>
     <div class="welcome-beta-note">
-      POTA CAT is in beta and we're working toward a strong v1 release. We're still collecting feedback on radio settings that work for each rig. Please visit the <a href="#" id="welcome-discord-link">Discord</a> and share a rig report on what you're integrating &mdash; every tester helps!
+      POTACAT is in beta and we're working toward a strong v1 release. We're still collecting feedback on radio settings that work for each rig. Please visit the <a href="#" id="welcome-discord-link">Discord</a> and share a rig report on what you're integrating &mdash; every tester helps!
     </div>
     <div class="dialog-buttons" style="margin-top:12px;">
       <button type="button" id="welcome-start" class="log-save-btn">Get Started</button>
     </div>
     <div class="welcome-coffee">
-      <span>Love POTA CAT? A coffee goes a long way to keep development alive!</span>
+      <span>Love POTACAT? A coffee goes a long way to keep development alive!</span>
       <button type="button" id="welcome-coffee-btn" class="coffee-btn">Buy Me a Coffee</button>
     </div>
   </dialog>
