@@ -45,6 +45,7 @@
           <label class="multi-dropdown-item"><input type="checkbox" value="FT4"> FT4</label>
           <label class="multi-dropdown-item"><input type="checkbox" value="FM"> FM</label>
           <label class="multi-dropdown-item"><input type="checkbox" value="RTTY"> RTTY</label>
+          <label class="multi-dropdown-item"><input type="checkbox" value="FREEDV"> FreeDV</label>
         </div>
       </div>
       <div class="multi-dropdown" id="continent-filter">
@@ -92,6 +93,7 @@
       <span id="cluster-status" class="status disconnected hidden">Cluster</span>
       <span id="rbn-status" class="status disconnected hidden">RBN</span>
       <span id="wsjtx-status" class="status disconnected hidden">WSJT-X</span>
+      <span id="pskr-status" class="status disconnected hidden">FreeDV</span>
       <span id="sfi-status" class="status solar-pill hidden">SFI —</span>
       <span id="k-status" class="status solar-pill hidden">K —</span>
       <span id="a-status" class="status solar-pill hidden">A —</span>
@@ -453,6 +455,10 @@
         <label class="checkbox-label" style="margin-top:6px;"><input type="checkbox" id="set-wsjtx-highlight" checked> Highlight POTA activators in WSJT-X</label>
         <label class="checkbox-label"><input type="checkbox" id="set-wsjtx-auto-log"> Auto-log WSJT-X QSOs to POTA CAT</label>
       </div>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-pskr"> FreeDV (PSKReporter)</label>
+      <div id="pskr-config" class="radio-sub hidden">
+        <span class="help-text" style="margin-left:12px;display:block;">Live FreeDV reception reports from PSKReporter. Shows who is hearing FreeDV signals worldwide.</span>
+      </div>
     </fieldset>
     <!-- 4. Spot Filters (merged Spots + Watchlist) -->
     <fieldset class="source-toggles">
@@ -598,6 +604,7 @@
           <label class="checkbox-label"><input type="checkbox" id="set-smartsdr-rbn"> RBN</label>
           <label class="checkbox-label"><input type="checkbox" id="set-smartsdr-wwff" checked> WWFF</label>
           <label class="checkbox-label"><input type="checkbox" id="set-smartsdr-llota" checked> LLOTA</label>
+          <label class="checkbox-label"><input type="checkbox" id="set-smartsdr-pskr" checked> FreeDV</label>
         </div>
         <label style="margin-top:8px;">Max spot age (minutes):
           <input type="number" id="set-smartsdr-max-age" min="0" max="120" value="15" style="width:60px;">
@@ -651,9 +658,14 @@
       <h3>Log QSO</h3>
       <button type="button" id="log-dialog-close" class="log-dialog-x" title="Close">&times;</button>
     </div>
-    <label>Callsign:
-      <input type="text" id="log-callsign" maxlength="12" style="text-transform:uppercase;">
-    </label>
+    <div style="display:flex;gap:8px;">
+      <label style="flex:1;">Callsign:
+        <input type="text" id="log-callsign" maxlength="12" style="text-transform:uppercase;">
+      </label>
+      <label style="flex:1;">Name:
+        <input type="text" id="log-op-name" readonly tabindex="-1" style="color:#b0bec5;background:transparent;border-color:#333;">
+      </label>
+    </div>
     <div style="display:flex;gap:8px;">
       <label style="flex:1;">Frequency (kHz):
         <input type="text" id="log-frequency">

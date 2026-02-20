@@ -4,6 +4,9 @@
 let allSpots = [];
 let sortCol = 'distance';
 let sortAsc = true;
+
+// Expose for DevTools console debugging
+window._debug = { get spots() { return allSpots; }, get qrz() { return qrzData; }, render() { render(); } };
 let currentView = 'table'; // 'table', 'map', 'dxcc', or 'rbn' (for exclusive views)
 let showTable = true;
 let showMap = false;
@@ -22,6 +25,7 @@ let enableLlota = false;
 let enableDxcc = false;
 let enableCluster = false;
 let enableRbn = false;
+let enablePskr = false;
 let enableSolar = false;
 let enableBandActivity = false;
 let licenseClass = 'none';
@@ -61,10 +65,11 @@ function cleanQrzName(raw) {
   return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
 }
 
-/** Build display name from QRZ info, respecting full-name setting */
+/** Build display name from QRZ info, respecting full-name setting.
+ *  Prefers nickname over fname when available. */
 function qrzDisplayName(info) {
   if (!info) return '';
-  const first = cleanQrzName(info.fname);
+  const first = cleanQrzName(info.nickname) || cleanQrzName(info.fname);
   if (!qrzFullName) return first || cleanQrzName(info.name);
   const last = cleanQrzName(info.name);
   return [first, last].filter(Boolean).join(' ');
@@ -97,6 +102,7 @@ const spotsWwff = document.getElementById('spots-wwff');
 const spotsLlota = document.getElementById('spots-llota');
 const spotsCluster = document.getElementById('spots-cluster');
 const spotsRbn = document.getElementById('spots-rbn');
+const spotsPskr = document.getElementById('spots-pskr');
 const spotsHideWorked = document.getElementById('spots-hide-worked');
 const spotsHideParks = document.getElementById('spots-hide-parks');
 const spotsHideParksLabel = document.getElementById('spots-hide-parks-label');
@@ -188,6 +194,9 @@ const setWsjtxPort = document.getElementById('set-wsjtx-port');
 const setWsjtxHighlight = document.getElementById('set-wsjtx-highlight');
 const setWsjtxAutoLog = document.getElementById('set-wsjtx-auto-log');
 const wsjtxStatusEl = document.getElementById('wsjtx-status');
+const setEnablePskr = document.getElementById('set-enable-pskr');
+const pskrConfig = document.getElementById('pskr-config');
+const pskrStatusEl = document.getElementById('pskr-status');
 const setMyCallsign = document.getElementById('set-my-callsign');
 const setClusterHost = document.getElementById('set-cluster-host');
 const setClusterPort = document.getElementById('set-cluster-port');
@@ -264,9 +273,11 @@ const setSmartSdrCluster = document.getElementById('set-smartsdr-cluster');
 const setSmartSdrRbn = document.getElementById('set-smartsdr-rbn');
 const setSmartSdrWwff = document.getElementById('set-smartsdr-wwff');
 const setSmartSdrLlota = document.getElementById('set-smartsdr-llota');
+const setSmartSdrPskr = document.getElementById('set-smartsdr-pskr');
 const setSmartSdrMaxAge = document.getElementById('set-smartsdr-max-age');
 const logDialog = document.getElementById('log-dialog');
 const logCallsign = document.getElementById('log-callsign');
+const logOpName = document.getElementById('log-op-name');
 const logFrequency = document.getElementById('log-frequency');
 const logMode = document.getElementById('log-mode');
 const logDate = document.getElementById('log-date');
@@ -429,6 +440,7 @@ async function loadPrefs() {
   enableDxcc = settings.enableDxcc === true;  // default false
   enableCluster = settings.enableCluster === true; // default false
   enableRbn = settings.enableRbn === true; // default false
+  enablePskr = settings.enablePskr === true; // default false
   enableSolar = settings.enableSolar === true;   // default false
   enableBandActivity = settings.enableBandActivity === true; // default false
   updateSolarVisibility();
@@ -456,6 +468,7 @@ async function loadPrefs() {
   updateWsjtxStatusVisibility();
   updateClusterStatusVisibility();
   updateRbnStatusVisibility();
+  updatePskrStatusVisibility();
   updateRbnButton();
   updateDxccButton();
   // maxAgeMin: prefer localStorage (last-used filter) over settings.json
@@ -1006,6 +1019,10 @@ function updateRbnStatusVisibility() {
   }
 }
 
+function updatePskrStatusVisibility() {
+  pskrStatusEl.classList.toggle('hidden', !enablePskr);
+}
+
 function updateRbnButton() {
   if (enableRbn) {
     viewRbnBtn.classList.remove('hidden');
@@ -1151,6 +1168,10 @@ setEnableRbn.addEventListener('change', () => {
 // WSJT-X checkbox toggles config visibility
 setEnableWsjtx.addEventListener('change', () => {
   wsjtxConfig.classList.toggle('hidden', !setEnableWsjtx.checked);
+});
+
+setEnablePskr.addEventListener('change', () => {
+  pskrConfig.classList.toggle('hidden', !setEnablePskr.checked);
 });
 
 // PstRotator checkbox toggles rotor config visibility
@@ -1385,11 +1406,15 @@ function getFiltered() {
       (s.source === 'wwff' && !enableWwff) ||
       (s.source === 'llota' && !enableLlota) ||
       (s.source === 'dxc' && !enableCluster) ||
-      (s.source === 'rbn' && !enableRbn);
+      (s.source === 'rbn' && !enableRbn) ||
+      (s.source === 'pskr' && !enablePskr);
     const isWatched = watchlist.has(s.callsign.toUpperCase());
 
     if (sourceOff) {
       if (!isWatched || spotAgeSecs(s.spotTime) > 300) return false;
+    } else if (s.source === 'pskr') {
+      // PSKReporter already limits to 15 min server-side; don't apply client max-age
+      if (spotAgeSecs(s.spotTime) > 900) return false;
     } else {
       if (spotAgeSecs(s.spotTime) > maxAgeSecs) return false;
     }
@@ -2006,7 +2031,7 @@ function updateMapMarkers(filtered) {
     const watched = watchlist.has(s.callsign.toUpperCase());
 
     const sourceLabel = (s.source || 'pota').toUpperCase();
-    const sourceColor = s.source === 'sota' ? '#f0a500' : s.source === 'dxc' ? '#e040fb' : s.source === 'rbn' ? '#00bcd4' : s.source === 'wwff' ? '#26a69a' : s.source === 'llota' ? '#42a5f5' : '#4ecca3';
+    const sourceColor = s.source === 'sota' ? '#f0a500' : s.source === 'dxc' ? '#e040fb' : s.source === 'rbn' ? '#00bcd4' : s.source === 'wwff' ? '#26a69a' : s.source === 'llota' ? '#42a5f5' : s.source === 'pskr' ? '#ff6b6b' : '#4ecca3';
     const logBtnHtml = enableLogging
       ? ` <button class="log-popup-btn" data-call="${s.callsign}" data-freq="${s.frequency}" data-mode="${s.mode}" data-ref="${s.reference || ''}" data-name="${(s.parkName || '').replace(/"/g, '&quot;')}" data-source="${s.source || ''}" data-wwff-ref="${s.wwffReference || ''}" data-wwff-name="${(s.wwffParkName || '').replace(/"/g, '&quot;')}">Log</button>`
       : '';
@@ -2539,6 +2564,7 @@ function render() {
       if (s.source === 'rbn') tr.classList.add('spot-rbn');
       if (s.source === 'wwff') tr.classList.add('spot-wwff');
       if (s.source === 'llota') tr.classList.add('spot-llota');
+      if (s.source === 'pskr') tr.classList.add('spot-pskr');
       if (s.comments && /POTA.?CAT/i.test(s.comments)) tr.classList.add('potacat-respot');
 
       // License privilege check
@@ -2609,6 +2635,11 @@ function render() {
       callLink.textContent = s.callsign;
       callLink.href = '#';
       callLink.className = 'qrz-link';
+      const qrzHover = qrzData.get(s.callsign.toUpperCase().split('/')[0]);
+      if (qrzHover) {
+        const hoverName = qrzDisplayName(qrzHover);
+        if (hoverName) callLink.title = hoverName;
+      }
       callLink.addEventListener('click', (e) => {
         e.stopPropagation();
         e.preventDefault();
@@ -2631,7 +2662,7 @@ function render() {
       const qrzInfo = qrzData.get(s.callsign.toUpperCase().split('/')[0]);
       if (qrzInfo) {
         operatorTd.textContent = qrzDisplayName(qrzInfo);
-        operatorTd.title = [qrzInfo.fname, qrzInfo.name].filter(Boolean).join(' ');
+        operatorTd.title = [qrzInfo.nickname || qrzInfo.fname, qrzInfo.name].filter(Boolean).join(' ');
       }
       tr.appendChild(operatorTd);
 
@@ -2758,6 +2789,8 @@ let currentLogSpot = null;
 function openLogPopup(spot) {
   currentLogSpot = spot;
   logCallsign.value = spot.callsign || '';
+  const logQrz = qrzData.get((spot.callsign || '').toUpperCase().split('/')[0]);
+  logOpName.value = logQrz ? [cleanQrzName(logQrz.nickname) || cleanQrzName(logQrz.fname), cleanQrzName(logQrz.name)].filter(Boolean).join(' ') : '';
   logFrequency.value = parseFloat(spot.frequency).toFixed(1);
 
   // Set mode dropdown
@@ -3062,6 +3095,7 @@ function syncSpotsPanel() {
   spotsLlota.checked = enableLlota;
   spotsCluster.checked = enableCluster;
   spotsRbn.checked = enableRbn;
+  spotsPskr.checked = enablePskr;
   spotsHideWorked.checked = hideWorked;
   spotsHideParks.checked = hideWorkedParks;
   spotsHideOob.checked = hideOutOfBand;
@@ -3077,6 +3111,7 @@ document.querySelector('.spots-dropdown-panel').addEventListener('change', async
   enableLlota = spotsLlota.checked;
   enableCluster = spotsCluster.checked;
   enableRbn = spotsRbn.checked;
+  enablePskr = spotsPskr.checked;
 
   // DX Cluster and RBN require a callsign
   if (enableCluster && !myCallsign) {
@@ -3100,19 +3135,21 @@ document.querySelector('.spots-dropdown-panel').addEventListener('change', async
   setEnableLlota.checked = enableLlota;
   setEnableCluster.checked = enableCluster;
   setEnableRbn.checked = enableRbn;
+  setEnablePskr.checked = enablePskr;
   setHideWorked.checked = hideWorked;
   setHideWorkedParks.checked = hideWorkedParks;
   setHideOutOfBand.checked = hideOutOfBand;
 
-  // Update UI visibility for cluster/RBN
+  // Update UI visibility for cluster/RBN/FreeDV
   updateClusterStatusVisibility();
   updateRbnStatusVisibility();
+  updatePskrStatusVisibility();
   updateRbnButton();
 
   // Save and let main process handle connect/disconnect
   await window.api.saveSettings({
     enablePota, enableSota, enableWwff, enableLlota,
-    enableCluster, enableRbn,
+    enableCluster, enableRbn, enablePskr,
     hideWorked, hideWorkedParks, hideOutOfBand,
   });
 
@@ -3180,6 +3217,8 @@ settingsBtn.addEventListener('click', async () => {
   setWsjtxHighlight.checked = s.wsjtxHighlight !== false;
   setWsjtxAutoLog.checked = s.wsjtxAutoLog === true;
   wsjtxConfig.classList.toggle('hidden', !s.enableWsjtx);
+  setEnablePskr.checked = s.enablePskr === true;
+  pskrConfig.classList.toggle('hidden', !s.enablePskr);
   setEnableLogging.checked = s.enableLogging === true;
   if (s.adifLogPath) {
     setAdifLogPath.value = s.adifLogPath;
@@ -3213,6 +3252,7 @@ settingsBtn.addEventListener('click', async () => {
   setSmartSdrRbn.checked = s.smartSdrRbn === true;
   setSmartSdrWwff.checked = s.smartSdrWwff !== false;
   setSmartSdrLlota.checked = s.smartSdrLlota !== false;
+  setSmartSdrPskr.checked = s.smartSdrPskr !== false;
   setSmartSdrMaxAge.value = s.smartSdrMaxAge != null ? s.smartSdrMaxAge : 15;
   smartSdrConfig.classList.toggle('hidden', !s.smartSdrSpots);
   setEnableTelemetry.checked = s.enableTelemetry === true;
@@ -3253,6 +3293,7 @@ settingsSave.addEventListener('click', async () => {
   const myCallsign = setMyCallsign.value.trim().toUpperCase();
   let clusterEnabled = setEnableCluster.checked;
   let rbnEnabled = setEnableRbn.checked;
+  const pskrEnabled = setEnablePskr.checked;
 
   // DX Cluster and RBN require a callsign
   if (clusterEnabled && !myCallsign) {
@@ -3296,6 +3337,7 @@ settingsSave.addEventListener('click', async () => {
   const smartSdrRbnEnabled = setSmartSdrRbn.checked;
   const smartSdrWwffEnabled = setSmartSdrWwff.checked;
   const smartSdrLlotaEnabled = setSmartSdrLlota.checked;
+  const smartSdrPskrEnabled = setSmartSdrPskr.checked;
   const smartSdrMaxAgeVal = parseInt(setSmartSdrMaxAge.value, 10) || 0;
   const adifPath = setAdifPath.value.trim() || '';
   const potaParksPath = setPotaParksPath.value.trim() || '';
@@ -3341,6 +3383,7 @@ settingsSave.addEventListener('click', async () => {
     enableCluster: clusterEnabled,
     enableRbn: rbnEnabled,
     enableWsjtx: wsjtxEnabled,
+    enablePskr: pskrEnabled,
     wsjtxPort: wsjtxPortVal,
     wsjtxHighlight: wsjtxHighlightEnabled,
     wsjtxAutoLog: wsjtxAutoLogEnabled,
@@ -3382,6 +3425,7 @@ settingsSave.addEventListener('click', async () => {
     smartSdrRbn: smartSdrRbnEnabled,
     smartSdrWwff: smartSdrWwffEnabled,
     smartSdrLlota: smartSdrLlotaEnabled,
+    smartSdrPskr: smartSdrPskrEnabled,
     smartSdrMaxAge: smartSdrMaxAgeVal,
   });
   distUnit = setDistUnit.value;
@@ -3394,10 +3438,12 @@ settingsSave.addEventListener('click', async () => {
   enableLlota = llotaEnabled;
   enableCluster = clusterEnabled;
   enableRbn = rbnEnabled;
+  enablePskr = pskrEnabled;
   enableWsjtx = wsjtxEnabled;
   updateWsjtxStatusVisibility();
   updateClusterStatusVisibility();
   updateRbnStatusVisibility();
+  updatePskrStatusVisibility();
   updateRbnButton();
   enableSolar = solarEnabled;
   updateSolarVisibility();
@@ -4089,6 +4135,15 @@ window.api.onRbnStatus(({ connected }) => {
   rbnStatusEl.textContent = 'RBN';
   rbnStatusEl.className = 'status ' + (connected ? 'connected' : 'disconnected');
   if (enableRbn) rbnStatusEl.classList.remove('hidden');
+});
+
+// --- PSKReporter status listener ---
+window.api.onPskrStatus(({ connected, error, spotCount }) => {
+  pskrStatusEl.textContent = 'FreeDV';
+  pskrStatusEl.className = 'status ' + (connected ? 'connected' : 'disconnected');
+  if (enablePskr) pskrStatusEl.classList.remove('hidden');
+  if (connected && spotCount != null) showLogToast(`FreeDV: ${spotCount} spots (polling every 5 min)`, { duration: 4000 });
+  if (error) showLogToast(error, { warn: true, duration: 5000 });
 });
 
 // --- Settings footer links ---

@@ -775,7 +775,17 @@ function connectPskr() {
   });
 
   pskr.on('status', (s) => {
-    sendPskrStatus(s);
+    sendPskrStatus({ ...s, spotCount: pskrSpots.length });
+  });
+
+  pskr.on('log', (msg) => {
+    sendCatLog(`[FreeDV] ${msg}`);
+  });
+
+  pskr.on('error', (msg) => {
+    console.error(msg);
+    sendCatLog(`[FreeDV] ${msg}`);
+    sendPskrStatus({ connected: false, error: msg });
   });
 
   pskr.connect();
@@ -1641,6 +1651,13 @@ function createWindow() {
 
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
+  // F12 opens DevTools
+  win.webContents.on('before-input-event', (_e, input) => {
+    if (input.key === 'F12' && input.type === 'keyDown') {
+      win.webContents.toggleDevTools();
+    }
+  });
+
   // Once the renderer is actually ready to listen, send current state
   win.webContents.on('did-finish-load', () => {
     if (cat) {
@@ -1655,6 +1672,9 @@ function createWindow() {
     }
     if (wsjtx) {
       sendWsjtxStatus({ connected: wsjtx.connected, listening: true });
+    }
+    if (pskr) {
+      sendPskrStatus({ connected: pskr.connected });
     }
     refreshSpots();
     fetchSolarData();
