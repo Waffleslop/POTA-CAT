@@ -3828,22 +3828,36 @@ window.api.onSpotsError((msg) => {
 });
 
 let catConnected = false; // track CAT state for WSJT-X tune decisions
+let catDisconnectTimer = null; // grace period before showing red pill
 
 window.api.onCatStatus(({ connected, error, wsjtxMode }) => {
   catConnected = connected;
   if (wsjtxMode) {
+    if (catDisconnectTimer) { clearTimeout(catDisconnectTimer); catDisconnectTimer = null; }
     catStatusEl.textContent = 'CAT';
     catStatusEl.className = 'status connected';
     catStatusEl.title = 'Radio controlled by WSJT-X';
     return;
   }
-  catStatusEl.textContent = 'CAT';
-  catStatusEl.className = 'status ' + (connected ? 'connected' : 'disconnected');
-  catStatusEl.title = connected
-    ? (activeRigName ? `Connected to ${activeRigName}` : 'Connected')
-    : (error || 'Disconnected');
-  if (!connected && error) {
-    showLogToast(`CAT: ${error}`, { warn: true, sticky: true });
+  if (connected) {
+    // Reconnected — cancel any pending disconnect display
+    if (catDisconnectTimer) { clearTimeout(catDisconnectTimer); catDisconnectTimer = null; }
+    catStatusEl.textContent = 'CAT';
+    catStatusEl.className = 'status connected';
+    catStatusEl.title = activeRigName ? `Connected to ${activeRigName}` : 'Connected';
+  } else {
+    // Grace period: delay showing red so transient reconnects don't flash
+    if (!catDisconnectTimer) {
+      catDisconnectTimer = setTimeout(() => {
+        catDisconnectTimer = null;
+        catStatusEl.textContent = 'CAT';
+        catStatusEl.className = 'status disconnected';
+        catStatusEl.title = error || 'Disconnected';
+        if (error) {
+          showLogToast(`CAT: ${error}`, { warn: true, sticky: true });
+        }
+      }, 3000);
+    }
   }
 });
 
