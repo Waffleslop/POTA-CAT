@@ -23,7 +23,8 @@
       "assets/icon.png",
       "assets/cty.dat",
       "node_modules/leaflet/**/*",
-      "node_modules/sql.js/**/*"
+      "node_modules/sql.js/**/*",
+      "node_modules/ws/**/*"
     ],
     "win": {
       "target": [
