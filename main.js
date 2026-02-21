@@ -1627,29 +1627,26 @@ function sendDxkeeperTcp(qsoData, host, port) {
 }
 
 // --- App lifecycle ---
-function createWindow() {
-  // Restore saved window bounds (with display sanity check)
-  let windowOpts = { width: 1100, height: 700 };
-  const saved = settings.windowBounds;
-  if (saved && saved.width > 200 && saved.height > 150) {
-    // Verify saved position is on a visible display
-    const displays = screen.getAllDisplays();
-    const onScreen = displays.some(d => {
-      const b = d.bounds;
-      return saved.x < b.x + b.width && saved.x + saved.width > b.x &&
-             saved.y < b.y + b.height && saved.y + saved.height > b.y;
-    });
-    if (onScreen) {
-      windowOpts = { x: saved.x, y: saved.y, width: saved.width, height: saved.height };
-    }
-  }
+function isOnScreen(saved) {
+  const displays = screen.getAllDisplays();
+  return displays.some(d => {
+    const b = d.bounds;
+    return saved.x < b.x + b.width && saved.x + saved.width > b.x &&
+           saved.y < b.y + b.height && saved.y + saved.height > b.y;
+  });
+}
 
+function createWindow() {
+  // Create window at default size first, then restore bounds via setBounds()
+  // so Electron resolves DPI scaling for the correct display
   const isMac = process.platform === 'darwin';
   win = new BrowserWindow({
-    ...windowOpts,
+    width: 1100,
+    height: 700,
     title: 'POTACAT',
     ...(isMac ? { titleBarStyle: 'hiddenInset' } : { frame: false }),
     icon: path.join(__dirname, 'assets', 'icon.png'),
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -1657,10 +1654,17 @@ function createWindow() {
     },
   });
 
-  // Restore maximized state after window is ready
+  // Restore saved window bounds after creation (DPI-aware)
+  const saved = settings.windowBounds;
+  if (saved && saved.width > 200 && saved.height > 150 && isOnScreen(saved)) {
+    win.setBounds(saved);
+  }
+
   if (settings.windowMaximized) {
     win.maximize();
   }
+
+  win.show();
 
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
@@ -2082,24 +2086,12 @@ app.whenReady().then(() => {
       return;
     }
 
-    let windowOpts = { width: 800, height: 600 };
-    const saved = settings.mapPopoutBounds;
-    if (saved && saved.width > 200 && saved.height > 150) {
-      const displays = screen.getAllDisplays();
-      const onScreen = displays.some(d => {
-        const b = d.bounds;
-        return saved.x < b.x + b.width && saved.x + saved.width > b.x &&
-               saved.y < b.y + b.height && saved.y + saved.height > b.y;
-      });
-      if (onScreen) {
-        windowOpts = { x: saved.x, y: saved.y, width: saved.width, height: saved.height };
-      }
-    }
-
     const isMac = process.platform === 'darwin';
     popoutWin = new BrowserWindow({
-      ...windowOpts,
+      width: 800,
+      height: 600,
       title: 'POTACAT Map',
+      show: false,
       ...(isMac ? { titleBarStyle: 'hiddenInset' } : { frame: false }),
       icon: path.join(__dirname, 'assets', 'icon.png'),
       webPreferences: {
@@ -2108,6 +2100,13 @@ app.whenReady().then(() => {
         nodeIntegration: false,
       },
     });
+
+    // Restore saved bounds after creation (DPI-aware)
+    const saved = settings.mapPopoutBounds;
+    if (saved && saved.width > 200 && saved.height > 150 && isOnScreen(saved)) {
+      popoutWin.setBounds(saved);
+    }
+    popoutWin.show();
 
     popoutWin.setMenuBarVisibility(false);
     popoutWin.loadFile(path.join(__dirname, 'renderer', 'map-popout.html'));
