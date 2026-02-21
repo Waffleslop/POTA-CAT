@@ -370,10 +370,38 @@ button:hover {
   font-weight: bold;
 }
 
+.update-action-btn {
+  background: #4ecca3;
+  color: #1a1a2e;
+  border: none;
+  border-radius: 3px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.update-action-btn:hover {
+  background: #6ee6bd;
+}
+
+.update-action-btn:disabled {
+  background: #3a9a7a;
+  cursor: default;
+}
+
+.update-action-btn.hidden {
+  display: none;
+}
+
 #update-link {
   color: var(--accent-blue);
   text-decoration: none;
   cursor: pointer;
+}
+
+#update-link.hidden {
+  display: none;
 }
 
 #update-link:hover {
@@ -472,14 +500,16 @@ main {
 
 table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   table-layout: fixed;
 }
 
 thead th {
   background: var(--bg-secondary);
-  position: sticky;
-  top: 0;
+  position: relative;
+  z-index: 2;
+  will-change: transform;
   padding: 8px 10px;
   text-align: left;
   font-size: 12px;
@@ -945,6 +975,56 @@ dialog input, dialog select {
   max-width: 180px;
 }
 
+/* Settings connection status bar */
+.settings-conn-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.conn-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.conn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e94560;
+}
+
+.conn-pill.connected .conn-dot {
+  background: #4ecca3;
+}
+
+/* Collapsible fieldset sections */
+.collapsible-legend {
+  cursor: pointer;
+  user-select: none;
+}
+
+.collapse-arrow {
+  font-size: 10px;
+  display: inline-block;
+  transition: transform 0.15s;
+}
+
+.collapsible.collapsed .collapse-arrow {
+  transform: rotate(-90deg);
+}
+
+.collapsible.collapsed > div {
+  display: none;
+}
+
 /* Settings source toggles */
 .source-toggles {
   border: 1px solid var(--border-secondary);
@@ -1250,9 +1330,18 @@ dialog input, dialog select {
   margin-bottom: 8px;
 }
 
-.welcome-telemetry {
-  margin-top: 4px;
-  font-size: 12px;
+
+
+.welcome-radio-section {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.welcome-radio-section a {
+  color: var(--accent-blue);
 }
 
 .welcome-import-section {

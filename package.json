@@ -1,6 +1,6 @@
 {
   "name": "potacat",
-  "version": "0.9.8",
+  "version": "0.9.9",
   "description": "POTA activator lookup with FlexRadio CAT control",
   "main": "main.js",
   "scripts": {
@@ -55,7 +55,12 @@
           "**/*"
         ]
       }
-    ]
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "Waffleslop",
+      "repo": "POTA-CAT"
+    }
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -63,6 +68,7 @@
     "sharp": "^0.34.5"
   },
   "dependencies": {
+    "electron-updater": "^6.8.3",
     "leaflet": "^1.9.4",
     "serialport": "^13.0.0",
     "sql.js": "^1.14.0"

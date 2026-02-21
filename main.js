@@ -24,6 +24,7 @@ const { fetchSpots: fetchWwffSpots } = require('./lib/wwff');
 const { fetchSpots: fetchLlotaSpots } = require('./lib/llota');
 const { postWwffRespot } = require('./lib/wwff-respot');
 const { QrzClient } = require('./lib/qrz');
+const { autoUpdater } = require('electron-updater');
 
 // --- QRZ.com callsign lookup ---
 let qrz = new QrzClient();
@@ -776,12 +777,17 @@ function connectPskr() {
   });
 
   pskr.on('status', (s) => {
-    sendPskrStatus({ ...s, spotCount: pskrSpots.length });
+    sendPskrStatus({ ...s, spotCount: pskrSpots.length, nextPollAt: pskr.nextPollAt });
     // Flush spots immediately on connect (don't wait for 2s throttle)
     if (s.connected && pskrSpots.length > 0) {
       if (pskrFlushTimer) { clearTimeout(pskrFlushTimer); pskrFlushTimer = null; }
       sendMergedSpots();
     }
+  });
+
+  pskr.on('pollDone', () => {
+    // Lightweight update — sends nextPollAt + spotCount without triggering the toast
+    sendPskrStatus({ connected: pskr.connected, nextPollAt: pskr.nextPollAt, spotCount: pskrSpots.length, pollUpdate: true });
   });
 
   pskr.on('log', (msg) => {
@@ -1747,8 +1753,39 @@ function fetchExpeditions() {
   req.on('error', () => { /* silently ignore */ });
 }
 
-// --- Update check ---
-function checkForUpdates() {
+// --- Update check (electron-updater for installed, manual fallback for portable) ---
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = false;
+
+autoUpdater.on('update-available', (info) => {
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('update-available', {
+      version: info.version,
+      releaseName: info.releaseName || '',
+      releaseNotes: info.releaseNotes || '',
+    });
+  }
+});
+
+autoUpdater.on('download-progress', (progress) => {
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('update-download-progress', { percent: Math.round(progress.percent) });
+  }
+});
+
+autoUpdater.on('update-downloaded', () => {
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('update-downloaded');
+  }
+});
+
+autoUpdater.on('error', () => { /* silently ignore update errors */ });
+
+ipcMain.on('start-download', () => { autoUpdater.downloadUpdate(); });
+ipcMain.on('install-update', () => { autoUpdater.quitAndInstall(); });
+
+// Fallback for portable builds where electron-updater is inactive
+function checkForUpdatesManual() {
   const https = require('https');
   const currentVersion = require('./package.json').version;
   const options = {
@@ -1786,6 +1823,23 @@ function isNewerVersion(current, latest) {
     if (bv < av) return false;
   }
   return false;
+}
+
+function checkForUpdates() {
+  if (autoUpdater.isUpdaterActive()) {
+    // Installed build — use electron-updater
+    autoUpdater.checkForUpdates().catch(() => {});
+    // Also tell renderer that auto-update is available
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('updater-active', true);
+    }
+  } else {
+    // Portable build — fall back to manual GitHub API check
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('updater-active', false);
+    }
+    checkForUpdatesManual();
+  }
 }
 
 // --- Anonymous telemetry (opt-in only) ---
@@ -2011,7 +2065,9 @@ app.whenReady().then(() => {
   solarTimer = setInterval(fetchSolarData, 600000);
 
   // Check for updates (after a short delay so the window is ready)
-  setTimeout(checkForUpdates, 5000);
+  if (!settings.disableAutoUpdate) {
+    setTimeout(checkForUpdates, 5000);
+  }
 
   // Send telemetry ping on launch (opt-in only, after short delay)
   setTimeout(() => sendTelemetry(0), 8000);
@@ -2107,28 +2163,35 @@ app.whenReady().then(() => {
     const adifLogPathChanged = newSettings.adifLogPath !== settings.adifLogPath;
     const potaParksPathChanged = newSettings.potaParksPath !== settings.potaParksPath;
 
-    const clusterChanged = newSettings.enableCluster !== settings.enableCluster ||
-      newSettings.myCallsign !== settings.myCallsign ||
-      newSettings.clusterHost !== settings.clusterHost ||
-      newSettings.clusterPort !== settings.clusterPort;
+    // Only detect changes for keys that are actually present in the incoming save
+    const has = (k) => k in newSettings;
 
-    const rbnChanged = newSettings.enableRbn !== settings.enableRbn ||
-      newSettings.myCallsign !== settings.myCallsign ||
-      newSettings.watchlist !== settings.watchlist;
+    const clusterChanged = (has('enableCluster') && newSettings.enableCluster !== settings.enableCluster) ||
+      (has('myCallsign') && newSettings.myCallsign !== settings.myCallsign) ||
+      (has('clusterHost') && newSettings.clusterHost !== settings.clusterHost) ||
+      (has('clusterPort') && newSettings.clusterPort !== settings.clusterPort);
 
-    const smartSdrChanged = newSettings.smartSdrSpots !== settings.smartSdrSpots ||
-      newSettings.smartSdrHost !== settings.smartSdrHost;
+    const rbnChanged = (has('enableRbn') && newSettings.enableRbn !== settings.enableRbn) ||
+      (has('myCallsign') && newSettings.myCallsign !== settings.myCallsign) ||
+      (has('watchlist') && newSettings.watchlist !== settings.watchlist);
 
-    const wsjtxChanged = newSettings.enableWsjtx !== settings.enableWsjtx ||
-      newSettings.wsjtxPort !== settings.wsjtxPort;
+    const smartSdrChanged = (has('smartSdrSpots') && newSettings.smartSdrSpots !== settings.smartSdrSpots) ||
+      (has('smartSdrHost') && newSettings.smartSdrHost !== settings.smartSdrHost);
 
-    const pskrChanged = newSettings.enablePskr !== settings.enablePskr;
+    const wsjtxChanged = (has('enableWsjtx') && newSettings.enableWsjtx !== settings.enableWsjtx) ||
+      (has('wsjtxPort') && newSettings.wsjtxPort !== settings.wsjtxPort);
+
+    const pskrChanged = has('enablePskr') && newSettings.enablePskr !== settings.enablePskr;
+
+    const isPartialSave = !has('enablePota'); // hotkey saves only send 1-2 keys
 
     settings = { ...settings, ...newSettings };
     saveSettings(settings);
-    // Only reconnect CAT if WSJT-X is not managing the radio
-    if (!settings.enableWsjtx) connectCat();
-    refreshSpots();
+    // Only reconnect CAT / refresh spots for full settings saves
+    if (!isPartialSave) {
+      if (!settings.enableWsjtx) connectCat();
+      refreshSpots();
+    }
 
     // Reconnect cluster if settings changed
     if (clusterChanged) {

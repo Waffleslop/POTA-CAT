@@ -94,7 +94,6 @@ const tbody = document.getElementById('spots-body');
 const noSpots = document.getElementById('no-spots');
 const catStatusEl = document.getElementById('cat-status');
 const spotCountEl = document.getElementById('spot-count');
-const lastRefreshEl = document.getElementById('last-refresh');
 const spotsDropdown = document.getElementById('spots-dropdown');
 const spotsBtn = document.getElementById('spots-btn');
 const spotsPota = document.getElementById('spots-pota');
@@ -197,14 +196,19 @@ const setWsjtxAutoLog = document.getElementById('set-wsjtx-auto-log');
 const wsjtxStatusEl = document.getElementById('wsjtx-status');
 const setEnablePskr = document.getElementById('set-enable-pskr');
 const pskrConfig = document.getElementById('pskr-config');
-const pskrStatusEl = document.getElementById('pskr-status');
 const setMyCallsign = document.getElementById('set-my-callsign');
 const setClusterHost = document.getElementById('set-cluster-host');
 const setClusterPort = document.getElementById('set-cluster-port');
 const clusterConfig = document.getElementById('cluster-config');
 const rbnConfig = document.getElementById('rbn-config');
-const clusterStatusEl = document.getElementById('cluster-status');
-const rbnStatusEl = document.getElementById('rbn-status');
+// Settings connection pills
+const connBar = document.getElementById('settings-conn-status');
+const connCluster = document.getElementById('conn-cluster');
+const connRbn = document.getElementById('conn-rbn');
+const connPskr = document.getElementById('conn-pskr');
+let clusterConnected = false;
+let rbnConnected = false;
+let pskrConnected = false;
 const viewRbnBtn = document.getElementById('view-rbn-btn');
 const rbnView = document.getElementById('rbn-view');
 const rbnCountEl = document.getElementById('rbn-count');
@@ -257,6 +261,7 @@ const logbookPortConfig = document.getElementById('logbook-port-config');
 const setLogbookHost = document.getElementById('set-logbook-host');
 const setLogbookPort = document.getElementById('set-logbook-port');
 const logbookHelp = document.getElementById('logbook-help');
+const setDisableAutoUpdate = document.getElementById('set-disable-auto-update');
 const setEnableTelemetry = document.getElementById('set-enable-telemetry');
 const setLightMode = document.getElementById('set-light-mode');
 setLightMode.addEventListener('change', () => applyTheme(setLightMode.checked));
@@ -467,9 +472,6 @@ async function loadPrefs() {
   activeRigName = activeRig ? activeRig.name : '';
   enableWsjtx = settings.enableWsjtx === true;
   updateWsjtxStatusVisibility();
-  updateClusterStatusVisibility();
-  updateRbnStatusVisibility();
-  updatePskrStatusVisibility();
   updateRbnButton();
   updateDxccButton();
   // maxAgeMin: prefer localStorage (last-used filter) over settings.json
@@ -1000,28 +1002,19 @@ function updateDxccButton() {
   }
 }
 
-function updateClusterStatusVisibility() {
-  if (enableCluster) {
-    clusterStatusEl.classList.remove('hidden');
-  } else {
-    clusterStatusEl.classList.add('hidden');
-  }
-}
-
 function updateWsjtxStatusVisibility() {
   wsjtxStatusEl.classList.toggle('hidden', !enableWsjtx);
 }
 
-function updateRbnStatusVisibility() {
-  if (enableRbn) {
-    rbnStatusEl.classList.remove('hidden');
-  } else {
-    rbnStatusEl.classList.add('hidden');
-  }
-}
-
-function updatePskrStatusVisibility() {
-  pskrStatusEl.classList.toggle('hidden', !enablePskr);
+function updateSettingsConnBar() {
+  const anyVisible = enableCluster || enableRbn || enablePskr;
+  connBar.classList.toggle('hidden', !anyVisible);
+  connCluster.classList.toggle('hidden', !enableCluster);
+  connCluster.classList.toggle('connected', clusterConnected);
+  connRbn.classList.toggle('hidden', !enableRbn);
+  connRbn.classList.toggle('connected', rbnConnected);
+  connPskr.classList.toggle('hidden', !enablePskr);
+  connPskr.classList.toggle('connected', pskrConnected);
 }
 
 function updateRbnButton() {
@@ -1990,18 +1983,29 @@ function showTuneArc(lat, lon, freq, source) {
   clearTuneArc();
   tuneArcFreq = freq || null;
   const color = tuneArcColor(source);
-  const arcPoints = greatCircleArc(mainHomePos.lat, mainHomePos.lon, lat, lon, 50);
-  for (const offset of [-360, 0, 360]) {
-    const offsetPoints = arcPoints.map(([a, b]) => [a, b + offset]);
-    tuneArcLayers.push(
-      L.polyline(offsetPoints, {
-        color,
-        weight: 2,
-        opacity: 0.7,
-        dashArray: '6 4',
-        interactive: false,
-      }).addTo(map)
-    );
+  const arcPoints = greatCircleArc(mainHomePos.lat, mainHomePos.lon, lat, lon, 200);
+  // Split into segments at longitude discontinuities (antimeridian or polar traversals)
+  const segments = [[arcPoints[0]]];
+  for (let i = 1; i < arcPoints.length; i++) {
+    if (Math.abs(arcPoints[i][1] - arcPoints[i - 1][1]) > 180) {
+      segments.push([]);
+    }
+    segments[segments.length - 1].push(arcPoints[i]);
+  }
+  for (const seg of segments) {
+    if (seg.length < 2) continue;
+    for (const offset of [-360, 0, 360]) {
+      const offsetPoints = seg.map(([a, b]) => [a, b + offset]);
+      tuneArcLayers.push(
+        L.polyline(offsetPoints, {
+          color,
+          weight: 2,
+          opacity: 0.7,
+          dashArray: '6 4',
+          interactive: false,
+        }).addTo(map)
+      );
+    }
   }
 }
 
@@ -2733,7 +2737,12 @@ function render() {
       const callTd = document.createElement('td');
       callTd.className = 'callsign-cell';
       callTd.setAttribute('data-col', 'callsign');
-      if (isWatched) {
+      if (myCallsign && s.callsign.toUpperCase() === myCallsign.toUpperCase()) {
+        const cat = document.createElement('span');
+        cat.textContent = '\uD83D\uDC08\u200D\u2B1B ';
+        cat.className = 'watchlist-star';
+        callTd.appendChild(cat);
+      } else if (isWatched) {
         const star = document.createElement('span');
         star.textContent = '\u2B50 ';
         star.className = 'watchlist-star';
@@ -3255,10 +3264,6 @@ document.querySelector('.spots-dropdown-panel').addEventListener('change', async
   setHideWorkedParks.checked = hideWorkedParks;
   setHideOutOfBand.checked = hideOutOfBand;
 
-  // Update UI visibility for cluster/RBN/FreeDV
-  updateClusterStatusVisibility();
-  updateRbnStatusVisibility();
-  updatePskrStatusVisibility();
   updateRbnButton();
 
   // Save and let main process handle connect/disconnect
@@ -3370,12 +3375,15 @@ settingsBtn.addEventListener('click', async () => {
   setSmartSdrPskr.checked = s.smartSdrPskr !== false;
   setSmartSdrMaxAge.value = s.smartSdrMaxAge != null ? s.smartSdrMaxAge : 15;
   smartSdrConfig.classList.toggle('hidden', !s.smartSdrSpots);
+  setDisableAutoUpdate.checked = s.disableAutoUpdate === true;
   setEnableTelemetry.checked = s.enableTelemetry === true;
   setLightMode.checked = s.lightMode === true;
   hamlibTestResult.textContent = '';
   hamlibTestResult.className = '';
   renderRigList(s.rigs || [], s.activeRigId || null);
   closeRigEditor();
+  // Update connection status pills
+  updateSettingsConnBar();
   settingsDialog.showModal();
 });
 
@@ -3442,6 +3450,7 @@ settingsSave.addEventListener('click', async () => {
   const rotorPortVal = parseInt(setRotorPort.value, 10) || 12040;
   const enableSplitEnabled = setEnableSplit.checked;
   const verboseLogEnabled = setVerboseLog.checked;
+  const disableAutoUpdate = setDisableAutoUpdate.checked;
   const telemetryEnabled = setEnableTelemetry.checked;
   const lightModeEnabled = setLightMode.checked;
   const smartSdrSpotsEnabled = setSmartSdrSpots.checked;
@@ -3530,6 +3539,7 @@ settingsSave.addEventListener('click', async () => {
     logbookType: logbookTypeVal,
     logbookHost: logbookHostVal,
     logbookPort: logbookPortVal,
+    disableAutoUpdate: disableAutoUpdate,
     enableTelemetry: telemetryEnabled,
     lightMode: lightModeEnabled,
     smartSdrSpots: smartSdrSpotsEnabled,
@@ -3556,9 +3566,6 @@ settingsSave.addEventListener('click', async () => {
   enablePskr = pskrEnabled;
   enableWsjtx = wsjtxEnabled;
   updateWsjtxStatusVisibility();
-  updateClusterStatusVisibility();
-  updateRbnStatusVisibility();
-  updatePskrStatusVisibility();
   updateRbnButton();
   enableSolar = solarEnabled;
   updateSolarVisibility();
@@ -3608,16 +3615,14 @@ settingsSave.addEventListener('click', async () => {
 window.api.onSpots((spots) => {
   if (scanning) {
     pendingSpots = spots;
-    lastRefreshEl.textContent = `Updated ${new Date().toISOString().slice(11, 19)}z`;
     return;
   }
   allSpots = spots;
-  lastRefreshEl.textContent = `Updated ${new Date().toISOString().slice(11, 19)}z`;
   render();
 });
 
 window.api.onSpotsError((msg) => {
-  lastRefreshEl.textContent = `Error: ${msg}`;
+  console.warn('Spots error:', msg);
 });
 
 let catConnected = false; // track CAT state for WSJT-X tune decisions
@@ -3641,28 +3646,68 @@ window.api.onCatStatus(({ connected, error, wsjtxMode }) => {
 });
 
 // --- Update available listener ---
-window.api.onUpdateAvailable(({ version, url, headline }) => {
+let updaterActive = false;
+
+window.api.onUpdaterActive((active) => { updaterActive = active; });
+
+window.api.onUpdateAvailable((data) => {
   const banner = document.getElementById('update-banner');
   const message = document.getElementById('update-message');
+  const actionBtn = document.getElementById('update-action-btn');
   const updateLink = document.getElementById('update-link');
   const supportLink = document.getElementById('support-link');
   const dismissBtn = document.getElementById('update-dismiss');
 
+  const version = data.version;
+  const headline = data.releaseName || data.headline || '';
   message.textContent = headline
     ? `v${version}: ${headline}`
     : `POTACAT v${version} is available!`;
-  updateLink.addEventListener('click', (e) => {
-    e.preventDefault();
-    window.api.openExternal(url);
-  });
-  supportLink.addEventListener('click', (e) => {
+
+  if (updaterActive && !data.url) {
+    // Installed build — show Upgrade button
+    actionBtn.textContent = 'Upgrade';
+    actionBtn.disabled = false;
+    actionBtn.classList.remove('hidden');
+    updateLink.classList.add('hidden');
+    actionBtn.onclick = () => {
+      actionBtn.textContent = 'Downloading... 0%';
+      actionBtn.disabled = true;
+      window.api.startDownload();
+    };
+  } else {
+    // Portable build — show Download link
+    actionBtn.classList.add('hidden');
+    updateLink.classList.remove('hidden');
+    const url = data.url || `https://github.com/Waffleslop/POTA-CAT/releases/latest`;
+    updateLink.onclick = (e) => {
+      e.preventDefault();
+      window.api.openExternal(url);
+    };
+  }
+
+  supportLink.onclick = (e) => {
     e.preventDefault();
     window.api.openExternal('https://buymeacoffee.com/potacat');
-  });
-  dismissBtn.addEventListener('click', () => {
+  };
+  dismissBtn.onclick = () => {
     banner.classList.add('hidden');
-  });
+  };
   banner.classList.remove('hidden');
+});
+
+window.api.onDownloadProgress(({ percent }) => {
+  const actionBtn = document.getElementById('update-action-btn');
+  actionBtn.textContent = `Downloading... ${percent}%`;
+});
+
+window.api.onUpdateDownloaded(() => {
+  const actionBtn = document.getElementById('update-action-btn');
+  actionBtn.textContent = 'Restart to Upgrade';
+  actionBtn.disabled = false;
+  actionBtn.onclick = () => {
+    window.api.installUpdate();
+  };
 });
 
 // --- Worked callsigns listener ---
@@ -3764,9 +3809,7 @@ window.api.onDxccData((data) => {
 
 // --- Cluster status listener ---
 window.api.onClusterStatus(({ connected }) => {
-  clusterStatusEl.textContent = 'Cluster';
-  clusterStatusEl.className = 'status ' + (connected ? 'connected' : 'disconnected');
-  if (enableCluster) clusterStatusEl.classList.remove('hidden');
+  clusterConnected = connected;
 });
 
 // --- WSJT-X listeners ---
@@ -4253,19 +4296,41 @@ window.api.onRbnSpots((spots) => {
 });
 
 window.api.onRbnStatus(({ connected }) => {
-  rbnStatusEl.textContent = 'RBN';
-  rbnStatusEl.className = 'status ' + (connected ? 'connected' : 'disconnected');
-  if (enableRbn) rbnStatusEl.classList.remove('hidden');
+  rbnConnected = connected;
 });
 
 // --- PSKReporter status listener ---
-window.api.onPskrStatus(({ connected, error, spotCount }) => {
-  pskrStatusEl.textContent = 'FreeDV';
-  pskrStatusEl.className = 'status ' + (connected ? 'connected' : 'disconnected');
-  if (enablePskr) pskrStatusEl.classList.remove('hidden');
-  if (connected && spotCount != null) showLogToast(`FreeDV: ${spotCount} spots (polling every 5 min)`, { duration: 4000 });
-  if (error) showLogToast(error, { warn: true, duration: 5000 });
+let pskrNextPollAt = null;
+window.api.onPskrStatus(({ connected, error, spotCount, nextPollAt, pollUpdate }) => {
+  pskrConnected = connected;
+  if (nextPollAt) pskrNextPollAt = nextPollAt;
+  if (!pollUpdate) {
+    if (connected && spotCount != null) showLogToast(`FreeDV: ${spotCount} spots (polling every 5 min)`, { duration: 4000 });
+    if (error) showLogToast(error, { warn: true, duration: 5000 });
+  }
 });
+
+// FreeDV tooltip — show countdown to next poll on hover
+(function setupPskrTooltip() {
+  const label = spotsPskr.closest('label');
+  if (!label) return;
+  let tipTimer = null;
+  const updateTip = () => {
+    if (!pskrNextPollAt) { label.title = 'FreeDV spots from PSKReporter'; return; }
+    const secsLeft = Math.max(0, Math.round((pskrNextPollAt - Date.now()) / 1000));
+    if (secsLeft === 0) { label.title = 'Updating now\u2026'; return; }
+    const m = Math.floor(secsLeft / 60);
+    const s = secsLeft % 60;
+    label.title = `Next update in ${m}m ${String(s).padStart(2, '0')}s`;
+  };
+  label.addEventListener('mouseenter', () => {
+    updateTip();
+    tipTimer = setInterval(updateTip, 1000);
+  });
+  label.addEventListener('mouseleave', () => {
+    if (tipTimer) { clearInterval(tipTimer); tipTimer = null; }
+  });
+})();
 
 // --- Settings footer links ---
 document.getElementById('bio-link').addEventListener('click', (e) => {
@@ -4296,6 +4361,18 @@ document.getElementById('hamlib-link').addEventListener('click', (e) => {
   window.api.openExternal('https://hamlib.github.io/');
 });
 
+// --- Collapsible settings sections ---
+document.querySelectorAll('.collapsible-legend').forEach(legend => {
+  const fieldset = legend.closest('fieldset');
+  const key = 'potacat-collapse-' + legend.dataset.target;
+  // Restore collapsed state
+  if (localStorage.getItem(key) === '1') fieldset.classList.add('collapsed');
+  legend.addEventListener('click', () => {
+    fieldset.classList.toggle('collapsed');
+    localStorage.setItem(key, fieldset.classList.contains('collapsed') ? '1' : '0');
+  });
+});
+
 // --- Hotkeys dialog ---
 document.getElementById('hotkeys-dialog-close').addEventListener('click', () => {
   document.getElementById('hotkeys-dialog').close();
@@ -4323,17 +4400,176 @@ const welcomeDialog = document.getElementById('welcome-dialog');
 const welcomeGridInput = document.getElementById('welcome-grid');
 const welcomeLightMode = document.getElementById('welcome-light-mode');
 const welcomeCallsignInput = document.getElementById('welcome-callsign');
-const welcomeWatchlistInput = document.getElementById('welcome-watchlist');
 
 welcomeLightMode.addEventListener('change', () => applyTheme(welcomeLightMode.checked));
 
-// Pre-fill watchlist with callsign as user types
-welcomeCallsignInput.addEventListener('input', () => {
-  const call = welcomeCallsignInput.value.trim().toUpperCase();
-  if (call && !welcomeWatchlistInput.value.trim()) {
-    welcomeWatchlistInput.placeholder = `${call}, K4SWL, KI6NAZ`;
-  } else if (!call) {
-    welcomeWatchlistInput.placeholder = 'K3SBP, K4SWL, KI6NAZ';
+// --- Welcome rig editor ---
+let welcomeRig = null; // rig configured in welcome dialog
+let welcomeHamlibLoaded = false;
+let welcomeSerialcatLoaded = false;
+let welcomeAllRigOptions = [];
+
+function getWelcomeRadioType() {
+  const checked = document.querySelector('input[name="welcome-radio-type"]:checked');
+  return checked ? checked.value : 'flex';
+}
+
+function updateWelcomeRadioSubPanels() {
+  const type = getWelcomeRadioType();
+  document.getElementById('welcome-flex-config').classList.toggle('hidden', type !== 'flex');
+  document.getElementById('welcome-tcpcat-config').classList.toggle('hidden', type !== 'tcpcat');
+  document.getElementById('welcome-serialcat-config').classList.toggle('hidden', type !== 'serialcat');
+  document.getElementById('welcome-hamlib-config').classList.toggle('hidden', type !== 'hamlib');
+  if (type === 'serialcat' && !welcomeSerialcatLoaded) {
+    welcomeSerialcatLoaded = true;
+    loadWelcomeSerialcatPorts();
+  }
+  if (type === 'hamlib' && !welcomeHamlibLoaded) {
+    welcomeHamlibLoaded = true;
+    loadWelcomeHamlibFields();
+  }
+}
+
+async function loadWelcomeSerialcatPorts() {
+  const ports = await window.api.listPorts();
+  const sel = document.getElementById('welcome-serialcat-port');
+  sel.innerHTML = '';
+  for (const p of ports) {
+    const opt = document.createElement('option');
+    opt.value = p.path;
+    opt.textContent = `${p.path} — ${p.friendlyName}`;
+    sel.appendChild(opt);
+  }
+}
+
+async function loadWelcomeHamlibFields() {
+  const rigModel = document.getElementById('welcome-rig-model');
+  const rigPort = document.getElementById('welcome-rig-port');
+  rigModel.innerHTML = '<option value="">Loading rigs...</option>';
+  const rigs = await window.api.listRigs();
+  welcomeAllRigOptions = rigs;
+  rigModel.innerHTML = '';
+  for (const rig of rigs) {
+    const opt = document.createElement('option');
+    opt.value = rig.id;
+    opt.textContent = `${rig.mfg} ${rig.model}`;
+    rigModel.appendChild(opt);
+  }
+  const ports = await window.api.listPorts();
+  rigPort.innerHTML = '';
+  for (const p of ports) {
+    const opt = document.createElement('option');
+    opt.value = p.path;
+    opt.textContent = `${p.path} — ${p.friendlyName}`;
+    rigPort.appendChild(opt);
+  }
+}
+
+function buildWelcomeCatTarget() {
+  const type = getWelcomeRadioType();
+  if (type === 'flex') {
+    return { type: 'tcp', host: '127.0.0.1', port: parseInt(document.getElementById('welcome-flex-slice').value, 10) };
+  } else if (type === 'tcpcat') {
+    return { type: 'tcp', host: document.getElementById('welcome-tcpcat-host').value.trim() || '127.0.0.1', port: parseInt(document.getElementById('welcome-tcpcat-port').value, 10) || 5002 };
+  } else if (type === 'serialcat') {
+    const manual = document.getElementById('welcome-serialcat-port-manual').value.trim();
+    return {
+      type: 'serial',
+      path: manual || document.getElementById('welcome-serialcat-port').value,
+      baudRate: parseInt(document.getElementById('welcome-serialcat-baud').value, 10) || 9600,
+      dtrOff: document.getElementById('welcome-serialcat-dtr-off').checked,
+    };
+  } else if (type === 'hamlib') {
+    const manual = document.getElementById('welcome-rig-port-manual').value.trim();
+    return {
+      type: 'rigctld',
+      rigId: parseInt(document.getElementById('welcome-rig-model').value, 10),
+      serialPort: manual || document.getElementById('welcome-rig-port').value,
+      baudRate: parseInt(document.getElementById('welcome-rig-baud').value, 10),
+      dtrOff: document.getElementById('welcome-rig-dtr-off').checked,
+    };
+  }
+  return null;
+}
+
+function showWelcomeRigItem(rig) {
+  const display = document.getElementById('welcome-rig-display');
+  display.innerHTML = '';
+  const item = document.createElement('div');
+  item.className = 'rig-item active';
+  item.innerHTML = `
+    <div class="rig-item-info">
+      <div class="rig-item-name">${rig.name || 'Unnamed Rig'}</div>
+      <div class="rig-item-desc">${describeRigTarget(rig.catTarget)}</div>
+    </div>
+  `;
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'rig-item-btn rig-delete-btn';
+  removeBtn.textContent = '\u2715';
+  removeBtn.title = 'Remove';
+  removeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    welcomeRig = null;
+    display.innerHTML = '';
+    display.classList.add('hidden');
+    document.getElementById('welcome-rig-add-btn').classList.remove('hidden');
+  });
+  item.appendChild(removeBtn);
+  display.appendChild(item);
+  display.classList.remove('hidden');
+}
+
+document.querySelectorAll('input[name="welcome-radio-type"]').forEach((btn) => {
+  btn.addEventListener('change', () => updateWelcomeRadioSubPanels());
+});
+
+document.getElementById('welcome-rig-add-btn').addEventListener('click', () => {
+  welcomeHamlibLoaded = false;
+  welcomeSerialcatLoaded = false;
+  document.getElementById('welcome-rig-editor').classList.remove('hidden');
+  document.getElementById('welcome-rig-add-btn').classList.add('hidden');
+  document.getElementById('welcome-rig-name').value = '';
+  document.querySelector('input[name="welcome-radio-type"][value="flex"]').checked = true;
+  updateWelcomeRadioSubPanels();
+  document.getElementById('welcome-rig-name').focus();
+});
+
+document.getElementById('welcome-rig-cancel-btn').addEventListener('click', () => {
+  document.getElementById('welcome-rig-editor').classList.add('hidden');
+  document.getElementById('welcome-rig-add-btn').classList.remove('hidden');
+});
+
+document.getElementById('welcome-rig-save-btn').addEventListener('click', () => {
+  const name = document.getElementById('welcome-rig-name').value.trim() || 'My Radio';
+  const catTarget = buildWelcomeCatTarget();
+  welcomeRig = { id: 'rig_' + Date.now(), name, catTarget };
+  showWelcomeRigItem(welcomeRig);
+  document.getElementById('welcome-rig-editor').classList.add('hidden');
+  document.getElementById('welcome-rig-add-btn').classList.add('hidden');
+});
+
+document.getElementById('welcome-radio-help-link').addEventListener('click', (e) => {
+  e.preventDefault();
+  window.api.openExternal('https://potacat.com/radios.html');
+});
+
+document.getElementById('welcome-radio-discord-link').addEventListener('click', (e) => {
+  e.preventDefault();
+  window.api.openExternal('https://discord.gg/JjdKSshej');
+});
+
+// Welcome hamlib rig search filter
+document.getElementById('welcome-rig-search').addEventListener('input', () => {
+  const query = document.getElementById('welcome-rig-search').value.toLowerCase().trim();
+  const sel = document.getElementById('welcome-rig-model');
+  sel.innerHTML = '';
+  const filtered = query ? welcomeAllRigOptions.filter(r => `${r.mfg} ${r.model}`.toLowerCase().includes(query)) : welcomeAllRigOptions;
+  for (const rig of filtered) {
+    const opt = document.createElement('option');
+    opt.value = rig.id;
+    opt.textContent = `${rig.mfg} ${rig.model}`;
+    sel.appendChild(opt);
   }
 });
 
@@ -4385,21 +4621,20 @@ document.getElementById('welcome-start').addEventListener('click', async () => {
   const grid = welcomeGridInput.value.trim() || 'FN20jb';
   const distUnitVal = document.getElementById('welcome-dist-unit').value;
   const licenseClassVal = document.getElementById('welcome-license-class').value;
-  const watchlistVal = welcomeWatchlistInput.value.trim();
+  const hideOobChecked = document.getElementById('welcome-hide-oob').checked;
   const enablePotaVal = document.getElementById('welcome-enable-pota').checked;
   const enableSotaVal = document.getElementById('welcome-enable-sota').checked;
   const enableWwffVal = document.getElementById('welcome-enable-wwff') ? document.getElementById('welcome-enable-wwff').checked : false;
   const enableLlotaVal = document.getElementById('welcome-enable-llota') ? document.getElementById('welcome-enable-llota').checked : false;
-  const telemetryOptIn = document.getElementById('welcome-telemetry').checked;
   const lightModeEnabled = welcomeLightMode.checked;
   const currentSettings = await window.api.getSettings();
 
-  await window.api.saveSettings({
+  const saveData = {
     myCallsign,
     grid,
     distUnit: distUnitVal,
     licenseClass: licenseClassVal,
-    watchlist: watchlistVal,
+    hideOutOfBand: hideOobChecked,
     firstRun: false,
     lastVersion: currentSettings.appVersion,
     maxAgeMin: 5,
@@ -4408,9 +4643,16 @@ document.getElementById('welcome-start').addEventListener('click', async () => {
     enableSota: enableSotaVal,
     enableWwff: enableWwffVal,
     enableLlota: enableLlotaVal,
-    enableTelemetry: telemetryOptIn,
     lightMode: lightModeEnabled,
-  });
+  };
+
+  // Add rig if configured in welcome
+  if (welcomeRig) {
+    saveData.rigs = [...(currentSettings.rigs || []), welcomeRig];
+    saveData.activeRigId = welcomeRig.id;
+  }
+
+  await window.api.saveSettings(saveData);
 
   welcomeDialog.close();
   // Reload prefs so the main UI reflects welcome choices
@@ -4421,19 +4663,32 @@ async function checkFirstRun(force = false) {
   const s = await window.api.getSettings();
   const isNewVersion = s.appVersion && s.lastVersion !== s.appVersion;
   if (force || s.firstRun || isNewVersion) {
+    // Reset welcome rig state
+    welcomeRig = null;
+    const welcomeRigDisplay = document.getElementById('welcome-rig-display');
+    welcomeRigDisplay.innerHTML = '';
+    welcomeRigDisplay.classList.add('hidden');
+    document.getElementById('welcome-rig-add-btn').classList.remove('hidden');
+    document.getElementById('welcome-rig-editor').classList.add('hidden');
     // Pre-fill with existing settings on upgrade (not fresh install)
     if (force || !s.firstRun) {
       welcomeCallsignInput.value = s.myCallsign || '';
       welcomeGridInput.value = s.grid || '';
-      welcomeWatchlistInput.value = s.watchlist || '';
       if (s.distUnit) document.getElementById('welcome-dist-unit').value = s.distUnit;
       if (s.licenseClass) document.getElementById('welcome-license-class').value = s.licenseClass;
+      document.getElementById('welcome-hide-oob').checked = s.hideOutOfBand === true;
       document.getElementById('welcome-enable-pota').checked = s.enablePota !== false;
       document.getElementById('welcome-enable-sota').checked = s.enableSota === true;
       if (document.getElementById('welcome-enable-wwff')) document.getElementById('welcome-enable-wwff').checked = s.enableWwff === true;
       if (document.getElementById('welcome-enable-llota')) document.getElementById('welcome-enable-llota').checked = s.enableLlota === true;
-      document.getElementById('welcome-telemetry').checked = s.enableTelemetry === true;
       welcomeLightMode.checked = s.lightMode === true;
+      // Show existing active rig if any
+      const rigs = s.rigs || [];
+      const activeRig = rigs.find(r => r.id === s.activeRigId) || rigs[0];
+      if (activeRig) {
+        welcomeRig = activeRig;
+        showWelcomeRigItem(activeRig);
+      }
     }
     welcomeDialog.showModal();
   }
@@ -4445,3 +4700,23 @@ loadPrefs().then(() => {
   checkFirstRun();
 });
 initColumnResizing();
+
+// Sticky table header via JS transform on each th
+// (CSS position:sticky and transform on <thead> are unreliable in Chromium table rendering)
+(function initStickyHeader() {
+  const ths = spotsTable.querySelectorAll('thead th');
+  if (!ths.length) return;
+  let ticking = false;
+  tablePaneEl.addEventListener('scroll', () => {
+    if (!ticking) {
+      ticking = true;
+      requestAnimationFrame(() => {
+        const y = tablePaneEl.scrollTop;
+        for (let i = 0; i < ths.length; i++) {
+          ths[i].style.transform = `translateY(${y}px)`;
+        }
+        ticking = false;
+      });
+    }
+  });
+})();
