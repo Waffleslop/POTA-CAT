@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('api', {
   wsjtxReply: (decode) => ipcRenderer.send('wsjtx-reply', decode),
   wsjtxHaltTx: () => ipcRenderer.send('wsjtx-halt-tx'),
   saveQso: (qsoData) => ipcRenderer.invoke('save-qso', qsoData),
+  quickRespot: (data) => ipcRenderer.invoke('quick-respot', data),
   getRecentQsos: () => ipcRenderer.invoke('get-recent-qsos'),
   getDefaultLogPath: () => ipcRenderer.invoke('get-default-log-path'),
   chooseLogFile: (currentPath) => ipcRenderer.invoke('choose-log-file', currentPath),

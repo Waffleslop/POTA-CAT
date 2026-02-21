@@ -45,7 +45,9 @@ let hideWorkedParks = false;
 let showBearing = false;
 let respotDefault = true; // default: re-spot on POTA after logging
 let respotTemplate = 'Thanks for {rst}. 73s {mycallsign} via POTACAT'; // re-spot comment template
+let quickRespotTemplate = 'Heard strong in {QTH}; 73s {callsign} via POTACAT'; // quick re-spot template
 let myCallsign = '';
+let lastTunedSpot = null; // last clicked/tuned spot for quick respot
 let popoutOpen = false; // pop-out map window is open
 let dxccData = null;  // { entities: [...] } from main process
 let enableWsjtx = false;
@@ -464,6 +466,7 @@ async function loadPrefs() {
   hideWorkedParks = settings.hideWorkedParks === true;
   respotDefault = settings.respotDefault !== false; // default true
   if (settings.respotTemplate != null) respotTemplate = settings.respotTemplate;
+  if (settings.quickRespotTemplate != null) quickRespotTemplate = settings.quickRespotTemplate;
   myCallsign = settings.myCallsign || '';
   tuneClick = settings.tuneClick === true;
   enableSplit = settings.enableSplit === true;
@@ -2198,6 +2201,9 @@ function bindPopupClickHandlers(mapInstance) {
         window.api.tune(btn.dataset.freq, btn.dataset.mode, b ? parseInt(b, 10) : undefined);
         const lat = parseFloat(btn.dataset.lat), lon = parseFloat(btn.dataset.lon);
         if (!isNaN(lat) && !isNaN(lon)) showTuneArc(lat, lon, btn.dataset.freq, btn.dataset.source);
+        // Find matching spot in allSpots for quick respot
+        const match = allSpots.find(s => s.frequency === btn.dataset.freq && s.callsign && s.mode === btn.dataset.mode);
+        if (match) lastTunedSpot = match;
       });
     });
     container.querySelectorAll('.popup-qrz').forEach((link) => {
@@ -2285,6 +2291,7 @@ function scanStep() {
   if (scanIndex >= list.length) scanIndex = 0;
 
   const spot = list[scanIndex];
+  lastTunedSpot = spot;
   window.api.tune(spot.frequency, spot.mode, spot.bearing);
   if (spot.lat != null && spot.lon != null) showTuneArc(spot.lat, spot.lon, spot.frequency, spot.source);
   render();
@@ -2331,6 +2338,119 @@ document.addEventListener('keydown', (e) => {
     showLogToast(enableSplit ? 'Split mode ON' : 'Split mode OFF', { duration: 1500 });
     return;
   }
+  // Ctrl+R / Cmd+R — Quick re-spot
+  if (e.key === 'r' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    openQuickRespot();
+    return;
+  }
+});
+
+// --- Quick Re-spot (Ctrl+R) ---
+async function openQuickRespot() {
+  if (!lastTunedSpot) {
+    showLogToast('No respottable spot selected', { duration: 2000 });
+    return;
+  }
+  const s = lastTunedSpot;
+  const isPota = s.source === 'pota' && s.reference;
+  const isWwff = (s.source === 'wwff' && s.reference) || (s.source === 'pota' && s.wwffReference);
+  const isLlota = s.source === 'llota' && s.reference;
+  if (!isPota && !isWwff && !isLlota) {
+    showLogToast('No respottable spot selected', { duration: 2000 });
+    return;
+  }
+  if (!myCallsign) {
+    showLogToast('Set your callsign in Settings to re-spot', { warn: true, duration: 3000 });
+    return;
+  }
+
+  const dlg = document.getElementById('respot-dialog');
+  const currentSettings = await window.api.getSettings();
+  const grid = currentSettings.grid || '';
+
+  // Populate read-only fields
+  document.getElementById('respot-callsign').textContent = s.callsign;
+  const qrz = qrzData.get(s.callsign.toUpperCase());
+  document.getElementById('respot-name').textContent = qrz ? qrzDisplayName(qrz) : '';
+  document.getElementById('respot-freq').textContent = parseFloat(s.frequency).toFixed(1) + ' kHz';
+
+  // Reference display
+  let refText = '';
+  if (isPota) refText = 'POTA: ' + s.reference + (s.parkName ? ' \u2014 ' + s.parkName : '');
+  else if (s.source === 'wwff') refText = 'WWFF: ' + s.reference + (s.parkName ? ' \u2014 ' + s.parkName : '');
+  else if (isLlota) refText = 'LLOTA: ' + s.reference + (s.parkName ? ' \u2014 ' + s.parkName : '');
+  document.getElementById('respot-ref').textContent = refText;
+
+  // Respot checkboxes
+  const potaCb = document.getElementById('respot-pota-cb');
+  const wwffCb = document.getElementById('respot-wwff-cb');
+  const llotaCb = document.getElementById('respot-llota-cb');
+  potaCb.parentElement.style.display = isPota ? '' : 'none';
+  potaCb.checked = isPota;
+  wwffCb.parentElement.style.display = isWwff ? '' : 'none';
+  wwffCb.checked = isWwff;
+  llotaCb.parentElement.style.display = isLlota ? '' : 'none';
+  llotaCb.checked = isLlota;
+
+  // Comment template
+  const commentField = document.getElementById('respot-comment');
+  commentField.value = quickRespotTemplate
+    .replace(/\{QTH\}/gi, grid)
+    .replace(/\{callsign\}/gi, myCallsign);
+
+  dlg.showModal();
+}
+
+// Quick respot send handler
+document.getElementById('respot-send').addEventListener('click', async () => {
+  const s = lastTunedSpot;
+  if (!s) return;
+
+  const potaCb = document.getElementById('respot-pota-cb');
+  const wwffCb = document.getElementById('respot-wwff-cb');
+  const llotaCb = document.getElementById('respot-llota-cb');
+  const commentText = document.getElementById('respot-comment').value.trim();
+  const dlg = document.getElementById('respot-dialog');
+  const sendBtn = document.getElementById('respot-send');
+
+  // Persist template (store the raw template with placeholders restored)
+  quickRespotTemplate = commentText || quickRespotTemplate;
+  window.api.saveSettings({ quickRespotTemplate });
+
+  const data = {
+    callsign: s.callsign,
+    frequency: s.frequency,
+    mode: s.mode,
+    comment: commentText,
+    potaRespot: potaCb.checked && potaCb.parentElement.style.display !== 'none',
+    potaReference: s.reference || '',
+    wwffRespot: wwffCb.checked && wwffCb.parentElement.style.display !== 'none',
+    wwffReference: s.wwffReference || (s.source === 'wwff' ? s.reference : ''),
+    llotaRespot: llotaCb.checked && llotaCb.parentElement.style.display !== 'none',
+    llotaReference: s.source === 'llota' ? s.reference : '',
+  };
+
+  sendBtn.disabled = true;
+  try {
+    const result = await window.api.quickRespot(data);
+    dlg.close();
+    if (result.error) {
+      showLogToast('Re-spot failed: ' + result.error, { warn: true, duration: 5000 });
+    } else {
+      const sources = [data.potaRespot && 'POTA', data.wwffRespot && 'WWFF', data.llotaRespot && 'LLOTA'].filter(Boolean).join(' & ');
+      showLogToast('Re-spotted ' + s.callsign + ' on ' + sources);
+    }
+  } catch (err) {
+    dlg.close();
+    showLogToast('Re-spot failed: ' + err.message, { warn: true, duration: 5000 });
+  } finally {
+    sendBtn.disabled = false;
+  }
+});
+
+document.getElementById('respot-cancel').addEventListener('click', () => {
+  document.getElementById('respot-dialog').close();
 });
 
 // --- Recent QSOs (F2) ---
@@ -2789,6 +2909,7 @@ function render() {
 
       tr.addEventListener('click', () => {
         if (scanning) stopScan(); // clicking a row stops scan
+        lastTunedSpot = s;
         window.api.tune(s.frequency, s.mode, s.bearing);
         if (s.lat != null && s.lon != null) showTuneArc(s.lat, s.lon, s.frequency, s.source);
       });

@@ -2738,6 +2738,55 @@ app.whenReady().then(() => {
     }
   });
 
+  // Quick re-spot (no QSO logging)
+  ipcMain.handle('quick-respot', async (_e, data) => {
+    try {
+      const errors = [];
+      if (data.potaRespot && data.potaReference && settings.myCallsign) {
+        try {
+          await postPotaRespot({
+            activator: data.callsign,
+            spotter: settings.myCallsign.toUpperCase(),
+            frequency: data.frequency,
+            reference: data.potaReference,
+            mode: data.mode,
+            comments: data.comment || '',
+          });
+          trackRespot('pota');
+        } catch (err) { errors.push('POTA: ' + err.message); }
+      }
+      if (data.wwffRespot && data.wwffReference && settings.myCallsign) {
+        try {
+          await postWwffRespot({
+            activator: data.callsign,
+            spotter: settings.myCallsign.toUpperCase(),
+            frequency: data.frequency,
+            reference: data.wwffReference,
+            mode: data.mode,
+            comments: data.comment || '',
+          });
+          trackRespot('wwff');
+        } catch (err) { errors.push('WWFF: ' + err.message); }
+      }
+      if (data.llotaRespot && data.llotaReference) {
+        try {
+          await postLlotaRespot({
+            activator: data.callsign,
+            frequency: data.frequency,
+            reference: data.llotaReference,
+            mode: data.mode,
+            comments: data.comment || '',
+          });
+          trackRespot('llota');
+        } catch (err) { errors.push('LLOTA: ' + err.message); }
+      }
+      if (errors.length > 0) return { error: errors.join('; ') };
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
   ipcMain.on('connect-cat', (_e, target) => {
     settings.catTarget = target;
     saveSettings(settings);

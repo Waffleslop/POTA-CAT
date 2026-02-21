@@ -1871,6 +1871,24 @@ dialog input, dialog select {
   background: #3db892 !important;
 }
 
+.respot-info {
+  margin: 8px 0;
+}
+.respot-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+.respot-label {
+  color: var(--text-tertiary);
+  min-width: 70px;
+}
+.respot-value {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
 .rst-quick-btn {
   font-size: 11px;
   padding: 2px 6px;
