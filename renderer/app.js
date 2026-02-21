@@ -2286,7 +2286,7 @@ function scanStep() {
 
   const spot = list[scanIndex];
   window.api.tune(spot.frequency, spot.mode, spot.bearing);
-  if (map && spot.lat != null && spot.lon != null) showTuneArc(spot.lat, spot.lon, spot.frequency, spot.source);
+  if (spot.lat != null && spot.lon != null) showTuneArc(spot.lat, spot.lon, spot.frequency, spot.source);
   render();
 
   scanTimer = setTimeout(() => {
@@ -2575,6 +2575,11 @@ window.api.onPopoutMapStatus((open) => {
   }
 });
 
+// Open log dialog when requested from pop-out map
+window.api.onPopoutOpenLog((spot) => {
+  if (enableLogging) openLogPopup(spot);
+});
+
 function enrichSpotsForPopout(filtered) {
   return filtered.map(s => ({
     ...s,
@@ -2785,7 +2790,7 @@ function render() {
       tr.addEventListener('click', () => {
         if (scanning) stopScan(); // clicking a row stops scan
         window.api.tune(s.frequency, s.mode, s.bearing);
-        if (map && s.lat != null && s.lon != null) showTuneArc(s.lat, s.lon, s.frequency, s.source);
+        if (s.lat != null && s.lon != null) showTuneArc(s.lat, s.lon, s.frequency, s.source);
       });
 
       // Log button cell (first column, hidden unless logging enabled)

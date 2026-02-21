@@ -9,7 +9,7 @@ contextBridge.exposeInMainWorld('api', {
   tune: (frequency, mode, bearing) => ipcRenderer.send('tune', { frequency, mode, bearing }),
   openExternal: (url) => ipcRenderer.send('open-external', url),
   getSettings: () => ipcRenderer.invoke('get-settings'),
-  logQso: (qsoData) => ipcRenderer.invoke('save-qso', qsoData),
+  openLogDialog: (spot) => ipcRenderer.send('popout-open-log', spot),
   minimize: () => ipcRenderer.send('popout-minimize'),
   maximize: () => ipcRenderer.send('popout-maximize'),
   close: () => ipcRenderer.send('popout-close'),

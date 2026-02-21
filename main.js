@@ -2171,6 +2171,14 @@ app.whenReady().then(() => {
   });
   ipcMain.on('popout-close', () => { if (popoutWin) popoutWin.close(); });
 
+  // Relay log dialog request from pop-out to main renderer
+  ipcMain.on('popout-open-log', (_e, spot) => {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('popout-open-log', spot);
+      win.focus();
+    }
+  });
+
   // Start spot fetching
   refreshSpots();
   spotTimer = setInterval(refreshSpots, 30000);

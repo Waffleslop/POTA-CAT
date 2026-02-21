@@ -391,18 +391,17 @@ function bindPopupClickHandlers(mapInstance) {
     container.querySelectorAll('.log-popup-btn').forEach((btn) => {
       btn.addEventListener('click', (ev) => {
         ev.stopPropagation();
-        // In pop-out we don't have the full log dialog — use a simple prompt approach
-        // For now, just send a basic QSO via IPC
-        const qsoData = {
+        // Open the log dialog in the main window with spot data pre-filled
+        window.api.openLogDialog({
           callsign: btn.dataset.call,
           frequency: btn.dataset.freq,
           mode: btn.dataset.mode,
-        };
-        if (btn.dataset.ref) qsoData.sigInfo = btn.dataset.ref;
-        if (btn.dataset.source === 'pota') qsoData.sig = 'POTA';
-        if (btn.dataset.source === 'sota') qsoData.sig = 'SOTA';
-        if (btn.dataset.source === 'wwff') qsoData.sig = 'WWFF';
-        window.api.logQso(qsoData);
+          reference: btn.dataset.ref || '',
+          parkName: btn.dataset.name || '',
+          source: btn.dataset.source || '',
+          wwffReference: btn.dataset.wwffRef || '',
+          wwffParkName: btn.dataset.wwffName || '',
+        });
       });
     });
   });

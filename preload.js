@@ -61,4 +61,5 @@ contextBridge.exposeInMainWorld('api', {
   sendPopoutHome: (data) => ipcRenderer.send('popout-map-home', data),
   sendPopoutTheme: (theme) => ipcRenderer.send('popout-map-theme', theme),
   onPopoutMapStatus: (cb) => ipcRenderer.on('popout-map-status', (_e, open) => cb(open)),
+  onPopoutOpenLog: (cb) => ipcRenderer.on('popout-open-log', (_e, spot) => cb(spot)),
 });
