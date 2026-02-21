@@ -53,4 +53,12 @@ contextBridge.exposeInMainWorld('api', {
   minimize: () => ipcRenderer.send('win-minimize'),
   maximize: () => ipcRenderer.send('win-maximize'),
   close: () => ipcRenderer.send('win-close'),
+  // Pop-out map
+  popoutMapOpen: () => ipcRenderer.send('popout-map-open'),
+  popoutMapClose: () => ipcRenderer.send('popout-map-close'),
+  sendPopoutSpots: (data) => ipcRenderer.send('popout-map-spots', data),
+  sendPopoutTuneArc: (data) => ipcRenderer.send('popout-map-tune-arc', data),
+  sendPopoutHome: (data) => ipcRenderer.send('popout-map-home', data),
+  sendPopoutTheme: (theme) => ipcRenderer.send('popout-map-theme', theme),
+  onPopoutMapStatus: (cb) => ipcRenderer.on('popout-map-status', (_e, open) => cb(open)),
 });

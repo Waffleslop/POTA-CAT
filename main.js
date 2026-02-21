@@ -49,6 +49,7 @@ function saveSettings(s) {
 
 let settings = null;
 let win = null;
+let popoutWin = null; // pop-out map window
 let cat = null;
 let spotTimer = null;
 let solarTimer = null;
@@ -1670,6 +1671,11 @@ function createWindow() {
     }
   });
 
+  // Close pop-out map when main window closes
+  win.on('close', () => {
+    if (popoutWin && !popoutWin.isDestroyed()) popoutWin.close();
+  });
+
   // Once the renderer is actually ready to listen, send current state
   win.webContents.on('did-finish-load', () => {
     if (cat) {
@@ -1790,7 +1796,7 @@ function checkForUpdatesManual() {
   const currentVersion = require('./package.json').version;
   const options = {
     hostname: 'api.github.com',
-    path: '/repos/Waffleslop/POTA-CAT/releases/latest',
+    path: '/repos/Waffleslop/POTACAT/releases/latest',
     headers: { 'User-Agent': 'POTACAT/' + currentVersion },
     timeout: 10000,
   };
@@ -1802,7 +1808,7 @@ function checkForUpdatesManual() {
         const data = JSON.parse(body);
         const latestTag = (data.tag_name || '').replace(/^v/, '');
         if (latestTag && isNewerVersion(currentVersion, latestTag)) {
-          const releaseUrl = data.html_url || `https://github.com/Waffleslop/POTA-CAT/releases/tag/${data.tag_name}`;
+          const releaseUrl = data.html_url || `https://github.com/Waffleslop/POTACAT/releases/tag/${data.tag_name}`;
           if (win && !win.isDestroyed()) {
             win.webContents.send('update-available', { version: latestTag, url: releaseUrl, headline: data.name || '' });
           }
@@ -2057,6 +2063,114 @@ app.whenReady().then(() => {
   });
   ipcMain.on('win-close', () => { if (win) win.close(); });
 
+  // --- Pop-out Map Window ---
+  ipcMain.on('popout-map-open', () => {
+    if (popoutWin && !popoutWin.isDestroyed()) {
+      popoutWin.focus();
+      return;
+    }
+
+    let windowOpts = { width: 800, height: 600 };
+    const saved = settings.mapPopoutBounds;
+    if (saved && saved.width > 200 && saved.height > 150) {
+      const displays = screen.getAllDisplays();
+      const onScreen = displays.some(d => {
+        const b = d.bounds;
+        return saved.x < b.x + b.width && saved.x + saved.width > b.x &&
+               saved.y < b.y + b.height && saved.y + saved.height > b.y;
+      });
+      if (onScreen) {
+        windowOpts = { x: saved.x, y: saved.y, width: saved.width, height: saved.height };
+      }
+    }
+
+    const isMac = process.platform === 'darwin';
+    popoutWin = new BrowserWindow({
+      ...windowOpts,
+      title: 'POTACAT Map',
+      ...(isMac ? { titleBarStyle: 'hiddenInset' } : { frame: false }),
+      icon: path.join(__dirname, 'assets', 'icon.png'),
+      webPreferences: {
+        preload: path.join(__dirname, 'preload-popout.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
+
+    popoutWin.setMenuBarVisibility(false);
+    popoutWin.loadFile(path.join(__dirname, 'renderer', 'map-popout.html'));
+
+    popoutWin.on('close', () => {
+      if (popoutWin && !popoutWin.isDestroyed()) {
+        if (!popoutWin.isMaximized() && !popoutWin.isMinimized()) {
+          settings.mapPopoutBounds = popoutWin.getBounds();
+          saveSettings(settings);
+        }
+      }
+    });
+
+    popoutWin.on('closed', () => {
+      popoutWin = null;
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('popout-map-status', false);
+      }
+    });
+
+    popoutWin.webContents.on('did-finish-load', () => {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('popout-map-status', true);
+      }
+    });
+
+    // F12 opens DevTools in pop-out
+    popoutWin.webContents.on('before-input-event', (_e, input) => {
+      if (input.key === 'F12' && input.type === 'keyDown') {
+        popoutWin.webContents.toggleDevTools();
+      }
+    });
+  });
+
+  ipcMain.on('popout-map-close', () => {
+    if (popoutWin && !popoutWin.isDestroyed()) popoutWin.close();
+  });
+
+  // Relay filtered spots from main renderer to pop-out
+  ipcMain.on('popout-map-spots', (_e, data) => {
+    if (popoutWin && !popoutWin.isDestroyed()) {
+      popoutWin.webContents.send('popout-spots', data);
+    }
+  });
+
+  // Relay tune arc from main renderer to pop-out
+  ipcMain.on('popout-map-tune-arc', (_e, data) => {
+    if (popoutWin && !popoutWin.isDestroyed()) {
+      popoutWin.webContents.send('popout-tune-arc', data);
+    }
+  });
+
+  // Relay home position updates to pop-out
+  ipcMain.on('popout-map-home', (_e, data) => {
+    if (popoutWin && !popoutWin.isDestroyed()) {
+      popoutWin.webContents.send('popout-home', data);
+    }
+  });
+
+  // Relay theme changes to pop-out
+  ipcMain.on('popout-map-theme', (_e, theme) => {
+    if (popoutWin && !popoutWin.isDestroyed()) {
+      popoutWin.webContents.send('popout-theme', theme);
+    }
+  });
+
+  // Pop-out window controls
+  ipcMain.on('popout-minimize', () => { if (popoutWin) popoutWin.minimize(); });
+  ipcMain.on('popout-maximize', () => {
+    if (!popoutWin) return;
+    if (popoutWin.isMaximized()) popoutWin.unmaximize();
+    else popoutWin.maximize();
+  });
+  ipcMain.on('popout-close', () => { if (popoutWin) popoutWin.close(); });
+
   // Start spot fetching
   refreshSpots();
   spotTimer = setInterval(refreshSpots, 30000);
@@ -2088,7 +2202,7 @@ app.whenReady().then(() => {
       return;
     }
     // Only allow known URLs
-    if (url.startsWith('https://www.qrz.com/') || url.startsWith('https://caseystanton.com/') || url.startsWith('https://github.com/Waffleslop/POTA-CAT/') || url.startsWith('https://hamlib.github.io/') || url.startsWith('https://github.com/Hamlib/') || url.startsWith('https://discord.gg/') || url.startsWith('https://potacat.com/') || url.startsWith('https://buymeacoffee.com/potacat')) {
+    if (url.startsWith('https://www.qrz.com/') || url.startsWith('https://caseystanton.com/') || url.startsWith('https://github.com/Waffleslop/POTACAT/') || url.startsWith('https://hamlib.github.io/') || url.startsWith('https://github.com/Hamlib/') || url.startsWith('https://discord.gg/') || url.startsWith('https://potacat.com/') || url.startsWith('https://buymeacoffee.com/potacat')) {
       shell.openExternal(url);
     }
   });

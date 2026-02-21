@@ -46,6 +46,7 @@ let showBearing = false;
 let respotDefault = true; // default: re-spot on POTA after logging
 let respotTemplate = 'Thanks for {rst}. 73s {mycallsign} via POTACAT'; // re-spot comment template
 let myCallsign = '';
+let popoutOpen = false; // pop-out map window is open
 let dxccData = null;  // { entities: [...] } from main process
 let enableWsjtx = false;
 let wsjtxDecodes = []; // recent decodes from WSJT-X (FIFO, max 50)
@@ -180,6 +181,7 @@ const mapPaneEl = document.getElementById('map-pane');
 const splitSplitterEl = document.getElementById('split-splitter');
 const viewTableBtn = document.getElementById('view-table-btn');
 const viewMapBtn = document.getElementById('view-map-btn');
+const popoutMapBtn = document.getElementById('popout-map-btn');
 const viewDxccBtn = document.getElementById('view-dxcc-btn');
 const dxccView = document.getElementById('dxcc-view');
 const dxccMatrixBody = document.getElementById('dxcc-matrix-body');
@@ -1979,6 +1981,9 @@ function tuneArcColor(source) {
 }
 
 function showTuneArc(lat, lon, freq, source) {
+  // Forward to pop-out map
+  sendPopoutTuneArc(lat, lon, freq, source);
+
   if (!map || !mainHomePos || lat == null || lon == null) return;
   clearTuneArc();
   tuneArcFreq = freq || null;
@@ -2505,6 +2510,11 @@ viewTableBtn.addEventListener('click', () => {
 });
 
 viewMapBtn.addEventListener('click', () => {
+  // If pop-out map is open, clicking Map focuses the pop-out instead
+  if (popoutOpen) {
+    window.api.popoutMapOpen(); // focuses existing window
+    return;
+  }
   if (currentView === 'rbn' || currentView === 'dxcc') {
     // Switching from exclusive view → map only
     currentView = 'map';
@@ -2531,6 +2541,66 @@ viewMapBtn.addEventListener('click', () => {
 
 viewRbnBtn.addEventListener('click', () => setView('rbn'));
 viewDxccBtn.addEventListener('click', () => setView('dxcc'));
+
+// --- Pop-out map ---
+popoutMapBtn.addEventListener('click', () => {
+  if (popoutOpen) {
+    window.api.popoutMapClose();
+  } else {
+    window.api.popoutMapOpen();
+  }
+});
+
+let _prePopoutShowMap = false; // saved inline map state before pop-out opened
+
+window.api.onPopoutMapStatus((open) => {
+  popoutOpen = open;
+  popoutMapBtn.classList.toggle('popout-active', open);
+  if (open) {
+    // Hide inline map — pop-out replaces it
+    _prePopoutShowMap = showMap;
+    if (showMap) {
+      showMap = false;
+      if (!showTable) { showTable = true; }
+      updateViewLayout();
+    }
+    // Send initial data (small delay for pop-out to finish init)
+    setTimeout(sendPopoutSpots, 300);
+  } else {
+    // Restore inline map if it was showing before
+    if (_prePopoutShowMap) {
+      showMap = true;
+      updateViewLayout();
+    }
+  }
+});
+
+function enrichSpotsForPopout(filtered) {
+  return filtered.map(s => ({
+    ...s,
+    isWorked: workedCallsigns.has(s.callsign.toUpperCase()),
+    isExpedition: expeditionCallsigns.has(s.callsign.toUpperCase()),
+    isNewPark: workedParksSet.size > 0 && (s.source === 'pota' || s.source === 'wwff') && s.reference && !workedParksSet.has(s.reference),
+    isOop: isOutOfPrivilege(parseFloat(s.frequency), s.mode, licenseClass),
+    isWatched: watchlist.has(s.callsign.toUpperCase()),
+    opName: qrzDisplayName(qrzData.get(s.callsign.toUpperCase().split('/')[0])),
+  }));
+}
+
+function sendPopoutSpots() {
+  if (!popoutOpen) return;
+  const filtered = sortSpots(getFiltered());
+  window.api.sendPopoutSpots({
+    spots: enrichSpotsForPopout(filtered),
+    distUnit,
+    enableLogging,
+  });
+}
+
+function sendPopoutTuneArc(lat, lon, freq, source) {
+  if (!popoutOpen) return;
+  window.api.sendPopoutTuneArc({ lat, lon, freq, source });
+}
 
 // --- Split splitter drag ---
 splitSplitterEl.addEventListener('mousedown', (e) => {
@@ -2869,6 +2939,9 @@ function render() {
   if (showMap) {
     updateMapMarkers(filtered);
     renderBandActivity();
+  }
+  if (popoutOpen) {
+    sendPopoutSpots();
   }
 }
 
@@ -3586,6 +3659,7 @@ settingsSave.addEventListener('click', async () => {
   defaultPower = defaultPowerVal;
   updateLoggingVisibility();
   applyTheme(lightModeEnabled);
+  if (popoutOpen) window.api.sendPopoutTheme(lightModeEnabled ? 'light' : 'dark');
   enableDxcc = dxccEnabled;
   licenseClass = licenseClassVal;
   hideOutOfBand = hideOob;
@@ -3609,6 +3683,8 @@ settingsSave.addEventListener('click', async () => {
   // Update home marker if map is initialized
   if (map) updateHomeMarker();
   if (rbnMap) updateRbnHomeMarker();
+  // Update pop-out map home marker
+  if (popoutOpen) window.api.sendPopoutHome({ grid: document.getElementById('set-grid').value });
 });
 
 // --- IPC listeners ---
@@ -3679,7 +3755,7 @@ window.api.onUpdateAvailable((data) => {
     // Portable build — show Download link
     actionBtn.classList.add('hidden');
     updateLink.classList.remove('hidden');
-    const url = data.url || `https://github.com/Waffleslop/POTA-CAT/releases/latest`;
+    const url = data.url || `https://github.com/Waffleslop/POTACAT/releases/latest`;
     updateLink.onclick = (e) => {
       e.preventDefault();
       window.api.openExternal(url);
@@ -4354,7 +4430,7 @@ document.getElementById('welcome-coffee-btn').addEventListener('click', () => {
 });
 document.getElementById('issues-link').addEventListener('click', (e) => {
   e.preventDefault();
-  window.api.openExternal('https://github.com/Waffleslop/POTA-CAT/issues');
+  window.api.openExternal('https://github.com/Waffleslop/POTACAT/issues');
 });
 document.getElementById('hamlib-link').addEventListener('click', (e) => {
   e.preventDefault();

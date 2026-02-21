@@ -2,7 +2,7 @@
 
 ## Standard Install
 
-1. Download `POTACAT Setup x.x.x.exe` from [GitHub Releases](https://github.com/Waffleslop/POTA-CAT/releases)
+1. Download `POTACAT Setup x.x.x.exe` from [GitHub Releases](https://github.com/Waffleslop/POTACAT/releases)
 2. Run the installer and follow the prompts
 3. Launch POTACAT from the desktop or Start Menu shortcut
 
@@ -14,7 +14,7 @@ POTACAT is not yet code-signed, so Windows may block it. Here's how to fix that:
 
 Right-click the downloaded `.exe` file → **Properties** → check the **Unblock** box at the bottom → click **OK**.
 
-![Unblock](https://github.com/Waffleslop/POTA-CAT/assets/unblock-example.png)
+![Unblock](https://github.com/Waffleslop/POTACAT/assets/unblock-example.png)
 
 ### Step 2: Run as Administrator
 
@@ -32,7 +32,7 @@ If you see "Windows protected your PC", click **More info** → **Run anyway**.
 
 If the installer gives you trouble, download the **portable** version instead:
 
-1. Download `POTACAT-x.x.x-portable.exe` from [GitHub Releases](https://github.com/Waffleslop/POTA-CAT/releases)
+1. Download `POTACAT-x.x.x-portable.exe` from [GitHub Releases](https://github.com/Waffleslop/POTACAT/releases)
 2. You may need to **Unblock** it (Step 1 above)
 3. Double-click to run — no installation needed
 
@@ -41,5 +41,5 @@ The portable version works identically to the installed version. Your settings a
 ## Still Having Problems?
 
 - Join the [POTACAT Discord](https://discord.gg/JjdKSshej) for help
-- Open an [issue on GitHub](https://github.com/Waffleslop/POTA-CAT/issues)
+- Open an [issue on GitHub](https://github.com/Waffleslop/POTACAT/issues)
 - A diagnostic log file (`potacat-install.log`) is created next to the installer — include it when reporting issues

@@ -23,15 +23,15 @@ A desktop app for hunting [Parks on the Air (POTA)](https://pota.app) activators
 
 ## Install (Windows)
 
-Download the latest installer from the [Releases](https://github.com/Waffleslop/POTA-CAT/releases) page and run it. No other software required.
+Download the latest installer from the [Releases](https://github.com/Waffleslop/POTACAT/releases) page and run it. No other software required.
 
 ## Run from Source
 
 Requires [Node.js](https://nodejs.org/) 18+.
 
 ```bash
-git clone https://github.com/Waffleslop/POTA-CAT.git
-cd POTA-CAT
+git clone https://github.com/Waffleslop/POTACAT.git
+cd POTACAT
 npm install
 npm start
 ```

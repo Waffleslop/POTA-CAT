@@ -79,7 +79,7 @@ function main() {
 |------|---------|
 ${checksums}
 
-**Full Changelog**: https://github.com/Waffleslop/POTA-CAT/compare/v${getPreviousTag()}...${tag}`;
+**Full Changelog**: https://github.com/Waffleslop/POTACAT/compare/v${getPreviousTag()}...${tag}`;
 
   // Write body to temp file (avoids shell escaping issues)
   const bodyFile = path.join(distDir, 'release-notes.md');

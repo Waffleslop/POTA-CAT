@@ -59,7 +59,7 @@
     "publish": {
       "provider": "github",
       "owner": "Waffleslop",
-      "repo": "POTA-CAT"
+      "repo": "POTACAT"
     }
   },
   "devDependencies": {
