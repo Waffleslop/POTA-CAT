@@ -1238,6 +1238,86 @@ dialog input, dialog select {
   color: var(--accent-red);
 }
 
+/* --- Cluster node list --- */
+.node-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  border-radius: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-secondary);
+}
+
+.node-item input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.node-item-info {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.node-item-name {
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.node-item-host {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.node-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.node-status-dot.connected {
+  background: #4ecca3;
+}
+
+.node-item-btn,
+.node-delete-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.node-delete-btn:hover {
+  background: var(--tint-red);
+  color: var(--accent-red);
+}
+
+.cluster-add-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  align-items: center;
+}
+
+.cluster-add-row select {
+  flex: 1;
+}
+
 .rig-action-btn {
   display: block;
   width: 100%;

@@ -201,9 +201,11 @@ const wsjtxStatusEl = document.getElementById('wsjtx-status');
 const setEnablePskr = document.getElementById('set-enable-pskr');
 const pskrConfig = document.getElementById('pskr-config');
 const setMyCallsign = document.getElementById('set-my-callsign');
-const setClusterHost = document.getElementById('set-cluster-host');
-const setClusterPort = document.getElementById('set-cluster-port');
 const clusterConfig = document.getElementById('cluster-config');
+const clusterNodeList = document.getElementById('cluster-node-list');
+const clusterPresetSelect = document.getElementById('cluster-preset-select');
+const clusterAddBtn = document.getElementById('cluster-add-btn');
+const clusterCustomFields = document.getElementById('cluster-custom-fields');
 const rbnConfig = document.getElementById('rbn-config');
 // Settings connection pills
 const connBar = document.getElementById('settings-conn-status');
@@ -211,6 +213,24 @@ const connCluster = document.getElementById('conn-cluster');
 const connRbn = document.getElementById('conn-rbn');
 const connPskr = document.getElementById('conn-pskr');
 let clusterConnected = false;
+let clusterNodeStatuses = []; // [{id, name, host, connected}, ...]
+let currentClusterNodes = []; // live node list for settings UI
+
+const CLUSTER_PRESETS = [
+  { name: 'W3LPL', host: 'w3lpl.net', port: 7373 },
+  { name: 'VE7CC', host: 'dxc.ve7cc.net', port: 23 },
+  { name: 'DXUSA', host: 'dxc.dxusa.net', port: 7373 },
+  { name: 'NC7J', host: 'dxc.nc7j.com', port: 7373 },
+  { name: 'K1TTT', host: 'k1ttt.net', port: 7373 },
+  { name: 'W6CUA', host: 'w6cua.no-ip.org', port: 7300 },
+  { name: 'G6NHU', host: 'dxspider.co.uk', port: 7300 },
+  { name: 'EA4RCH', host: 'dxfun.com', port: 8000 },
+  { name: 'DA0BCC', host: 'dx.da0bcc.de', port: 7300 },
+  { name: 'PI4CC', host: 'dxc.pi4cc.nl', port: 8000 },
+  { name: 'WA9PIE', host: 'dxc.wa9pie.net', port: 7373 },
+  { name: 'W0MU', host: 'dxc.w0mu.net', port: 7373 },
+  { name: 'OH2AQ', host: 'oh2aq.kolumbus.fi', port: 8000 },
+];
 let rbnConnected = false;
 let pskrConnected = false;
 const viewRbnBtn = document.getElementById('view-rbn-btn');
@@ -1016,6 +1036,12 @@ function updateSettingsConnBar() {
   connBar.classList.toggle('hidden', !anyVisible);
   connCluster.classList.toggle('hidden', !enableCluster);
   connCluster.classList.toggle('connected', clusterConnected);
+  // Tooltip showing per-node status breakdown
+  if (clusterNodeStatuses.length > 0) {
+    connCluster.title = clusterNodeStatuses.map(n => n.name + ': ' + (n.connected ? 'connected' : 'disconnected')).join('\n');
+  } else {
+    connCluster.title = '';
+  }
   connRbn.classList.toggle('hidden', !enableRbn);
   connRbn.classList.toggle('connected', rbnConnected);
   connPskr.classList.toggle('hidden', !enablePskr);
@@ -1157,6 +1183,119 @@ setEnableQrz.addEventListener('change', () => {
 
 setEnableCluster.addEventListener('change', () => {
   clusterConfig.classList.toggle('hidden', !setEnableCluster.checked);
+});
+
+// --- Cluster node list rendering ---
+function renderClusterNodeList(nodes) {
+  clusterNodeList.innerHTML = '';
+  for (const node of nodes) {
+    const item = document.createElement('div');
+    item.className = 'node-item';
+    item.dataset.id = node.id;
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = node.enabled;
+    cb.addEventListener('change', () => {
+      node.enabled = cb.checked;
+      // Enforce max 3 enabled
+      const enabledCount = currentClusterNodes.filter(n => n.enabled).length;
+      if (enabledCount > 3) {
+        cb.checked = false;
+        node.enabled = false;
+        alert('Maximum 3 simultaneous cluster connections.');
+      }
+    });
+
+    const info = document.createElement('div');
+    info.className = 'node-item-info';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'node-item-name';
+    nameEl.textContent = node.name;
+    const hostEl = document.createElement('div');
+    hostEl.className = 'node-item-host';
+    hostEl.textContent = node.host + ':' + node.port;
+    info.appendChild(nameEl);
+    info.appendChild(hostEl);
+
+    const dot = document.createElement('span');
+    dot.className = 'node-status-dot';
+    // Update from live status
+    const status = clusterNodeStatuses.find(s => s.id === node.id);
+    if (status && status.connected) dot.classList.add('connected');
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'node-item-btn node-delete-btn';
+    delBtn.textContent = '\u2715';
+    delBtn.title = 'Remove node';
+    delBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      currentClusterNodes = currentClusterNodes.filter(n => n.id !== node.id);
+      renderClusterNodeList(currentClusterNodes);
+    });
+
+    item.appendChild(cb);
+    item.appendChild(info);
+    item.appendChild(dot);
+    item.appendChild(delBtn);
+    clusterNodeList.appendChild(item);
+  }
+}
+
+// Populate preset dropdown
+function populateClusterPresets() {
+  clusterPresetSelect.innerHTML = '<option value="">Add a node...</option>';
+  for (const p of CLUSTER_PRESETS) {
+    const opt = document.createElement('option');
+    opt.value = p.name;
+    opt.textContent = p.name + ' (' + p.host + ':' + p.port + ')';
+    clusterPresetSelect.appendChild(opt);
+  }
+  const customOpt = document.createElement('option');
+  customOpt.value = '__custom__';
+  customOpt.textContent = 'Custom node...';
+  clusterPresetSelect.appendChild(customOpt);
+}
+populateClusterPresets();
+
+clusterPresetSelect.addEventListener('change', () => {
+  clusterCustomFields.classList.toggle('hidden', clusterPresetSelect.value !== '__custom__');
+});
+
+clusterAddBtn.addEventListener('click', () => {
+  const val = clusterPresetSelect.value;
+  if (!val) return;
+
+  if (currentClusterNodes.length >= 3) {
+    alert('Maximum 3 cluster nodes. Remove one before adding another.');
+    return;
+  }
+
+  let newNode;
+  if (val === '__custom__') {
+    const name = document.getElementById('set-cluster-custom-name').value.trim();
+    const host = document.getElementById('set-cluster-custom-host').value.trim();
+    const port = parseInt(document.getElementById('set-cluster-custom-port').value, 10) || 7373;
+    if (!host) { alert('Please enter a hostname.'); return; }
+    newNode = { id: Date.now().toString(36), name: name || host, host, port, enabled: true, preset: null };
+    document.getElementById('set-cluster-custom-name').value = '';
+    document.getElementById('set-cluster-custom-host').value = '';
+    document.getElementById('set-cluster-custom-port').value = '7373';
+  } else {
+    const preset = CLUSTER_PRESETS.find(p => p.name === val);
+    if (!preset) return;
+    // Check for duplicate host
+    if (currentClusterNodes.some(n => n.host === preset.host && n.port === preset.port)) {
+      alert(preset.name + ' is already in the list.');
+      return;
+    }
+    newNode = { id: Date.now().toString(36), name: preset.name, host: preset.host, port: preset.port, enabled: true, preset: preset.name };
+  }
+
+  currentClusterNodes.push(newNode);
+  renderClusterNodeList(currentClusterNodes);
+  clusterPresetSelect.value = '';
+  clusterCustomFields.classList.add('hidden');
 });
 
 // RBN checkbox toggles RBN config visibility
@@ -2363,7 +2502,8 @@ async function openQuickRespot() {
   const isPota = s.source === 'pota' && s.reference;
   const isWwff = (s.source === 'wwff' && s.reference) || (s.source === 'pota' && s.wwffReference);
   const isLlota = s.source === 'llota' && s.reference;
-  if (!isPota && !isWwff && !isLlota) {
+  const canDxc = clusterConnected;
+  if (!isPota && !isWwff && !isLlota && !canDxc) {
     showLogToast('No respottable spot selected', { duration: 2000 });
     return;
   }
@@ -2387,18 +2527,22 @@ async function openQuickRespot() {
   if (isPota) refText = 'POTA: ' + s.reference + (s.parkName ? ' \u2014 ' + s.parkName : '');
   else if (s.source === 'wwff') refText = 'WWFF: ' + s.reference + (s.parkName ? ' \u2014 ' + s.parkName : '');
   else if (isLlota) refText = 'LLOTA: ' + s.reference + (s.parkName ? ' \u2014 ' + s.parkName : '');
+  else if (s.source === 'dxc') refText = s.callsign + (s.locationDesc ? ' \u2014 ' + s.locationDesc : '');
   document.getElementById('respot-ref').textContent = refText;
 
   // Respot checkboxes
   const potaCb = document.getElementById('respot-pota-cb');
   const wwffCb = document.getElementById('respot-wwff-cb');
   const llotaCb = document.getElementById('respot-llota-cb');
+  const dxcCb = document.getElementById('respot-dxc-cb');
   potaCb.parentElement.style.display = isPota ? '' : 'none';
   potaCb.checked = isPota;
   wwffCb.parentElement.style.display = isWwff ? '' : 'none';
   wwffCb.checked = isWwff;
   llotaCb.parentElement.style.display = isLlota ? '' : 'none';
   llotaCb.checked = isLlota;
+  dxcCb.parentElement.style.display = canDxc ? '' : 'none';
+  dxcCb.checked = canDxc;
 
   // Comment template
   const commentField = document.getElementById('respot-comment');
@@ -2417,6 +2561,7 @@ document.getElementById('respot-send').addEventListener('click', async () => {
   const potaCb = document.getElementById('respot-pota-cb');
   const wwffCb = document.getElementById('respot-wwff-cb');
   const llotaCb = document.getElementById('respot-llota-cb');
+  const dxcCb = document.getElementById('respot-dxc-cb');
   const commentText = document.getElementById('respot-comment').value.trim();
   const dlg = document.getElementById('respot-dialog');
   const sendBtn = document.getElementById('respot-send');
@@ -2436,6 +2581,7 @@ document.getElementById('respot-send').addEventListener('click', async () => {
     wwffReference: s.wwffReference || (s.source === 'wwff' ? s.reference : ''),
     llotaRespot: llotaCb.checked && llotaCb.parentElement.style.display !== 'none',
     llotaReference: s.source === 'llota' ? s.reference : '',
+    dxcRespot: dxcCb.checked && dxcCb.parentElement.style.display !== 'none',
   };
 
   sendBtn.disabled = true;
@@ -2445,7 +2591,7 @@ document.getElementById('respot-send').addEventListener('click', async () => {
     if (result.error) {
       showLogToast('Re-spot failed: ' + result.error, { warn: true, duration: 5000 });
     } else {
-      const sources = [data.potaRespot && 'POTA', data.wwffRespot && 'WWFF', data.llotaRespot && 'LLOTA'].filter(Boolean).join(' & ');
+      const sources = [data.potaRespot && 'POTA', data.wwffRespot && 'WWFF', data.llotaRespot && 'LLOTA', data.dxcRespot && 'DX Cluster'].filter(Boolean).join(' & ');
       showLogToast('Re-spotted ' + s.callsign + ' on ' + sources);
     }
   } catch (err) {
@@ -3241,6 +3387,12 @@ function openLogPopup(spot) {
       llotaRespotCheckbox.parentElement.style.display = 'none';
       llotaRespotCheckbox.checked = false;
     }
+    // Hide DX Cluster checkbox — park spots use their own respot APIs
+    let dxcRespotCheckbox = document.getElementById('log-dxc-respot');
+    if (dxcRespotCheckbox) {
+      dxcRespotCheckbox.parentElement.style.display = 'none';
+      dxcRespotCheckbox.checked = false;
+    }
     respotComment.value = respotTemplate;
     const anyChecked = () => respotCheckbox.checked || (wwffRespotCheckbox && wwffRespotCheckbox.checked) || (llotaRespotCheckbox && llotaRespotCheckbox.checked);
     respotCommentLabel.style.display = anyChecked() ? '' : 'none';
@@ -3249,14 +3401,53 @@ function openLogPopup(spot) {
     if (wwffRespotCheckbox) wwffRespotCheckbox.onchange = updateCommentVis;
     if (llotaRespotCheckbox) llotaRespotCheckbox.onchange = updateCommentVis;
   } else {
-    respotSection.classList.add('hidden');
-    if (wwffRespotCheckbox) {
-      wwffRespotCheckbox.parentElement.style.display = 'none';
-      wwffRespotCheckbox.checked = false;
-    }
-    if (llotaRespotCheckbox) {
-      llotaRespotCheckbox.parentElement.style.display = 'none';
-      llotaRespotCheckbox.checked = false;
+    // No POTA/WWFF/LLOTA — but still show section if DX Cluster is connected
+    let dxcRespotCheckbox = document.getElementById('log-dxc-respot');
+    if (clusterConnected) {
+      respotSection.classList.remove('hidden');
+      respotCheckbox.checked = false;
+      respotCheckbox.parentElement.style.display = 'none';
+      if (wwffRespotCheckbox) {
+        wwffRespotCheckbox.parentElement.style.display = 'none';
+        wwffRespotCheckbox.checked = false;
+      }
+      if (llotaRespotCheckbox) {
+        llotaRespotCheckbox.parentElement.style.display = 'none';
+        llotaRespotCheckbox.checked = false;
+      }
+      if (!dxcRespotCheckbox) {
+        const label = document.createElement('label');
+        label.className = 'checkbox-label';
+        label.style.marginTop = '4px';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.id = 'log-dxc-respot';
+        cb.checked = true;
+        label.appendChild(cb);
+        label.appendChild(document.createTextNode(' Spot on DX Cluster'));
+        respotCheckbox.parentElement.parentElement.insertBefore(label, respotCommentLabel);
+        dxcRespotCheckbox = cb;
+      } else {
+        dxcRespotCheckbox.checked = true;
+        dxcRespotCheckbox.parentElement.style.display = '';
+      }
+      respotComment.value = respotTemplate;
+      respotCommentLabel.style.display = dxcRespotCheckbox.checked ? '' : 'none';
+      dxcRespotCheckbox.onchange = () => { respotCommentLabel.style.display = dxcRespotCheckbox.checked ? '' : 'none'; };
+    } else {
+      respotSection.classList.add('hidden');
+      if (wwffRespotCheckbox) {
+        wwffRespotCheckbox.parentElement.style.display = 'none';
+        wwffRespotCheckbox.checked = false;
+      }
+      if (llotaRespotCheckbox) {
+        llotaRespotCheckbox.parentElement.style.display = 'none';
+        llotaRespotCheckbox.checked = false;
+      }
+      if (dxcRespotCheckbox) {
+        dxcRespotCheckbox.parentElement.style.display = 'none';
+        dxcRespotCheckbox.checked = false;
+      }
     }
   }
 
@@ -3328,9 +3519,11 @@ logSaveBtn.addEventListener('click', async () => {
   const respotSection = document.getElementById('log-respot-section');
   const wwffRespotCheckbox = document.getElementById('log-wwff-respot');
   const llotaRespotCheckbox = document.getElementById('log-llota-respot');
+  const dxcRespotCheckbox = document.getElementById('log-dxc-respot');
   const wantsRespot = !respotSection.classList.contains('hidden') && respotCheckbox.checked;
   const wantsWwffRespot = !respotSection.classList.contains('hidden') && wwffRespotCheckbox && wwffRespotCheckbox.checked;
   const wantsLlotaRespot = !respotSection.classList.contains('hidden') && llotaRespotCheckbox && llotaRespotCheckbox.checked;
+  const wantsDxcRespot = !respotSection.classList.contains('hidden') && dxcRespotCheckbox && dxcRespotCheckbox.checked;
 
   // Persist re-spot preference and template
   if (!respotSection.classList.contains('hidden')) {
@@ -3361,7 +3554,8 @@ logSaveBtn.addEventListener('click', async () => {
     wwffReference: wantsWwffRespot ? wwffRef : '',
     llotaRespot: wantsLlotaRespot,
     llotaReference: wantsLlotaRespot && currentLogSpot && currentLogSpot.source === 'llota' ? currentLogSpot.reference : '',
-    respotComment: (wantsRespot || wantsWwffRespot || wantsLlotaRespot) ? commentText : '',
+    dxcRespot: wantsDxcRespot,
+    respotComment: (wantsRespot || wantsWwffRespot || wantsLlotaRespot || wantsDxcRespot) ? commentText : '',
   };
 
   logSaveBtn.disabled = true;
@@ -3380,8 +3574,10 @@ logSaveBtn.addEventListener('click', async () => {
         showLogToast(`Logged ${callsign} to ADIF, but WWFF re-spot failed: ${result.wwffRespotError}`, { warn: true, duration: 8000 });
       } else if (result.llotaRespotError) {
         showLogToast(`Logged ${callsign} to ADIF, but LLOTA re-spot failed: ${result.llotaRespotError}`, { warn: true, duration: 8000 });
+      } else if (result.dxcRespotError) {
+        showLogToast(`Logged ${callsign} to ADIF, but DX Cluster spot failed: ${result.dxcRespotError}`, { warn: true, duration: 8000 });
       } else if (result.resposted) {
-        const sources = [wantsRespot && 'POTA', wantsWwffRespot && 'WWFF', wantsLlotaRespot && 'LLOTA'].filter(Boolean).join(' & ');
+        const sources = [wantsRespot && 'POTA', wantsWwffRespot && 'WWFF', wantsLlotaRespot && 'LLOTA', wantsDxcRespot && 'DX Cluster'].filter(Boolean).join(' & ');
         showLogToast(`Logged ${callsign} — re-spotted on ${sources || 'POTA'}`);
       } else {
         showLogToast(`Logged ${callsign}`);
@@ -3545,8 +3741,17 @@ settingsBtn.addEventListener('click', async () => {
   setEnableCluster.checked = s.enableCluster === true;
   setEnableRbn.checked = s.enableRbn === true;
   setMyCallsign.value = s.myCallsign || '';
-  setClusterHost.value = s.clusterHost || 'w3lpl.net';
-  setClusterPort.value = s.clusterPort || 7373;
+  // Load cluster nodes (migrate legacy if needed)
+  if (s.clusterNodes && s.clusterNodes.length > 0) {
+    currentClusterNodes = JSON.parse(JSON.stringify(s.clusterNodes));
+  } else {
+    // Legacy migration: convert single host/port to node list
+    const host = s.clusterHost || 'w3lpl.net';
+    const port = s.clusterPort || 7373;
+    const preset = CLUSTER_PRESETS.find(p => p.host === host && p.port === port);
+    currentClusterNodes = [{ id: Date.now().toString(36), name: preset ? preset.name : host, host, port, enabled: true, preset: preset ? preset.name : null }];
+  }
+  renderClusterNodeList(currentClusterNodes);
   clusterConfig.classList.toggle('hidden', !s.enableCluster);
   rbnConfig.classList.toggle('hidden', !s.enableRbn);
   setEnableWsjtx.checked = s.enableWsjtx === true;
@@ -3646,8 +3851,7 @@ settingsSave.addEventListener('click', async () => {
     setEnableRbn.checked = false;
     alert('RBN requires a callsign. Please enter your callsign above.');
   }
-  const clusterHost = setClusterHost.value.trim() || 'w3lpl.net';
-  const clusterPort = parseInt(setClusterPort.value, 10) || 7373;
+  const clusterNodes = currentClusterNodes;
   const wsjtxEnabled = setEnableWsjtx.checked;
   const wsjtxPortVal = parseInt(setWsjtxPort.value, 10) || 2237;
   const wsjtxHighlightEnabled = setWsjtxHighlight.checked;
@@ -3729,8 +3933,7 @@ settingsSave.addEventListener('click', async () => {
     wsjtxHighlight: wsjtxHighlightEnabled,
     wsjtxAutoLog: wsjtxAutoLogEnabled,
     myCallsign: myCallsign,
-    clusterHost: clusterHost,
-    clusterPort: clusterPort,
+    clusterNodes: clusterNodes,
     enableSolar: solarEnabled,
     enableBandActivity: bandActivityEnabled,
     showBearing: showBearingEnabled,
@@ -4042,8 +4245,21 @@ window.api.onDxccData((data) => {
 });
 
 // --- Cluster status listener ---
-window.api.onClusterStatus(({ connected }) => {
-  clusterConnected = connected;
+window.api.onClusterStatus((s) => {
+  if (s.nodes) {
+    clusterNodeStatuses = s.nodes;
+    clusterConnected = s.nodes.some(n => n.connected);
+    // Update status dots in settings node list if visible
+    for (const ns of s.nodes) {
+      const dot = clusterNodeList.querySelector(`.node-item[data-id="${ns.id}"] .node-status-dot`);
+      if (dot) dot.classList.toggle('connected', ns.connected);
+    }
+  } else {
+    // Legacy single-node format fallback
+    clusterConnected = s.connected === true;
+    clusterNodeStatuses = [];
+  }
+  updateSettingsConnBar();
 });
 
 // --- WSJT-X listeners ---

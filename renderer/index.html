@@ -443,8 +443,19 @@
       <label class="checkbox-label"><input type="checkbox" id="set-enable-llota"> Enable LLOTA</label>
       <label class="checkbox-label"><input type="checkbox" id="set-enable-cluster"> Enable DX Cluster</label>
       <div id="cluster-config" class="radio-sub hidden">
-        <label>Cluster Host: <input type="text" id="set-cluster-host" value="w3lpl.net"></label>
-        <label>Cluster Port: <input type="number" id="set-cluster-port" value="7373" min="1" max="65535"></label>
+        <div id="cluster-node-list"></div>
+        <div class="cluster-add-row">
+          <select id="cluster-preset-select">
+            <option value="">Add a node...</option>
+          </select>
+          <button type="button" id="cluster-add-btn">Add</button>
+        </div>
+        <div id="cluster-custom-fields" class="hidden" style="margin-top:6px;">
+          <label>Name: <input type="text" id="set-cluster-custom-name" placeholder="My Node"></label>
+          <label>Host: <input type="text" id="set-cluster-custom-host" placeholder="host.example.com"></label>
+          <label>Port: <input type="number" id="set-cluster-custom-port" value="7373" min="1" max="65535"></label>
+        </div>
+        <span class="help-text" style="display:block;margin-top:6px;">Enable up to 3 nodes for simultaneous connections. Duplicate spots are automatically removed.</span>
       </div>
       <label class="checkbox-label"><input type="checkbox" id="set-enable-rbn"> Reverse Beacon Network</label>
       <div id="rbn-config" class="radio-sub hidden">
@@ -760,6 +771,9 @@
       </label>
       <label class="checkbox-label" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
         <input type="checkbox" id="respot-llota-cb"> Re-spot on LLOTA
+      </label>
+      <label class="checkbox-label" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+        <input type="checkbox" id="respot-dxc-cb"> Spot on DX Cluster
       </label>
     </div>
     <label>Comment:

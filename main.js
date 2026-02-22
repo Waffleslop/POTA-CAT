@@ -54,7 +54,7 @@ let cat = null;
 let spotTimer = null;
 let solarTimer = null;
 let rigctldProc = null;
-let cluster = null;
+let cluster = null; // legacy — replaced by clusterClients Map
 let clusterSpots = []; // streaming DX cluster spots (FIFO, max 500)
 let clusterFlushTimer = null; // throttle timer for cluster → renderer updates
 let rbn = null;
@@ -329,6 +329,22 @@ async function connectCat() {
 
 // --- DX Cluster ---
 
+const CLUSTER_PRESETS = [
+  { name: 'W3LPL', host: 'w3lpl.net', port: 7373 },
+  { name: 'VE7CC', host: 'dxc.ve7cc.net', port: 23 },
+  { name: 'DXUSA', host: 'dxc.dxusa.net', port: 7373 },
+  { name: 'NC7J', host: 'dxc.nc7j.com', port: 7373 },
+  { name: 'K1TTT', host: 'k1ttt.net', port: 7373 },
+  { name: 'W6CUA', host: 'w6cua.no-ip.org', port: 7300 },
+  { name: 'G6NHU', host: 'dxspider.co.uk', port: 7300 },
+  { name: 'EA4RCH', host: 'dxfun.com', port: 8000 },
+  { name: 'DA0BCC', host: 'dx.da0bcc.de', port: 7300 },
+  { name: 'PI4CC', host: 'dxc.pi4cc.nl', port: 8000 },
+  { name: 'WA9PIE', host: 'dxc.wa9pie.net', port: 7373 },
+  { name: 'W0MU', host: 'dxc.w0mu.net', port: 7373 },
+  { name: 'OH2AQ', host: 'oh2aq.kolumbus.fi', port: 8000 },
+];
+
 // Clean up RBN-style comments for the Name column (strip redundant mode, reorder fields)
 const CLUSTER_COMMENT_RE = /^(\S+)\s+(-?\d+)\s*dB\s+(?:(\d+)\s*WPM\s*)?(.*)$/i;
 const MODE_KEYWORDS = /^(?:CW|SSB|USB|LSB|FM|AM|FT[48]|RTTY|PSK\d*|JS8)\b/i;
@@ -351,104 +367,129 @@ function formatClusterComment(comment) {
   return comment;
 }
 
-function sendClusterStatus(s) {
+// Build a normalized spot from raw cluster data (shared by all cluster clients)
+function buildClusterSpot(raw, myPos, myEntity) {
+  const spot = {
+    source: 'dxc',
+    callsign: raw.callsign,
+    frequency: raw.frequency,
+    freqMHz: raw.freqMHz,
+    mode: raw.mode,
+    reference: '',
+    parkName: formatClusterComment(raw.comment || ''),
+    locationDesc: '',
+    distance: null,
+    lat: null,
+    lon: null,
+    band: raw.band,
+    spotTime: raw.spotTime,
+  };
+
+  if (ctyDb) {
+    const entity = resolveCallsign(raw.callsign, ctyDb);
+    if (entity) {
+      spot.locationDesc = entity.name;
+      spot.continent = entity.continent || '';
+      if (entity.lat != null && entity.lon != null) {
+        spot.lat = entity.lat;
+        spot.lon = entity.lon;
+        if (myPos && entity !== myEntity) {
+          spot.distance = Math.round(haversineDistanceMiles(myPos.lat, myPos.lon, entity.lat, entity.lon));
+          spot.bearing = Math.round(bearing(myPos.lat, myPos.lon, entity.lat, entity.lon));
+        }
+      }
+    }
+  }
+
+  return spot;
+}
+
+let clusterClients = new Map(); // id → { client, nodeConfig }
+
+function sendClusterStatus() {
+  const nodes = [];
+  for (const [id, entry] of clusterClients) {
+    nodes.push({ id, name: entry.nodeConfig.name, host: entry.nodeConfig.host, connected: entry.client.connected });
+  }
+  const s = { nodes };
   if (win && !win.isDestroyed()) win.webContents.send('cluster-status', s);
 }
 
 function connectCluster() {
-  if (cluster) {
-    cluster.disconnect();
-    cluster.removeAllListeners();
-    cluster = null;
+  // Disconnect all existing clients
+  for (const [, entry] of clusterClients) {
+    entry.client.disconnect();
+    entry.client.removeAllListeners();
   }
+  clusterClients.clear();
   clusterSpots = [];
 
   if (!settings.enableCluster || !settings.myCallsign) {
-    sendClusterStatus({ connected: false });
+    sendClusterStatus();
     return;
   }
 
-  cluster = new DxClusterClient();
+  // Migrate legacy settings if needed
+  if (!settings.clusterNodes) {
+    migrateClusterNodes();
+  }
+
+  const enabledNodes = (settings.clusterNodes || []).filter(n => n.enabled).slice(0, 3);
+  if (enabledNodes.length === 0) {
+    sendClusterStatus();
+    return;
+  }
+
   const myPos = gridToLatLon(settings.grid);
-  // Resolve user's own entity so we can suppress meaningless same-entity distances
   const myEntity = (ctyDb && settings.myCallsign) ? resolveCallsign(settings.myCallsign, ctyDb) : null;
 
-  cluster.on('spot', (raw) => {
-    // Normalize to standard spot shape
-    const spot = {
-      source: 'dxc',
-      callsign: raw.callsign,
-      frequency: raw.frequency,
-      freqMHz: raw.freqMHz,
-      mode: raw.mode,
-      reference: '',
-      parkName: formatClusterComment(raw.comment || ''),
-      locationDesc: '',
-      distance: null,
-      lat: null,
-      lon: null,
-      band: raw.band,
-      spotTime: raw.spotTime,
-    };
+  for (const node of enabledNodes) {
+    const client = new DxClusterClient();
 
-    // Resolve DXCC entity for location info + approximate coordinates
-    if (ctyDb) {
-      const entity = resolveCallsign(raw.callsign, ctyDb);
-      if (entity) {
-        spot.locationDesc = entity.name;
-        spot.continent = entity.continent || '';
-        if (entity.lat != null && entity.lon != null) {
-          spot.lat = entity.lat;
-          spot.lon = entity.lon;
-          // Skip distance for same-entity spots — cty.dat centroid is meaningless
-          if (myPos && entity !== myEntity) {
-            spot.distance = Math.round(haversineDistanceMiles(myPos.lat, myPos.lon, entity.lat, entity.lon));
-            spot.bearing = Math.round(bearing(myPos.lat, myPos.lon, entity.lat, entity.lon));
-          }
-        }
+    client.on('spot', (raw) => {
+      const spot = buildClusterSpot(raw, myPos, myEntity);
+
+      // Watchlist notification
+      const watchSet = parseWatchlist(settings.watchlist);
+      if (watchSet.has(raw.callsign.toUpperCase())) {
+        notifyWatchlistSpot({
+          callsign: raw.callsign,
+          frequency: raw.frequency,
+          mode: raw.mode,
+          source: 'dxc',
+          reference: '',
+          locationDesc: spot.locationDesc,
+        });
       }
-    }
 
-    // Watchlist notification for DX Cluster spots
-    const watchSet = parseWatchlist(settings.watchlist);
-    if (watchSet.has(raw.callsign.toUpperCase())) {
-      notifyWatchlistSpot({
-        callsign: raw.callsign,
-        frequency: raw.frequency,
-        mode: raw.mode,
-        source: 'dxc',
-        reference: '',
-        locationDesc: spot.locationDesc,
-      });
-    }
+      // Dedupe: keep only the latest spot per callsign (across all nodes)
+      const idx = clusterSpots.findIndex(s => s.callsign === spot.callsign);
+      if (idx !== -1) clusterSpots.splice(idx, 1);
+      clusterSpots.push(spot);
+      if (clusterSpots.length > 500) {
+        clusterSpots = clusterSpots.slice(-500);
+      }
 
-    // Dedupe: keep only the latest spot per callsign
-    const idx = clusterSpots.findIndex(s => s.callsign === spot.callsign);
-    if (idx !== -1) clusterSpots.splice(idx, 1);
-    clusterSpots.push(spot);
-    // FIFO cap at 500
-    if (clusterSpots.length > 500) {
-      clusterSpots = clusterSpots.slice(-500);
-    }
+      if (!clusterFlushTimer) {
+        clusterFlushTimer = setTimeout(() => {
+          clusterFlushTimer = null;
+          sendMergedSpots();
+        }, 2000);
+      }
+    });
 
-    // Throttle: batch spots and flush to renderer at most once every 2s
-    if (!clusterFlushTimer) {
-      clusterFlushTimer = setTimeout(() => {
-        clusterFlushTimer = null;
-        sendMergedSpots();
-      }, 2000);
-    }
-  });
+    client.on('status', () => {
+      sendClusterStatus();
+    });
 
-  cluster.on('status', (s) => {
-    sendClusterStatus(s);
-  });
+    client.connect({
+      host: node.host,
+      port: node.port,
+      callsign: settings.myCallsign,
+    });
 
-  cluster.connect({
-    host: settings.clusterHost || 'w3lpl.net',
-    port: settings.clusterPort || 7373,
-    callsign: settings.myCallsign,
-  });
+    clusterClients.set(node.id, { client, nodeConfig: node });
+  }
 }
 
 function disconnectCluster() {
@@ -456,13 +497,31 @@ function disconnectCluster() {
     clearTimeout(clusterFlushTimer);
     clusterFlushTimer = null;
   }
-  if (cluster) {
-    cluster.disconnect();
-    cluster.removeAllListeners();
-    cluster = null;
+  for (const [, entry] of clusterClients) {
+    entry.client.disconnect();
+    entry.client.removeAllListeners();
   }
+  clusterClients.clear();
   clusterSpots = [];
-  sendClusterStatus({ connected: false });
+  sendClusterStatus();
+}
+
+// Migrate legacy clusterHost/clusterPort to clusterNodes array
+function migrateClusterNodes() {
+  if (settings.clusterNodes) return;
+  const host = settings.clusterHost || 'w3lpl.net';
+  const port = settings.clusterPort || 7373;
+  // Find matching preset
+  const preset = CLUSTER_PRESETS.find(p => p.host === host && p.port === port);
+  settings.clusterNodes = [{
+    id: Date.now().toString(36),
+    name: preset ? preset.name : host,
+    host,
+    port,
+    enabled: true,
+    preset: preset ? preset.name : null,
+  }];
+  saveSettings(settings);
 }
 
 // --- Call area coordinate lookup for large countries ---
@@ -1693,8 +1752,8 @@ function createWindow() {
     if (cat) {
       sendCatStatus({ connected: cat.connected, target: cat._target });
     }
-    if (cluster) {
-      sendClusterStatus({ connected: cluster.connected, host: settings.clusterHost, port: settings.clusterPort });
+    if (clusterClients.size > 0) {
+      sendClusterStatus();
     }
     if (rbn) {
       sendRbnStatus({ connected: rbn.connected, host: 'telnet.reversebeacon.net', port: 7000 });
@@ -2308,8 +2367,7 @@ app.whenReady().then(() => {
 
     const clusterChanged = (has('enableCluster') && newSettings.enableCluster !== settings.enableCluster) ||
       (has('myCallsign') && newSettings.myCallsign !== settings.myCallsign) ||
-      (has('clusterHost') && newSettings.clusterHost !== settings.clusterHost) ||
-      (has('clusterPort') && newSettings.clusterPort !== settings.clusterPort);
+      (has('clusterNodes') && JSON.stringify(newSettings.clusterNodes) !== JSON.stringify(settings.clusterNodes));
 
     const rbnChanged = (has('enableRbn') && newSettings.enableRbn !== settings.enableRbn) ||
       (has('myCallsign') && newSettings.myCallsign !== settings.myCallsign) ||
@@ -2739,7 +2797,23 @@ app.whenReady().then(() => {
         }
       }
 
-      const didRespot = (qsoData.respot && qsoData.sig === 'POTA') || qsoData.wwffRespot || qsoData.llotaRespot;
+      // Spot on DX Cluster if requested
+      if (qsoData.dxcRespot) {
+        try {
+          let sent = 0;
+          for (const [, entry] of clusterClients) {
+            if (entry.client.sendSpot({ frequency: qsoData.frequency, callsign: qsoData.callsign, comment: qsoData.respotComment || '' })) {
+              sent++;
+            }
+          }
+          if (sent === 0) throw new Error('no connected nodes');
+        } catch (respotErr) {
+          console.error('DX Cluster spot failed:', respotErr.message);
+          return { success: true, dxcRespotError: respotErr.message };
+        }
+      }
+
+      const didRespot = (qsoData.respot && qsoData.sig === 'POTA') || qsoData.wwffRespot || qsoData.llotaRespot || qsoData.dxcRespot;
       return { success: true, resposted: didRespot || false };
     } catch (err) {
       return { success: false, error: err.message };
@@ -2788,6 +2862,15 @@ app.whenReady().then(() => {
           });
           trackRespot('llota');
         } catch (err) { errors.push('LLOTA: ' + err.message); }
+      }
+      if (data.dxcRespot) {
+        let sent = 0;
+        for (const [, entry] of clusterClients) {
+          if (entry.client.sendSpot({ frequency: data.frequency, callsign: data.callsign, comment: data.comment || '' })) {
+            sent++;
+          }
+        }
+        if (sent === 0) errors.push('DX Cluster: no connected nodes');
       }
       if (errors.length > 0) return { error: errors.join('; ') };
       return { success: true };
@@ -2853,7 +2936,8 @@ function gracefulCleanup() {
   if (spotTimer) clearInterval(spotTimer);
   if (solarTimer) clearInterval(solarTimer);
   if (cat) try { cat.disconnect(); } catch {}
-  if (cluster) try { cluster.disconnect(); } catch {}
+  for (const [, entry] of clusterClients) { try { entry.client.disconnect(); } catch {} }
+  clusterClients.clear();
   if (rbn) try { rbn.disconnect(); } catch {}
   try { disconnectWsjtx(); } catch {}
   try { disconnectSmartSdr(); } catch {}
