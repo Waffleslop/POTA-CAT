@@ -2846,18 +2846,29 @@ app.whenReady().then(() => {
   });
 });
 
+let cleanupDone = false;
+function gracefulCleanup() {
+  if (cleanupDone) return;
+  cleanupDone = true;
+  if (spotTimer) clearInterval(spotTimer);
+  if (solarTimer) clearInterval(solarTimer);
+  if (cat) try { cat.disconnect(); } catch {}
+  if (cluster) try { cluster.disconnect(); } catch {}
+  if (rbn) try { rbn.disconnect(); } catch {}
+  try { disconnectWsjtx(); } catch {}
+  try { disconnectSmartSdr(); } catch {}
+  killRigctld();
+}
+
+app.on('before-quit', gracefulCleanup);
+process.on('SIGINT', () => { gracefulCleanup(); process.exit(0); });
+process.on('SIGTERM', () => { gracefulCleanup(); process.exit(0); });
+
 app.on('window-all-closed', async () => {
   // Send session duration telemetry before quitting — await so the request flushes
   const sessionSeconds = Math.round((Date.now() - sessionStartTime) / 1000);
   await sendTelemetry(sessionSeconds);
 
-  if (spotTimer) clearInterval(spotTimer);
-  if (solarTimer) clearInterval(solarTimer);
-  if (cat) cat.disconnect();
-  if (cluster) cluster.disconnect();
-  if (rbn) rbn.disconnect();
-  disconnectWsjtx();
-  disconnectSmartSdr();
-  killRigctld();
+  gracefulCleanup();
   app.quit();
 });
