@@ -772,29 +772,42 @@
     </div>
   </dialog>
 
-  <!-- Recent QSOs dialog (F2) -->
-  <dialog id="recent-qsos-dialog">
+  <!-- QSO Log Viewer (F2) -->
+  <dialog id="log-viewer-dialog">
     <div class="log-dialog-header">
-      <h3>Recent QSOs</h3>
-      <button type="button" id="recent-qsos-close" class="log-dialog-x" title="Close">&times;</button>
+      <h3>QSO Log</h3>
+      <button type="button" id="log-viewer-close" class="log-dialog-x" title="Close">&times;</button>
     </div>
-    <div id="recent-qsos-body">
-      <table id="recent-qsos-table">
+    <div id="log-viewer-toolbar">
+      <input type="text" id="log-viewer-search" placeholder="Search callsign, park, notes..." autocomplete="off">
+      <span id="log-viewer-count"></span>
+    </div>
+    <div id="log-viewer-body">
+      <table id="log-viewer-table">
         <thead>
           <tr>
-            <th>Callsign</th><th>Date</th><th>Time</th><th>Band</th><th>Mode</th><th>RST S</th><th>RST R</th><th>Notes</th>
+            <th data-sort="QSO_DATE">Date</th>
+            <th data-sort="TIME_ON">Time</th>
+            <th data-sort="CALL">Callsign</th>
+            <th data-sort="FREQ">Freq</th>
+            <th data-sort="MODE">Mode</th>
+            <th data-sort="BAND">Band</th>
+            <th>RST S</th>
+            <th>RST R</th>
+            <th data-sort="SIG_INFO">Park</th>
+            <th>Notes</th>
+            <th></th>
           </tr>
         </thead>
-        <tbody id="recent-qsos-tbody"></tbody>
+        <tbody id="log-viewer-tbody"></tbody>
       </table>
-      <p id="recent-qsos-empty" class="hidden" style="text-align:center;color:var(--text-tertiary);margin:20px 0;">No QSOs logged yet</p>
+      <p id="log-viewer-empty" class="hidden" style="text-align:center;color:var(--text-tertiary);margin:20px 0;">No QSOs logged yet</p>
     </div>
-    <div id="recent-qsos-footer" style="margin-top:12px;font-size:11px;color:var(--text-tertiary);">
-      <div>Your log is located at: <a href="#" id="recent-qsos-path-link" style="color:var(--link-color);"></a></div>
-      <div style="margin-top:4px;color:var(--accent-red);font-size:10px;">Be careful if you edit your logfile, you may corrupt it.</div>
+    <div id="log-viewer-footer">
+      <span>Log file: <a href="#" id="log-viewer-path-link"></a></span>
     </div>
     <div class="dialog-buttons">
-      <button type="button" id="recent-qsos-close-btn">Close</button>
+      <button type="button" id="log-viewer-close-btn">Close</button>
     </div>
   </dialog>
 
@@ -807,7 +820,7 @@
     <table class="hotkeys-table">
       <tbody>
         <tr><td><kbd>F1</kbd></td><td>Keyboard shortcuts</td></tr>
-        <tr><td><kbd>F2</kbd></td><td>Recent QSOs</td></tr>
+        <tr><td><kbd>F2</kbd></td><td>QSO Log</td></tr>
         <tr><td><kbd>F11</kbd></td><td>Welcome / setup screen</td></tr>
         <tr><td><kbd>Space</kbd></td><td>Start / stop scan</td></tr>
         <tr><td><kbd>S</kbd></td><td>Toggle split mode</td></tr>
@@ -981,6 +994,8 @@
       <button type="button" id="welcome-coffee-btn" class="coffee-btn">Buy Me a Coffee</button>
     </div>
   </dialog>
+
+  <div id="log-viewer-toast"></div>
 
   <script src="../node_modules/leaflet/dist/leaflet.js"></script>
   <script src="app.js"></script>

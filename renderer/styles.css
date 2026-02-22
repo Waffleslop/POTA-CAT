@@ -2001,41 +2001,164 @@ dialog input, dialog select {
   border-color: var(--accent-green);
 }
 
-/* Recent QSOs dialog */
-#recent-qsos-dialog {
-  min-width: 600px;
-  max-width: 760px;
+/* QSO Log Viewer dialog */
+#log-viewer-dialog {
+  min-width: 780px;
+  max-width: 920px;
+  max-height: 80vh;
 }
 
-#recent-qsos-table {
+#log-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+#log-viewer-search {
+  flex: 1;
+  padding: 4px 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+#log-viewer-search:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+#log-viewer-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+#log-viewer-body {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+#log-viewer-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
   font-family: 'Consolas', 'Courier New', monospace;
 }
 
-#recent-qsos-table th {
+#log-viewer-table th {
   text-align: left;
   padding: 4px 6px;
   border-bottom: 1px solid var(--border-primary);
   color: var(--text-secondary);
   font-size: 11px;
   white-space: nowrap;
+  position: sticky;
+  top: 0;
+  background: var(--bg-secondary);
+  z-index: 1;
 }
 
-#recent-qsos-table td {
+#log-viewer-table th[data-sort] {
+  cursor: pointer;
+  user-select: none;
+}
+
+#log-viewer-table th[data-sort]:hover {
+  color: var(--accent-blue);
+}
+
+#log-viewer-table th.sort-asc::after {
+  content: ' \25B2';
+  font-size: 9px;
+}
+
+#log-viewer-table th.sort-desc::after {
+  content: ' \25BC';
+  font-size: 9px;
+}
+
+#log-viewer-table td {
   padding: 3px 6px;
   white-space: nowrap;
   border-bottom: 1px solid var(--border-secondary);
 }
 
-#recent-qsos-table td:last-child {
+#log-viewer-table td:nth-child(10) {
   white-space: normal;
   word-break: break-word;
+  max-width: 150px;
 }
 
-#recent-qsos-table tr:last-child td {
+#log-viewer-table tr:last-child td {
   border-bottom: none;
+}
+
+#log-viewer-table td.editable {
+  cursor: text;
+}
+
+#log-viewer-table td input {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--accent-blue);
+  color: var(--text-primary);
+  padding: 1px 4px;
+  font-size: inherit;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.log-delete-btn {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.log-delete-btn:hover {
+  color: var(--accent-red);
+}
+
+.log-delete-btn.confirming {
+  color: var(--accent-red);
+  font-weight: bold;
+}
+
+#log-viewer-footer {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+#log-viewer-footer a {
+  color: var(--accent-blue);
+}
+
+#log-viewer-toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-header);
+  color: var(--text-primary);
+  padding: 6px 16px;
+  border-radius: 4px;
+  font-size: 12px;
+  border: 1px solid var(--border-primary);
+  z-index: 10000;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+#log-viewer-toast.show {
+  opacity: 1;
 }
 
 /* Map popup log button */

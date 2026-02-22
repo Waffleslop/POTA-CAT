@@ -12,10 +12,10 @@ const { CatClient, RigctldClient, listSerialPorts } = require('./lib/cat');
 const { gridToLatLon, haversineDistanceMiles, bearing } = require('./lib/grid');
 const { freqToBand } = require('./lib/bands');
 const { loadCtyDat, resolveCallsign, getAllEntities } = require('./lib/cty');
-const { parseAdifFile, parseWorkedQsos, parseAllQsos, parseSqliteFile, parseSqliteConfirmed, isSqliteFile } = require('./lib/adif');
+const { parseAdifFile, parseWorkedQsos, parseAllQsos, parseAllRawQsos, parseSqliteFile, parseSqliteConfirmed, isSqliteFile } = require('./lib/adif');
 const { DxClusterClient } = require('./lib/dxcluster');
 const { RbnClient } = require('./lib/rbn');
-const { appendQso, buildAdifRecord, appendImportedQso } = require('./lib/adif-writer');
+const { appendQso, buildAdifRecord, appendImportedQso, rewriteAdifFile } = require('./lib/adif-writer');
 const { SmartSdrClient } = require('./lib/smartsdr');
 const { parsePotaParksCSV } = require('./lib/pota-parks');
 const { WsjtxClient } = require('./lib/wsjtx');
@@ -2938,6 +2938,46 @@ app.whenReady().then(() => {
       }));
     } catch {
       return [];
+    }
+  });
+
+  // --- Full Log Viewer IPC ---
+  ipcMain.handle('get-all-qsos', () => {
+    const logPath = settings.adifLogPath || path.join(app.getPath('userData'), 'potacat_qso_log.adi');
+    try {
+      if (!fs.existsSync(logPath)) return [];
+      const qsos = parseAllRawQsos(logPath);
+      return qsos.map((fields, idx) => ({ idx, ...fields }));
+    } catch {
+      return [];
+    }
+  });
+
+  ipcMain.handle('update-qso', async (_e, { idx, fields }) => {
+    const logPath = settings.adifLogPath || path.join(app.getPath('userData'), 'potacat_qso_log.adi');
+    try {
+      const qsos = parseAllRawQsos(logPath);
+      if (idx < 0 || idx >= qsos.length) return { success: false, error: 'Invalid index' };
+      Object.assign(qsos[idx], fields);
+      rewriteAdifFile(logPath, qsos);
+      loadWorkedQsos();
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('delete-qso', async (_e, idx) => {
+    const logPath = settings.adifLogPath || path.join(app.getPath('userData'), 'potacat_qso_log.adi');
+    try {
+      const qsos = parseAllRawQsos(logPath);
+      if (idx < 0 || idx >= qsos.length) return { success: false, error: 'Invalid index' };
+      qsos.splice(idx, 1);
+      rewriteAdifFile(logPath, qsos);
+      loadWorkedQsos();
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
     }
   });
 

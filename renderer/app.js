@@ -2476,10 +2476,10 @@ document.addEventListener('keydown', (e) => {
     document.getElementById('hotkeys-dialog').showModal();
     return;
   }
-  // F2 — Recent QSOs viewer
+  // F2 — QSO Log viewer
   if (e.key === 'F2' && !e.target.matches('input, select, textarea')) {
     e.preventDefault();
-    openRecentQsos();
+    openLogViewer();
     return;
   }
   // F11 — Welcome screen
@@ -2697,35 +2697,145 @@ logCallsign.addEventListener('input', () => {
   }, 500);
 });
 
-// --- Recent QSOs (F2) ---
-async function openRecentQsos() {
-  const dlg = document.getElementById('recent-qsos-dialog');
-  const tbody = document.getElementById('recent-qsos-tbody');
-  const emptyMsg = document.getElementById('recent-qsos-empty');
-  const table = document.getElementById('recent-qsos-table');
-  tbody.innerHTML = '';
+// --- QSO Log Viewer (F2) ---
+let logViewerQsos = [];
+let logViewerSort = 'QSO_DATE';
+let logViewerAsc = false;
+let logViewerSearch = '';
+let logViewerToastTimer = null;
 
-  const qsos = await window.api.getRecentQsos();
-  if (qsos.length === 0) {
+// Editable ADIF field names per column index
+const LOG_VIEWER_EDITABLE = {
+  2: 'CALL',
+  3: 'FREQ',
+  4: 'MODE',
+  6: 'RST_SENT',
+  7: 'RST_RCVD',
+  8: 'SIG_INFO',
+  9: 'COMMENT',
+};
+
+function logViewerToast(msg) {
+  const el = document.getElementById('log-viewer-toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(logViewerToastTimer);
+  logViewerToastTimer = setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+function freqMhzToBandLocal(mhz) {
+  const khz = parseFloat(mhz) * 1000;
+  return freqKhzToBand(khz);
+}
+
+function renderLogViewer() {
+  const tbody = document.getElementById('log-viewer-tbody');
+  const table = document.getElementById('log-viewer-table');
+  const emptyMsg = document.getElementById('log-viewer-empty');
+  const countEl = document.getElementById('log-viewer-count');
+
+  // Filter
+  const search = logViewerSearch.toLowerCase();
+  let filtered = logViewerQsos;
+  if (search) {
+    filtered = logViewerQsos.filter(q => {
+      const hay = [q.CALL, q.SIG_INFO, q.COMMENT, q.MODE, q.BAND].join(' ').toLowerCase();
+      return hay.includes(search);
+    });
+  }
+
+  // Sort
+  const col = logViewerSort;
+  const dir = logViewerAsc ? 1 : -1;
+  filtered.sort((a, b) => {
+    let va = (a[col] || ''), vb = (b[col] || '');
+    if (col === 'FREQ') return (parseFloat(va) - parseFloat(vb)) * dir;
+    if (col === 'QSO_DATE') {
+      const ka = (a.QSO_DATE || '') + (a.TIME_ON || '');
+      const kb = (b.QSO_DATE || '') + (b.TIME_ON || '');
+      return ka.localeCompare(kb) * dir;
+    }
+    return va.localeCompare(vb) * dir;
+  });
+
+  // Update count
+  countEl.textContent = search
+    ? `${filtered.length} / ${logViewerQsos.length} QSOs`
+    : `${logViewerQsos.length} QSOs`;
+
+  if (logViewerQsos.length === 0) {
     table.classList.add('hidden');
     emptyMsg.classList.remove('hidden');
-  } else {
-    table.classList.remove('hidden');
-    emptyMsg.classList.add('hidden');
-    for (const q of qsos) {
-      const tr = document.createElement('tr');
-      const date = q.qsoDate ? q.qsoDate.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3') : '';
-      const time = q.timeOn ? q.timeOn.slice(0, 2) + ':' + q.timeOn.slice(2, 4) : '';
-      tr.innerHTML =
-        `<td>${q.call}</td><td>${date}</td><td>${time}</td>` +
-        `<td>${q.band}</td><td>${q.mode}</td>` +
-        `<td>${q.rstSent}</td><td>${q.rstRcvd}</td>` +
-        `<td>${q.comment}</td>`;
-      tbody.appendChild(tr);
-    }
+    return;
   }
+  table.classList.remove('hidden');
+  emptyMsg.classList.add('hidden');
+
+  // Sort indicators on headers
+  table.querySelectorAll('th').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.sort === col) {
+      th.classList.add(logViewerAsc ? 'sort-asc' : 'sort-desc');
+    }
+  });
+
+  // Build rows
+  const frag = document.createDocumentFragment();
+  for (const q of filtered) {
+    const tr = document.createElement('tr');
+    tr.dataset.idx = q.idx;
+
+    const date = q.QSO_DATE ? q.QSO_DATE.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3') : '';
+    const time = q.TIME_ON ? q.TIME_ON.slice(0, 2) + ':' + q.TIME_ON.slice(2, 4) : '';
+
+    const cells = [
+      date,                          // 0 Date
+      time,                          // 1 Time
+      q.CALL || '',                  // 2 Callsign
+      q.FREQ || '',                  // 3 Freq
+      q.MODE || '',                  // 4 Mode
+      q.BAND || '',                  // 5 Band
+      q.RST_SENT || '',             // 6 RST S
+      q.RST_RCVD || '',             // 7 RST R
+      q.SIG_INFO || '',             // 8 Park
+      q.COMMENT || '',              // 9 Notes
+    ];
+
+    for (let i = 0; i < cells.length; i++) {
+      const td = document.createElement('td');
+      td.textContent = cells[i];
+      if (LOG_VIEWER_EDITABLE[i]) {
+        td.dataset.field = LOG_VIEWER_EDITABLE[i];
+        td.classList.add('editable');
+      }
+      tr.appendChild(td);
+    }
+
+    // Delete button column
+    const tdDel = document.createElement('td');
+    const btn = document.createElement('button');
+    btn.className = 'log-delete-btn';
+    btn.textContent = '\u00D7';
+    btn.title = 'Delete QSO';
+    tdDel.appendChild(btn);
+    tr.appendChild(tdDel);
+
+    frag.appendChild(tr);
+  }
+  tbody.innerHTML = '';
+  tbody.appendChild(frag);
+}
+
+async function openLogViewer() {
+  const dlg = document.getElementById('log-viewer-dialog');
+  document.getElementById('log-viewer-search').value = '';
+  logViewerSearch = '';
+
+  logViewerQsos = await window.api.getAllQsos();
+  renderLogViewer();
+
   // Show log file path
-  const pathLink = document.getElementById('recent-qsos-path-link');
+  const pathLink = document.getElementById('log-viewer-path-link');
   const settings = await window.api.getSettings();
   const logPath = settings.adifLogPath || await window.api.getDefaultLogPath();
   pathLink.textContent = logPath;
@@ -2737,11 +2847,116 @@ async function openRecentQsos() {
   dlg.showModal();
 }
 
-document.getElementById('recent-qsos-close').addEventListener('click', () => {
-  document.getElementById('recent-qsos-dialog').close();
+// Close buttons
+document.getElementById('log-viewer-close').addEventListener('click', () => {
+  document.getElementById('log-viewer-dialog').close();
 });
-document.getElementById('recent-qsos-close-btn').addEventListener('click', () => {
-  document.getElementById('recent-qsos-dialog').close();
+document.getElementById('log-viewer-close-btn').addEventListener('click', () => {
+  document.getElementById('log-viewer-dialog').close();
+});
+
+// Column header sorting
+document.querySelectorAll('#log-viewer-table th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.sort;
+    if (logViewerSort === col) logViewerAsc = !logViewerAsc;
+    else { logViewerSort = col; logViewerAsc = col !== 'QSO_DATE'; }
+    renderLogViewer();
+  });
+});
+
+// Search with debounce
+{
+  let searchTimer = null;
+  document.getElementById('log-viewer-search').addEventListener('input', (e) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      logViewerSearch = e.target.value.trim();
+      renderLogViewer();
+    }, 200);
+  });
+}
+
+// Inline editing — double-click on editable cells
+document.getElementById('log-viewer-tbody').addEventListener('dblclick', (e) => {
+  const td = e.target.closest('td.editable');
+  if (!td || td.querySelector('input')) return;
+  const tr = td.closest('tr');
+  const idx = parseInt(tr.dataset.idx, 10);
+  const field = td.dataset.field;
+  const original = td.textContent;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = original;
+  td.textContent = '';
+  td.appendChild(input);
+  input.focus();
+  input.select();
+
+  function cancel() {
+    td.textContent = original;
+  }
+
+  async function save() {
+    const newVal = input.value.trim();
+    if (newVal === original) { cancel(); return; }
+
+    const fields = { [field]: newVal };
+    // If freq changed, recalculate band
+    if (field === 'FREQ') {
+      fields.BAND = freqMhzToBandLocal(newVal);
+    }
+
+    const result = await window.api.updateQso({ idx, fields });
+    if (result.success) {
+      // Update local data
+      const qso = logViewerQsos.find(q => q.idx === idx);
+      if (qso) Object.assign(qso, fields);
+      renderLogViewer();
+      logViewerToast(`Updated ${qso ? qso.CALL : 'QSO'}`);
+    } else {
+      cancel();
+      logViewerToast('Update failed: ' + (result.error || 'unknown error'));
+    }
+  }
+
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); save(); }
+    if (ev.key === 'Escape') { ev.preventDefault(); cancel(); }
+  });
+  input.addEventListener('blur', save);
+});
+
+// Delete — click on delete button, two-click confirmation
+document.getElementById('log-viewer-tbody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.log-delete-btn');
+  if (!btn) return;
+
+  if (btn.classList.contains('confirming')) {
+    // Second click — actually delete
+    const tr = btn.closest('tr');
+    const idx = parseInt(tr.dataset.idx, 10);
+    const qso = logViewerQsos.find(q => q.idx === idx);
+    const call = qso ? qso.CALL : '?';
+
+    const result = await window.api.deleteQso(idx);
+    if (result.success) {
+      logViewerQsos = logViewerQsos.filter(q => q.idx !== idx);
+      renderLogViewer();
+      logViewerToast(`Deleted QSO with ${call}`);
+    } else {
+      logViewerToast('Delete failed: ' + (result.error || 'unknown error'));
+    }
+  } else {
+    // First click — show confirmation
+    btn.classList.add('confirming');
+    btn.textContent = 'Sure?';
+    setTimeout(() => {
+      btn.classList.remove('confirming');
+      btn.textContent = '\u00D7';
+    }, 3000);
+  }
 });
 
 // --- View Toggle ---
