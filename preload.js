@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer, shell } = require('electron');
+const { contextBridge, ipcRenderer, shell, webFrame } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   platform: process.platform,
@@ -75,6 +75,9 @@ contextBridge.exposeInMainWorld('api', {
   cwPaddleDah: (pressed) => ipcRenderer.send('cw-paddle-dah', pressed),
   cwSetWpm: (wpm) => ipcRenderer.send('cw-set-wpm', wpm),
   cwStop: () => ipcRenderer.send('cw-stop'),
+  // Zoom
+  setZoom: (factor) => webFrame.setZoomFactor(factor),
+  getZoom: () => webFrame.getZoomFactor(),
   onCwKey: (cb) => ipcRenderer.on('cw-key', (_e, data) => cb(data)),
   onCwKeyerStatus: (cb) => ipcRenderer.on('cw-keyer-status', (_e, s) => cb(s)),
   onCwText: (cb) => ipcRenderer.on('cw-text', (_e, data) => cb(data)),

@@ -2692,6 +2692,26 @@ document.addEventListener('keydown', (e) => {
     openQuickLog();
     return;
   }
+  // Ctrl+= / Ctrl+- / Ctrl+0 — UI zoom
+  if (e.ctrlKey || e.metaKey) {
+    const ZOOM_KEY = 'pota-cat-zoom';
+    const ZOOM_MIN = 0.6, ZOOM_MAX = 2.0, ZOOM_STEP = 0.1;
+    if (e.key === '=' || e.key === '+') {
+      e.preventDefault();
+      const z = Math.min(ZOOM_MAX, window.api.getZoom() + ZOOM_STEP);
+      window.api.setZoom(z);
+      localStorage.setItem(ZOOM_KEY, z.toFixed(1));
+    } else if (e.key === '-') {
+      e.preventDefault();
+      const z = Math.max(ZOOM_MIN, window.api.getZoom() - ZOOM_STEP);
+      window.api.setZoom(z);
+      localStorage.setItem(ZOOM_KEY, z.toFixed(1));
+    } else if (e.key === '0') {
+      e.preventDefault();
+      window.api.setZoom(1.0);
+      localStorage.removeItem(ZOOM_KEY);
+    }
+  }
 });
 
 // --- Quick Re-spot (Ctrl+R) ---
@@ -5930,6 +5950,12 @@ async function checkFirstRun(force = false) {
     welcomeDialog.showModal();
   }
 }
+
+// Restore saved zoom level
+(function restoreZoom() {
+  const saved = parseFloat(localStorage.getItem('pota-cat-zoom'));
+  if (saved && saved >= 0.6 && saved <= 2.0) window.api.setZoom(saved);
+})();
 
 // Init
 loadPrefs().then(() => {
