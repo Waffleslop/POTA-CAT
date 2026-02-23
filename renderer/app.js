@@ -1720,6 +1720,24 @@ function showColContextMenu(x, y) {
     item.appendChild(document.createTextNode(col.label));
     colContextMenu.appendChild(item);
   }
+  // Separator + Reset Column Order
+  const sep = document.createElement('div');
+  sep.style.cssText = 'border-top:1px solid #444;margin:4px 0;';
+  colContextMenu.appendChild(sep);
+  const resetItem = document.createElement('div');
+  resetItem.className = 'col-ctx-item';
+  resetItem.style.cssText = 'cursor:pointer;padding:4px 8px;';
+  resetItem.textContent = 'Reset Column Order';
+  resetItem.addEventListener('click', () => {
+    colOrder = [...DEFAULT_COL_ORDER];
+    saveColOrder();
+    applyColOrder();
+    applyColWidths(loadColWidths());
+    render();
+    colContextMenu.classList.add('hidden');
+  });
+  colContextMenu.appendChild(resetItem);
+
   // Position within viewport
   colContextMenu.classList.remove('hidden');
   const menuW = colContextMenu.offsetWidth;
@@ -1792,18 +1810,64 @@ const mapResizeObserver = new ResizeObserver(() => {
 });
 mapResizeObserver.observe(mapPaneEl);
 
+// --- Column Order (drag-and-drop reordering) ---
+const COL_ORDER_KEY = 'pota-cat-col-order-v1';
+const DEFAULT_COL_ORDER = [
+  'log','callsign','operator','frequency','mode','reference',
+  'parkName','locationDesc','distance','bearing','spotTime','comments','skip'
+];
+
+function loadColOrder() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(COL_ORDER_KEY));
+    if (Array.isArray(saved) && saved.length === DEFAULT_COL_ORDER.length &&
+        DEFAULT_COL_ORDER.every(k => saved.includes(k))) return saved;
+  } catch { /* ignore */ }
+  return [...DEFAULT_COL_ORDER];
+}
+
+function saveColOrder() {
+  localStorage.setItem(COL_ORDER_KEY, JSON.stringify(colOrder));
+}
+
+function applyColOrder() {
+  const thead = spotsTable.querySelector('thead tr');
+  if (!thead) return;
+  const thMap = new Map();
+  thead.querySelectorAll('th').forEach(th => thMap.set(th.getAttribute('data-col'), th));
+  for (const col of colOrder) {
+    const th = thMap.get(col);
+    if (th) thead.appendChild(th);
+  }
+}
+
+let colOrder = loadColOrder();
+
 // --- Column Resizing ---
-// Widths stored as percentages of table width so they always fit
-const COL_WIDTHS_KEY = 'pota-cat-col-pct-v8';
-// Log, Callsign, Operator, Freq, Mode, Ref, Name, State, Dist, Heading, Age, Comments, Skip
-const DEFAULT_COL_PCT = [4, 8, 7, 6, 5, 6, 16, 8, 6, 5, 5, 10, 4];
+// Widths stored as { colKey: pct } object so they follow columns regardless of position
+const COL_WIDTHS_KEY = 'pota-cat-col-pct-v9';
+const COL_WIDTHS_KEY_V8 = 'pota-cat-col-pct-v8';
+const DEFAULT_COL_PCT_OBJ = {
+  log: 4, callsign: 8, operator: 7, frequency: 6, mode: 5, reference: 6,
+  parkName: 16, locationDesc: 8, distance: 6, bearing: 5, spotTime: 5, comments: 10, skip: 4
+};
 
 function loadColWidths() {
   try {
     const saved = JSON.parse(localStorage.getItem(COL_WIDTHS_KEY));
-    if (Array.isArray(saved) && saved.length === DEFAULT_COL_PCT.length) return saved;
+    if (saved && typeof saved === 'object' && !Array.isArray(saved)) return saved;
   } catch { /* ignore */ }
-  return [...DEFAULT_COL_PCT];
+  // Migrate from v8 array format
+  try {
+    const v8 = JSON.parse(localStorage.getItem(COL_WIDTHS_KEY_V8));
+    if (Array.isArray(v8) && v8.length === DEFAULT_COL_ORDER.length) {
+      const obj = {};
+      DEFAULT_COL_ORDER.forEach((key, i) => { obj[key] = v8[i]; });
+      saveColWidths(obj);
+      return obj;
+    }
+  } catch { /* ignore */ }
+  return { ...DEFAULT_COL_PCT_OBJ };
 }
 
 function saveColWidths(widths) {
@@ -1812,8 +1876,9 @@ function saveColWidths(widths) {
 
 function applyColWidths(widths) {
   const ths = spotsTable.querySelectorAll('thead th');
-  ths.forEach((th, i) => {
-    if (widths[i] != null) th.style.width = widths[i] + '%';
+  ths.forEach(th => {
+    const col = th.getAttribute('data-col');
+    if (col && widths[col] != null) th.style.width = widths[col] + '%';
   });
 }
 
@@ -1822,27 +1887,31 @@ function initColumnResizing() {
   applyColWidths(colPcts);
 
   const ths = spotsTable.querySelectorAll('thead th');
-  ths.forEach((th, i) => {
+  ths.forEach(th => {
     const handle = document.createElement('div');
     handle.className = 'col-resize-handle';
     th.style.position = 'relative';
     th.appendChild(handle);
 
+    // Prevent drag-and-drop from firing on resize handle
+    handle.addEventListener('dragstart', (e) => { e.preventDefault(); });
+
     let startX, startPct;
+    const col = th.getAttribute('data-col');
 
     handle.addEventListener('mousedown', (e) => {
       e.preventDefault();
       e.stopPropagation(); // don't trigger sort
       startX = e.clientX;
-      startPct = colPcts[i];
+      startPct = colPcts[col] || 5;
       const tableW = spotsTable.offsetWidth;
       document.body.style.cursor = 'col-resize';
 
       const onMove = (ev) => {
         const deltaPx = ev.clientX - startX;
         const deltaPct = (deltaPx / tableW) * 100;
-        colPcts[i] = Math.max(3, startPct + deltaPct);
-        th.style.width = colPcts[i] + '%';
+        colPcts[col] = Math.max(3, startPct + deltaPct);
+        th.style.width = colPcts[col] + '%';
       };
 
       const onUp = () => {
@@ -1854,6 +1923,67 @@ function initColumnResizing() {
 
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
+    });
+  });
+}
+
+// --- Column Drag-and-Drop Reordering ---
+function initColumnDragging() {
+  const ths = spotsTable.querySelectorAll('thead th');
+  ths.forEach(th => {
+    th.setAttribute('draggable', 'true');
+
+    th.addEventListener('dragstart', (e) => {
+      const col = th.getAttribute('data-col');
+      e.dataTransfer.setData('text/plain', col);
+      e.dataTransfer.effectAllowed = 'move';
+      th.classList.add('col-dragging');
+    });
+
+    th.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      // Show drop indicator based on mouse position vs column midpoint
+      const rect = th.getBoundingClientRect();
+      const midX = rect.left + rect.width / 2;
+      th.classList.toggle('col-drop-left', e.clientX < midX);
+      th.classList.toggle('col-drop-right', e.clientX >= midX);
+    });
+
+    th.addEventListener('dragleave', () => {
+      th.classList.remove('col-drop-left', 'col-drop-right');
+    });
+
+    th.addEventListener('drop', (e) => {
+      e.preventDefault();
+      th.classList.remove('col-drop-left', 'col-drop-right');
+      const sourceCol = e.dataTransfer.getData('text/plain');
+      const targetCol = th.getAttribute('data-col');
+      if (sourceCol === targetCol) return;
+
+      const srcIdx = colOrder.indexOf(sourceCol);
+      if (srcIdx === -1) return;
+      colOrder.splice(srcIdx, 1);
+
+      // Insert before or after target based on mouse position
+      const rect = th.getBoundingClientRect();
+      const midX = rect.left + rect.width / 2;
+      let tgtIdx = colOrder.indexOf(targetCol);
+      if (e.clientX >= midX) tgtIdx++;
+      colOrder.splice(tgtIdx, 0, sourceCol);
+
+      saveColOrder();
+      applyColOrder();
+      applyColWidths(loadColWidths());
+      render();
+    });
+
+    th.addEventListener('dragend', () => {
+      th.classList.remove('col-dragging');
+      // Clean up all drop indicators
+      spotsTable.querySelectorAll('thead th').forEach(h => {
+        h.classList.remove('col-drop-left', 'col-drop-right');
+      });
     });
   });
 }
@@ -3484,7 +3614,10 @@ function render() {
         render(); // highlight the clicked row immediately
       });
 
-      // Log button cell (first column, hidden unless logging enabled)
+      // Build all cells into a map keyed by data-col, then append in colOrder
+      const cellMap = new Map();
+
+      // Log button cell
       const logTd = document.createElement('td');
       logTd.className = 'log-cell log-col';
       logTd.setAttribute('data-col', 'log');
@@ -3496,7 +3629,7 @@ function render() {
         openLogPopup(s);
       });
       logTd.appendChild(logButton);
-      tr.appendChild(logTd);
+      cellMap.set('log', logTd);
 
       // Callsign cell — clickable link to QRZ
       const isWatched = watchlist.has(s.callsign.toUpperCase());
@@ -3543,7 +3676,7 @@ function render() {
         dxp.textContent = 'DXP';
         callTd.appendChild(dxp);
       }
-      tr.appendChild(callTd);
+      cellMap.set('callsign', callTd);
 
       // Operator name cell (from QRZ lookup)
       const operatorTd = document.createElement('td');
@@ -3554,7 +3687,7 @@ function render() {
         operatorTd.textContent = qrzDisplayName(qrzInfo);
         operatorTd.title = [qrzInfo.nickname || qrzInfo.fname, qrzInfo.name].filter(Boolean).join(' ');
       }
-      tr.appendChild(operatorTd);
+      cellMap.set('operator', operatorTd);
 
       // Frequency cell — styled as clickable link
       const freqTd = document.createElement('td');
@@ -3563,7 +3696,7 @@ function render() {
       freqLink.textContent = parseFloat(s.frequency).toFixed(1);
       freqLink.className = 'freq-link';
       freqTd.appendChild(freqLink);
-      tr.appendChild(freqTd);
+      cellMap.set('frequency', freqTd);
 
       // Build reference display — dual-park shows both refs
       const refDisplay = s.wwffReference ? s.reference + ' / ' + s.wwffReference : s.reference;
@@ -3592,10 +3725,10 @@ function render() {
           badge.style.cssText = 'background:#26a69a;color:#000;font-size:9px;font-weight:bold;padding:1px 3px;border-radius:3px;margin-left:4px;';
           td.appendChild(badge);
         }
-        tr.appendChild(td);
+        cellMap.set(cell.col, td);
       }
 
-      // Skip button (last cell)
+      // Skip button cell
       const skipTd = document.createElement('td');
       skipTd.className = 'skip-cell';
       skipTd.setAttribute('data-col', 'skip');
@@ -3613,7 +3746,13 @@ function render() {
         render();
       });
       skipTd.appendChild(skipButton);
-      tr.appendChild(skipTd);
+      cellMap.set('skip', skipTd);
+
+      // Append cells in user-configured column order
+      for (const col of colOrder) {
+        const td = cellMap.get(col);
+        if (td) tr.appendChild(td);
+      }
 
       tbody.appendChild(tr);
     }
@@ -5797,7 +5936,9 @@ loadPrefs().then(() => {
   render();
   checkFirstRun();
 });
+applyColOrder();
 initColumnResizing();
+initColumnDragging();
 
 // Sticky table header via JS transform on each th
 // (CSS position:sticky and transform on <thead> are unreliable in Chromium table rendering)

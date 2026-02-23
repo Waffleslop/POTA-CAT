@@ -661,6 +661,12 @@ th.no-sort:hover {
   background: var(--accent-red);
 }
 
+/* Column drag-and-drop reordering */
+th[draggable="true"] { cursor: grab; }
+th.col-dragging { opacity: 0.4; cursor: grabbing; }
+th.col-drop-left { border-left: 2px solid var(--accent-blue) !important; }
+th.col-drop-right { border-right: 2px solid var(--accent-blue) !important; }
+
 /* Operator column */
 .operator-col {
   color: var(--text-tertiary, #b0bec5);
