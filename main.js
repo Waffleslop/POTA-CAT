@@ -17,6 +17,7 @@ const { DxClusterClient } = require('./lib/dxcluster');
 const { RbnClient } = require('./lib/rbn');
 const { appendQso, buildAdifRecord, appendImportedQso, rewriteAdifFile } = require('./lib/adif-writer');
 const { SmartSdrClient } = require('./lib/smartsdr');
+const { TciClient } = require('./lib/tci');
 const { parsePotaParksCSV } = require('./lib/pota-parks');
 const { WsjtxClient } = require('./lib/wsjtx');
 const { PskrClient } = require('./lib/pskreporter');
@@ -63,6 +64,8 @@ let rbnFlushTimer = null; // throttle timer for RBN → renderer updates
 let rbnWatchSpots = []; // RBN spots for watchlist callsigns, merged into main table
 let smartSdr = null;
 let smartSdrPushTimer = null; // throttle timer for SmartSDR spot pushes
+let tciClient = null;
+let tciPushTimer = null; // throttle timer for TCI spot pushes
 let workedQsos = new Map(); // callsign → [{date, ref}] from QSO log (all QSOs, not just confirmed)
 let workedParks = new Map(); // reference → park data from POTA parks CSV
 let wsjtx = null;
@@ -1107,6 +1110,59 @@ function pushSpotsToSmartSdr(spots) {
   smartSdr.pruneStaleSpots();
 }
 
+// --- TCI (Thetis/ExpertSDR3) panadapter spots ---
+function connectTci() {
+  disconnectTci();
+  if (!settings.tciSpots) return;
+  tciClient = new TciClient();
+  tciClient.on('error', (err) => {
+    console.error('TCI:', err.message);
+  });
+  tciClient.connect(settings.tciHost || '127.0.0.1', settings.tciPort || 50001);
+}
+
+function disconnectTci() {
+  if (tciPushTimer) {
+    clearTimeout(tciPushTimer);
+    tciPushTimer = null;
+  }
+  if (tciClient) {
+    if (tciClient.connected) tciClient.clearSpots();
+    tciClient.disconnect();
+    tciClient = null;
+  }
+}
+
+let lastTciPush = 0;
+
+function pushSpotsToTci(spots) {
+  if (!tciClient || !tciClient.connected) return;
+  const now = Date.now();
+  if (now - lastTciPush < 5000) return;
+  lastTciPush = now;
+
+  const maxAgeMs = (settings.tciMaxAge != null ? settings.tciMaxAge : 15) * 60000;
+
+  for (const spot of spots) {
+    if (spot.source === 'pota' && settings.tciPota === false) continue;
+    if (spot.source === 'sota' && settings.tciSota === false) continue;
+    if (spot.source === 'dxc' && settings.tciCluster === false) continue;
+    if (spot.source === 'rbn' && !settings.tciRbn) continue;
+    if (spot.source === 'wwff' && settings.tciWwff === false) continue;
+    if (spot.source === 'llota' && settings.tciLlota === false) continue;
+    if (spot.source === 'pskr' && settings.tciPskr === false) continue;
+    // Age filter — skip spots older than the configured max age (0 = no limit)
+    if (maxAgeMs > 0 && spot.spotTime) {
+      const t = spot.spotTime.endsWith('Z') ? spot.spotTime : spot.spotTime + 'Z';
+      const age = now - new Date(t).getTime();
+      if (age > maxAgeMs) continue;
+    }
+    tciClient.addSpot(spot);
+  }
+  // Remove spots no longer in the list (instead of clear+re-add which causes flashing)
+  tciClient.pruneStaleSpots();
+}
+
 // --- Solar data ---
 function fetchSolarData() {
   const https = require('https');
@@ -1383,6 +1439,7 @@ function sendMergedSpots() {
   const merged = [...lastPotaSotaSpots, ...clusterSpots, ...rbnWatchSpots, ...pskrSpots];
   win.webContents.send('spots', merged);
   pushSpotsToSmartSdr(merged);
+  pushSpotsToTci(merged);
   // Trigger QRZ lookups for new callsigns (async, non-blocking)
   if (qrz.configured && settings.enableQrz) {
     const callsigns = [...new Set(merged.map(s => s.callsign))];
@@ -2133,6 +2190,7 @@ app.whenReady().then(() => {
   if (settings.enableCluster) connectCluster();
   if (settings.enableRbn) connectRbn();
   connectSmartSdr(); // connects if smartSdrSpots or WSJT-X+Flex
+  connectTci();
   if (settings.enableWsjtx) connectWsjtx();
   if (settings.enablePskr) connectPskr();
   // Configure QRZ client from saved credentials
@@ -2382,6 +2440,10 @@ app.whenReady().then(() => {
     const smartSdrChanged = (has('smartSdrSpots') && newSettings.smartSdrSpots !== settings.smartSdrSpots) ||
       (has('smartSdrHost') && newSettings.smartSdrHost !== settings.smartSdrHost);
 
+    const tciChanged = (has('tciSpots') && newSettings.tciSpots !== settings.tciSpots) ||
+      (has('tciHost') && newSettings.tciHost !== settings.tciHost) ||
+      (has('tciPort') && newSettings.tciPort !== settings.tciPort);
+
     const wsjtxChanged = (has('enableWsjtx') && newSettings.enableWsjtx !== settings.enableWsjtx) ||
       (has('wsjtxPort') && newSettings.wsjtxPort !== settings.wsjtxPort);
 
@@ -2418,6 +2480,11 @@ app.whenReady().then(() => {
     // Reconnect SmartSDR if settings changed (also needed for WSJT-X+Flex tuning)
     if (smartSdrChanged || wsjtxChanged) {
       connectSmartSdr(); // needsSmartSdr() decides whether to actually connect
+    }
+
+    // Reconnect TCI if settings changed
+    if (tciChanged) {
+      connectTci();
     }
 
     // Reconnect WSJT-X if settings changed
@@ -3000,6 +3067,7 @@ function gracefulCleanup() {
   if (rbn) try { rbn.disconnect(); } catch {}
   try { disconnectWsjtx(); } catch {}
   try { disconnectSmartSdr(); } catch {}
+  try { disconnectTci(); } catch {}
   killRigctld();
 }
 
