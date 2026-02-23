@@ -1191,7 +1191,6 @@ function pushSpotsToTci(spots) {
 
 // --- CW Keyer ---
 
-// Morse lookup: element sequence → character
 function connectKeyer() {
   disconnectKeyer();
   if (!settings.enableCwKeyer) return;
@@ -1204,10 +1203,10 @@ function connectKeyer() {
   keyer.setSwapPaddles(!!settings.cwSwapPaddles);
 
   keyer.on('key', ({ down }) => {
-    // Send raw key event directly to radio — no Morse decode, no latency
+    // Send raw key event directly to radio with timestamps — preserves operator's fist
     if (smartSdr && smartSdr.connected) {
       if (down) {
-        smartSdr.cwMoxOn();  // activate PTT (with holdoff auto-release)
+        smartSdr.cwPttOn();  // activate CW PTT (with holdoff auto-release)
       }
       smartSdr.cwKey(down);
     }
