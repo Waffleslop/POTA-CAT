@@ -278,6 +278,10 @@ function sendCatMode(mode) {
   if (win && !win.isDestroyed()) win.webContents.send('cat-mode', mode);
 }
 
+function sendCatPower(watts) {
+  if (win && !win.isDestroyed()) win.webContents.send('cat-power', watts);
+}
+
 function sendCatLog(msg) {
   const ts = new Date().toISOString().slice(11, 23);
   const line = `[CAT ${ts}] ${msg}`;
@@ -338,6 +342,7 @@ async function connectCat() {
     cat.on('status', sendCatStatus);
     cat.on('frequency', sendCatFrequency);
     cat.on('mode', sendCatMode);
+    cat.on('power', sendCatPower);
     if (target) {
       cat.connect(target);
     }
@@ -1940,8 +1945,9 @@ function createWindow() {
     }
     fetchActiveEvents();
     setInterval(fetchActiveEvents, 4 * 3600000); // refresh every 4 hours
-    // Push cached events to renderer immediately
+    // Push cached events to renderer immediately + scan log for matches
     pushEventsToRenderer();
+    scanLogForEvents();
     // Auto-reopen pop-out map if it was open when the app last closed
     if (settings.mapPopoutOpen) {
       ipcMain.emit('popout-map-open');
@@ -2120,6 +2126,7 @@ function fetchActiveEvents() {
           activeEvents = data.events;
           saveEventsCache(data);
           pushEventsToRenderer();
+          scanLogForEvents();
         }
       } catch { /* silently ignore parse errors */ }
     });
@@ -2166,6 +2173,71 @@ function markEventRegion(eventId, region, qsoData) {
   };
   saveSettings(settings);
   pushEventsToRenderer();
+}
+
+/** Scan existing QSO log for contacts that match opted-in events */
+function scanLogForEvents() {
+  if (!activeEvents.length || !settings.events) return;
+  const logPath = settings.adifLogPath || path.join(app.getPath('userData'), 'potacat_qso_log.adi');
+  let qsos;
+  try {
+    if (!fs.existsSync(logPath)) return;
+    qsos = parseAllRawQsos(logPath);
+  } catch { return; }
+  if (!qsos.length) return;
+
+  let changed = false;
+  for (const ev of activeEvents) {
+    const state = settings.events && settings.events[ev.id];
+    if (!state || !state.optedIn) continue;
+
+    const board = ev.board || ev.tracking?.type || 'regions';
+
+    for (const rec of qsos) {
+      const call = (rec.CALL || '').toUpperCase();
+      if (!call) continue;
+
+      // Parse QSO date (YYYYMMDD) to match against schedule
+      const qsoDateStr = rec.QSO_DATE || '';
+      const qsoDate = qsoDateStr.length === 8
+        ? new Date(`${qsoDateStr.slice(0, 4)}-${qsoDateStr.slice(4, 6)}-${qsoDateStr.slice(6, 8)}T12:00:00Z`)
+        : null;
+
+      // Find schedule entry that covers this QSO's date
+      const matchEntry = (ev.schedule || []).find(s => {
+        const start = new Date(s.start);
+        const end = new Date(s.end);
+        return qsoDate && qsoDate >= start && qsoDate < end;
+      });
+      if (!matchEntry) continue;
+
+      const qsoData = {
+        callsign: call,
+        band: rec.BAND || '',
+        mode: rec.MODE || '',
+        qsoDate: qsoDateStr,
+        frequency: rec.FREQ || '',
+      };
+
+      if (board === 'checklist') {
+        const items = (ev.tracking && ev.tracking.items) || [];
+        const matchedItem = items.find(it => call === it.id.toUpperCase() || call.startsWith(it.id.toUpperCase() + '/'));
+        if (!matchedItem || state.progress[matchedItem.id]) continue;
+        markEventRegion(ev.id, matchedItem.id, qsoData);
+        changed = true;
+      } else if (board === 'regions') {
+        const matches = (ev.callsignPatterns || []).some(pattern => {
+          if (pattern.endsWith('/*')) return call.startsWith(pattern.slice(0, -1));
+          return call === pattern.toUpperCase();
+        });
+        if (!matches || state.progress[matchEntry.region]) continue;
+        markEventRegion(ev.id, matchEntry.region, qsoData);
+        changed = true;
+      }
+      // Skip 'counter' — don't retroactively count old QSOs for counter events
+    }
+  }
+  if (changed) pushEventsToRenderer();
 }
 
 /** Check if a logged QSO matches any active event and auto-mark progress */
@@ -2847,6 +2919,8 @@ app.whenReady().then(() => {
 
   ipcMain.handle('set-event-optin', (_e, { eventId, optedIn, dismissed }) => {
     setEventOptIn(eventId, optedIn, dismissed);
+    // Scan existing log for matching QSOs when user opts in
+    if (optedIn) scanLogForEvents();
     return true;
   });
 
@@ -3130,6 +3204,8 @@ app.whenReady().then(() => {
 
     // Reload worked callsigns from updated log and push to renderer
     loadWorkedQsos();
+    // Scan imported QSOs for event matches
+    scanLogForEvents();
 
     const fileList = fileNames.join(', ');
     dialog.showMessageBox(win, {

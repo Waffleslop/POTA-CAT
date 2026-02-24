@@ -187,6 +187,7 @@ const mapDiv = document.getElementById('map');
 const bandActivityBar = document.getElementById('band-activity-bar');
 const splitContainerEl = document.getElementById('split-container');
 const tablePaneEl = document.getElementById('table-pane');
+const tableScrollEl = document.getElementById('table-scroll-wrap');
 const mapPaneEl = document.getElementById('map-pane');
 const splitSplitterEl = document.getElementById('split-splitter');
 const viewTableBtn = document.getElementById('view-table-btn');
@@ -256,6 +257,7 @@ const rbnMaxAgeInput = document.getElementById('rbn-max-age');
 const rbnAgeUnitSelect = document.getElementById('rbn-age-unit');
 const setPotaParksPath = document.getElementById('set-pota-parks-path');
 const potaParksBrowseBtn = document.getElementById('pota-parks-browse-btn');
+const potaParksClearBtn = document.getElementById('pota-parks-clear-btn');
 const potaParksPicker = document.getElementById('pota-parks-picker');
 const setHideWorkedParks = document.getElementById('set-hide-worked-parks');
 const parksStatsOverlay = document.getElementById('parks-stats-overlay');
@@ -1495,7 +1497,13 @@ potaParksBrowseBtn.addEventListener('click', async () => {
   const filePath = await window.api.choosePotaParksFile();
   if (filePath) {
     setPotaParksPath.value = filePath;
+    potaParksClearBtn.style.display = '';
   }
+});
+
+potaParksClearBtn.addEventListener('click', () => {
+  setPotaParksPath.value = '';
+  potaParksClearBtn.style.display = 'none';
 });
 
 // Rig search filtering
@@ -2569,7 +2577,7 @@ function bindPopupClickHandlers(mapInstance) {
         if (!isNaN(lat) && !isNaN(lon)) showTuneArc(lat, lon, btn.dataset.freq, btn.dataset.source);
         // Find matching spot in allSpots for quick respot
         const match = allSpots.find(s => s.frequency === btn.dataset.freq && s.callsign && s.mode === btn.dataset.mode);
-        if (match) lastTunedSpot = match;
+        if (match) { lastTunedSpot = match; updateDxRespotBar(); }
       });
     });
     container.querySelectorAll('.popup-qrz').forEach((link) => {
@@ -2658,6 +2666,7 @@ function scanStep() {
 
   const spot = list[scanIndex];
   lastTunedSpot = spot;
+  updateDxRespotBar();
   window.api.tune(spot.frequency, spot.mode, spot.bearing);
   if (spot.lat != null && spot.lon != null) showTuneArc(spot.lat, spot.lon, spot.frequency, spot.source);
   render();
@@ -2867,6 +2876,51 @@ document.getElementById('respot-send').addEventListener('click', async () => {
 
 document.getElementById('respot-cancel').addEventListener('click', () => {
   document.getElementById('respot-dialog').close();
+});
+
+// --- DX Respot Banner ---
+function updateDxRespotBar() {
+  const bar = document.getElementById('dx-respot-bar');
+  const callEl = document.getElementById('dx-respot-call');
+  if (lastTunedSpot && lastTunedSpot.source === 'dxc') {
+    callEl.textContent = lastTunedSpot.callsign;
+    bar.classList.remove('hidden');
+  } else {
+    bar.classList.add('hidden');
+  }
+}
+
+async function sendDxRespot() {
+  if (!lastTunedSpot || lastTunedSpot.source !== 'dxc') return;
+  const btn = document.getElementById('dx-respot-send');
+  const input = document.getElementById('dx-respot-comment');
+  const comment = input.value.trim();
+  btn.disabled = true;
+  try {
+    const result = await window.api.quickRespot({
+      callsign: lastTunedSpot.callsign,
+      frequency: lastTunedSpot.frequency,
+      mode: lastTunedSpot.mode,
+      comment,
+      dxcRespot: true,
+    });
+    if (result.error) {
+      showLogToast('Re-spot failed: ' + result.error, { warn: true, duration: 5000 });
+    } else {
+      btn.textContent = 'Sent!';
+      setTimeout(() => { btn.textContent = 'Respot'; }, 1500);
+      input.value = '';
+    }
+  } catch (err) {
+    showLogToast('Re-spot failed: ' + err.message, { warn: true, duration: 5000 });
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('dx-respot-send').addEventListener('click', sendDxRespot);
+document.getElementById('dx-respot-comment').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); sendDxRespot(); }
 });
 
 // --- Quick Log (Ctrl+L) ---
@@ -3348,6 +3402,7 @@ function render() {
       tr.addEventListener('click', () => {
         if (scanning) stopScan(); // clicking a row stops scan
         lastTunedSpot = s;
+        updateDxRespotBar();
         window.api.tune(s.frequency, s.mode, s.bearing);
         if (s.lat != null && s.lon != null) showTuneArc(s.lat, s.lon, s.frequency, s.source);
         render(); // highlight the clicked row immediately
@@ -3596,8 +3651,8 @@ function openLogPopup(spot) {
   logDate.value = now.toISOString().slice(0, 10);
   logTime.value = now.toISOString().slice(11, 16);
 
-  // Pre-fill power from settings
-  logPower.value = defaultPower || 100;
+  // Pre-fill power: use CAT reading if available, otherwise settings default
+  logPower.value = radioPower > 0 ? radioPower : (defaultPower || 100);
 
   // Pre-fill RST based on mode
   const defaultRst = CW_DIGI_MODES_SET.has(mode) ? '599' : '59';
@@ -3701,6 +3756,14 @@ logMode.addEventListener('change', () => {
 // Log dialog close/cancel
 logCancelBtn.addEventListener('click', () => logDialog.close());
 logDialogClose.addEventListener('click', () => logDialog.close());
+
+// Enter key saves QSO from anywhere in the log dialog
+logDialog.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    logSaveBtn.click();
+  }
+});
 
 // Save QSO
 logSaveBtn.addEventListener('click', async () => {
@@ -4027,6 +4090,7 @@ settingsBtn.addEventListener('click', async () => {
   setAdifPath.value = s.adifPath || '';
   adifPicker.classList.toggle('hidden', !s.enableDxcc);
   setPotaParksPath.value = s.potaParksPath || '';
+  potaParksClearBtn.style.display = s.potaParksPath ? '' : 'none';
   setHideWorkedParks.checked = s.hideWorkedParks === true;
   setSmartSdrSpots.checked = s.smartSdrSpots === true;
   setSmartSdrHost.value = s.smartSdrHost || '127.0.0.1';
@@ -5167,6 +5231,11 @@ window.api.onCatMode((mode) => {
   radioMode = mode;
 });
 
+let radioPower = 0; // last known TX power from CAT (watts)
+window.api.onCatPower((watts) => {
+  radioPower = watts;
+});
+
 // --- CAT Log Panel ---
 const catLogPanel = document.getElementById('cat-log-panel');
 const catLogOutput = document.getElementById('cat-log-output');
@@ -6195,7 +6264,9 @@ document.getElementById('welcome-start').addEventListener('click', async () => {
   const lightModeEnabled = welcomeLightMode.checked;
   const currentSettings = await window.api.getSettings();
 
+  // Merge with existing settings so upgrade doesn't wipe user preferences
   const saveData = {
+    ...currentSettings,
     myCallsign,
     grid,
     distUnit: distUnitVal,
@@ -6203,14 +6274,13 @@ document.getElementById('welcome-start').addEventListener('click', async () => {
     hideOutOfBand: hideOobChecked,
     firstRun: false,
     lastVersion: currentSettings.appVersion,
-    maxAgeMin: 5,
-    scanDwell: 7,
     enablePota: enablePotaVal,
     enableSota: enableSotaVal,
     enableWwff: enableWwffVal,
     enableLlota: enableLlotaVal,
     lightMode: lightModeEnabled,
   };
+  delete saveData.appVersion; // runtime-only, don't persist
 
   // Add rig if configured in welcome
   if (welcomeRig) {
@@ -6289,11 +6359,11 @@ initColumnDragging();
   const ths = spotsTable.querySelectorAll('thead th');
   if (!ths.length) return;
   let ticking = false;
-  tablePaneEl.addEventListener('scroll', () => {
+  tableScrollEl.addEventListener('scroll', () => {
     if (!ticking) {
       ticking = true;
       requestAnimationFrame(() => {
-        const y = tablePaneEl.scrollTop;
+        const y = tableScrollEl.scrollTop;
         for (let i = 0; i < ths.length; i++) {
           ths[i].style.transform = `translateY(${y}px)`;
         }
