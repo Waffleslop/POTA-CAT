@@ -9,6 +9,7 @@
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",
     "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
     "release": "node scripts/release.js"
   },
   "build": {
@@ -51,6 +52,13 @@
     "mac": {
       "target": "dmg",
       "category": "public.app-category.utilities"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility"
     },
     "extraResources": [
       {

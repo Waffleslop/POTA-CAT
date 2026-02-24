@@ -3697,7 +3697,32 @@ function openLogPopup(spot) {
   }
 
   logDialog.showModal();
+  // Start live UTC clock — ticks every second until dialog closes or user edits time
+  logTimeUserEdited = false;
+  startLogClock();
 }
+
+// --- Live UTC clock in log dialog ---
+let logClockTimer = null;
+let logTimeUserEdited = false;
+
+function startLogClock() {
+  stopLogClock();
+  logClockTimer = setInterval(() => {
+    if (logTimeUserEdited) return; // user touched the field, stop updating
+    const now = new Date();
+    logTime.value = now.toISOString().slice(11, 16);
+    logDate.value = now.toISOString().slice(0, 10);
+  }, 1000);
+}
+
+function stopLogClock() {
+  if (logClockTimer) { clearInterval(logClockTimer); logClockTimer = null; }
+}
+
+logTime.addEventListener('input', () => { logTimeUserEdited = true; });
+
+logDialog.addEventListener('close', () => { stopLogClock(); });
 
 function updateRstButtons() {
   const mode = logMode.value.toUpperCase();
