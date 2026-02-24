@@ -308,135 +308,34 @@ export default {
       }
     }
 
-    // GET /stats — legacy JSON stats endpoint (preserved for backwards compat)
+    // GET /stats — serves cached stats (rebuilt by cron)
     if (request.method === 'GET' && url.pathname === '/stats') {
-      const list = await env.TELEMETRY.list({ prefix: 'user:' });
-      const users = [];
-      const versionCounts = {};
-      const osCounts = {};
-      let totalSeconds = 0;
-      let totalSessions = 0;
-
-      for (const key of list.keys) {
-        const record = await env.TELEMETRY.get(key.name, { type: 'json' });
-        if (record) {
-          users.push(record);
-          versionCounts[record.version] = (versionCounts[record.version] || 0) + 1;
-          osCounts[record.os] = (osCounts[record.os] || 0) + 1;
-          totalSeconds += record.totalSeconds || 0;
-          totalSessions += record.totalSessions || 0;
-        }
-      }
-
-      const weekAgo = Date.now() - 7 * 86400000;
-      const activeLastWeek = users.filter(u => new Date(u.lastSeen).getTime() > weekAgo).length;
-
-      const totalRespots = parseInt(await env.TELEMETRY.get('global:respots') || '0', 10);
-      const totalQsos = parseInt(await env.TELEMETRY.get('global:qsos') || '0', 10);
-
-      const qsos = {};
-      const respots = {};
-      for (const src of VALID_SOURCES) {
-        qsos[src] = parseInt(await env.TELEMETRY.get(`global:qsos:${src}`) || '0', 10);
-        respots[src] = parseInt(await env.TELEMETRY.get(`global:respots:${src}`) || '0', 10);
-      }
-
-      const stats = {
-        totalUsers: users.length,
-        activeLastWeek,
-        totalSessions,
-        totalHours: Math.round(totalSeconds / 3600),
-        totalQsos,
-        qsos,
-        totalRespots,
-        respots,
-        versions: versionCounts,
-        platforms: osCounts,
-      };
-
-      return new Response(JSON.stringify(stats, null, 2), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // GET /api/timeseries — JSON data for dashboard charts
-    if (request.method === 'GET' && url.pathname === '/api/timeseries') {
-      try {
-        // Fetch daily summaries (last 90 days)
-        const daily = [];
-        const summaryKeys = await listAllKeys(env, 'summary:');
-        for (const key of summaryKeys) {
-          const date = key.name.replace('summary:', '');
-          // Skip monthly summary keys (summary-month:)
-          if (date.length !== 10) continue;
-          const val = await env.TELEMETRY.get(key.name, { type: 'json' });
-          if (val) daily.push({ date, dau: val.dau || 0 });
-        }
-        daily.sort((a, b) => a.date.localeCompare(b.date));
-
-        // Fetch monthly summaries
-        const monthly = [];
-        const monthKeys = await listAllKeys(env, 'summary-month:');
-        for (const key of monthKeys) {
-          const month = key.name.replace('summary-month:', '');
-          const val = await env.TELEMETRY.get(key.name, { type: 'json' });
-          if (val) monthly.push({ month, mau: val.mau || 0 });
-        }
-        monthly.sort((a, b) => a.month.localeCompare(b.month));
-
-        // Current live stats
-        const now = new Date();
-        const today = fmtDate(now);
-        const todayKeys = await listAllKeys(env, `day:${today}:`);
-        const activeToday = todayKeys.length;
-
-        // WAU — unique users across the last 7 days of day: keys
-        const wauUsers = new Set(todayKeys.map(k => k.name.replace(`day:${today}:`, '')));
-        for (let i = 1; i < 7; i++) {
-          const d = new Date(now);
-          d.setUTCDate(d.getUTCDate() - i);
-          const dateStr = fmtDate(d);
-          const keys = await listAllKeys(env, `day:${dateStr}:`);
-          for (const k of keys) wauUsers.add(k.name.replace(`day:${dateStr}:`, ''));
-        }
-        const activeThisWeek = wauUsers.size;
-
-        const userKeys = await listAllKeys(env, 'user:');
-        const versionCounts = {};
-        const osCounts = {};
-        for (const key of userKeys) {
-          const record = await env.TELEMETRY.get(key.name, { type: 'json' });
-          if (record) {
-            versionCounts[record.version] = (versionCounts[record.version] || 0) + 1;
-            osCounts[record.os] = (osCounts[record.os] || 0) + 1;
-          }
-        }
-
-        const totalQsos = parseInt(await env.TELEMETRY.get('global:qsos') || '0', 10);
-        const totalRespots = parseInt(await env.TELEMETRY.get('global:respots') || '0', 10);
-
-        const result = {
-          daily,
-          monthly,
-          current: {
-            totalUsers: userKeys.length,
-            activeToday,
-            activeThisWeek,
-            versions: versionCounts,
-            platforms: osCounts,
-            totalQsos,
-            totalRespots,
-          },
-        };
-
-        return new Response(JSON.stringify(result), {
+      const cached = await env.TELEMETRY.get('cache:stats');
+      if (cached) {
+        return new Response(cached, {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
-      } catch {
-        return new Response('Server error', { status: 500, headers: corsHeaders });
       }
+      return new Response('{}', { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // GET /api/timeseries — serves cached timeseries (rebuilt by cron)
+    if (request.method === 'GET' && url.pathname === '/api/timeseries') {
+      const cached = await env.TELEMETRY.get('cache:timeseries');
+      if (cached) {
+        return new Response(cached, {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('{}', { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // POST /rebuild-cache — manually trigger cache rebuild (same as cron)
+    if (request.method === 'POST' && url.pathname === '/rebuild-cache') {
+      await this.scheduled(null, env, null);
+      return new Response('ok', { status: 200, headers: corsHeaders });
     }
 
     // GET /dashboard — self-contained HTML dashboard
@@ -450,7 +349,7 @@ export default {
     return new Response('Not found', { status: 404, headers: corsHeaders });
   },
 
-  // ─── Cron: Daily rollup (runs at 05:00 UTC) ────────────────────────────────
+  // ─── Cron: Daily rollup + cache rebuild (runs at 05:00 UTC) ─────────────────
 
   async scheduled(event, env, ctx) {
     const now = new Date();
@@ -488,16 +387,13 @@ export default {
       lastMonth.setUTCMonth(lastMonth.getUTCMonth() - 1);
       const monthStr = fmtMonth(lastMonth);
 
-      // List all day keys for that month and count unique users
       const monthDayKeys = await listAllKeys(env, `day:${monthStr}-`);
       const monthUsers = new Set(monthDayKeys.map(k => {
-        // key format: day:YYYY-MM-DD:userId — extract userId after third colon-group
         const parts = k.name.split(':');
-        return parts.slice(2).join(':'); // userId may theoretically contain colons (UUIDs don't, but be safe)
+        return parts.slice(2).join(':');
       }));
       const mau = monthUsers.size;
 
-      // Collect version/platform from monthly active users
       const mVersions = {};
       const mPlatforms = {};
       for (const userId of monthUsers) {
@@ -510,5 +406,99 @@ export default {
 
       await env.TELEMETRY.put(`summary-month:${monthStr}`, JSON.stringify({ mau, versions: mVersions, platforms: mPlatforms }), { expirationTtl: SUMMARY_TTL });
     }
+
+    // ─── Rebuild cached dashboard data ─────────────────────────────────────────
+    // This runs once/day so the GET endpoints serve a single cached KV read
+    // instead of hundreds of list+get operations per request.
+
+    // Timeseries cache
+    const daily = [];
+    const summaryKeys = await listAllKeys(env, 'summary:');
+    for (const key of summaryKeys) {
+      const date = key.name.replace('summary:', '');
+      if (date.length !== 10) continue;
+      const val = await env.TELEMETRY.get(key.name, { type: 'json' });
+      if (val) daily.push({ date, dau: val.dau || 0 });
+    }
+    daily.sort((a, b) => a.date.localeCompare(b.date));
+
+    const monthly = [];
+    const monthKeys = await listAllKeys(env, 'summary-month:');
+    for (const key of monthKeys) {
+      const month = key.name.replace('summary-month:', '');
+      const val = await env.TELEMETRY.get(key.name, { type: 'json' });
+      if (val) monthly.push({ month, mau: val.mau || 0 });
+    }
+    monthly.sort((a, b) => a.month.localeCompare(b.month));
+
+    const today = fmtDate(now);
+    const todayKeys = await listAllKeys(env, `day:${today}:`);
+    const activeToday = todayKeys.length;
+
+    const wauUsers = new Set(todayKeys.map(k => k.name.replace(`day:${today}:`, '')));
+    for (let i = 1; i < 7; i++) {
+      const d = new Date(now);
+      d.setUTCDate(d.getUTCDate() - i);
+      const dateStr = fmtDate(d);
+      const keys = await listAllKeys(env, `day:${dateStr}:`);
+      for (const k of keys) wauUsers.add(k.name.replace(`day:${dateStr}:`, ''));
+    }
+
+    // Read all user records once for both timeseries + stats caches
+    const userKeys = await listAllKeys(env, 'user:');
+    const allVersions = {};
+    const allPlatforms = {};
+    let totalSeconds = 0;
+    let totalSessions = 0;
+    const weekAgo = Date.now() - 7 * 86400000;
+    let activeLastWeek = 0;
+    for (const key of userKeys) {
+      const record = await env.TELEMETRY.get(key.name, { type: 'json' });
+      if (record) {
+        allVersions[record.version] = (allVersions[record.version] || 0) + 1;
+        allPlatforms[record.os] = (allPlatforms[record.os] || 0) + 1;
+        totalSeconds += record.totalSeconds || 0;
+        totalSessions += record.totalSessions || 0;
+        if (new Date(record.lastSeen).getTime() > weekAgo) activeLastWeek++;
+      }
+    }
+
+    // Timeseries cache
+    const timeseries = {
+      daily,
+      monthly,
+      current: {
+        totalUsers: userKeys.length,
+        activeToday,
+        activeThisWeek: wauUsers.size,
+        versions: allVersions,
+        platforms: allPlatforms,
+        totalQsos,
+        totalRespots,
+      },
+    };
+    await env.TELEMETRY.put('cache:timeseries', JSON.stringify(timeseries));
+
+    // Stats cache (legacy endpoint)
+    const qsos = {};
+    const respots = {};
+    for (const src of VALID_SOURCES) {
+      qsos[src] = parseInt(await env.TELEMETRY.get(`global:qsos:${src}`) || '0', 10);
+      respots[src] = parseInt(await env.TELEMETRY.get(`global:respots:${src}`) || '0', 10);
+    }
+
+    const stats = {
+      totalUsers: userKeys.length,
+      activeLastWeek,
+      totalSessions,
+      totalHours: Math.round(totalSeconds / 3600),
+      totalQsos,
+      qsos,
+      totalRespots,
+      respots,
+      versions: allVersions,
+      platforms: allPlatforms,
+    };
+    await env.TELEMETRY.put('cache:stats', JSON.stringify(stats, null, 2));
   },
 };

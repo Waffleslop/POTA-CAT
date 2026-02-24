@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline';">
+  <title>POTACAT Logbook</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: var(--bg-primary); }
+    body { display: flex; flex-direction: column; color: var(--text-primary); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; }
+
+    .qso-toolbar {
+      display: flex; align-items: center; gap: 10px; padding: 6px 10px;
+      background: var(--bg-secondary); border-bottom: 1px solid var(--border-primary);
+    }
+    .qso-toolbar input {
+      flex: 1; padding: 4px 8px; background: var(--bg-input); border: 1px solid var(--border-primary);
+      border-radius: 4px; color: var(--text-primary); font-size: 12px;
+    }
+    .qso-toolbar input:focus { outline: none; border-color: var(--accent-blue); }
+    .qso-count { font-size: 11px; color: var(--text-tertiary); white-space: nowrap; }
+    .qso-export-btn {
+      border: 1px solid var(--accent-green, #4ecca3); color: var(--accent-green, #4ecca3);
+      background: transparent; padding: 3px 10px; border-radius: 4px; cursor: pointer;
+      font-size: 11px; white-space: nowrap;
+    }
+    .qso-export-btn:hover { background: var(--accent-green, #4ecca3); color: #fff; }
+
+    .qso-body { flex: 1; overflow-y: auto; min-height: 0; }
+
+    .qso-table {
+      width: 100%; border-collapse: collapse; font-size: 12px;
+      font-family: 'Consolas', 'Courier New', monospace;
+    }
+    .qso-table th {
+      text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border-primary);
+      color: var(--text-secondary); font-size: 11px; white-space: nowrap;
+      position: sticky; top: 0; background: var(--bg-secondary); z-index: 1;
+    }
+    .qso-table th[data-sort] { cursor: pointer; user-select: none; }
+    .qso-table th[data-sort]:hover { color: var(--accent-blue); }
+    .qso-table th.sort-asc::after { content: ' \25B2'; font-size: 9px; }
+    .qso-table th.sort-desc::after { content: ' \25BC'; font-size: 9px; }
+    .qso-table td { padding: 3px 6px; white-space: nowrap; border-bottom: 1px solid var(--border-secondary); }
+    .qso-table td:nth-child(10) { white-space: normal; word-break: break-word; max-width: 150px; }
+    .qso-table tr:last-child td { border-bottom: none; }
+    .qso-table td.editable { cursor: text; }
+    .qso-table td input {
+      width: 100%; background: var(--bg-input); border: 1px solid var(--accent-blue);
+      color: var(--text-primary); padding: 1px 4px; font-size: inherit;
+      font-family: inherit; box-sizing: border-box;
+    }
+
+    .qso-empty { text-align: center; color: var(--text-tertiary); margin: 40px 0; }
+
+    .qso-footer {
+      padding: 6px 10px; font-size: 11px; color: var(--text-tertiary);
+      background: var(--bg-secondary); border-top: 1px solid var(--border-primary);
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .qso-stats { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+    .qso-footer-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .qso-path-wrap { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .qso-footer a { color: var(--accent-blue); }
+
+    .qso-toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: var(--bg-header); color: var(--text-primary); padding: 6px 16px;
+      border-radius: 4px; font-size: 12px; border: 1px solid var(--border-primary);
+      z-index: 10000; pointer-events: none; opacity: 0; transition: opacity 0.2s;
+    }
+    .qso-toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="titlebar">
+    <div class="titlebar-title">POTACAT Logbook</div>
+    <div class="titlebar-controls">
+      <button class="titlebar-btn" id="tb-min" title="Minimize">&#x2014;</button>
+      <button class="titlebar-btn" id="tb-max" title="Maximize">&#x25A1;</button>
+      <button class="titlebar-btn titlebar-close" id="tb-close" title="Close">&#x2715;</button>
+    </div>
+  </div>
+
+  <div class="qso-toolbar">
+    <input type="text" id="qso-search" placeholder="Search callsign, park, notes..." autocomplete="off">
+    <span class="qso-count" id="qso-count"></span>
+    <button class="qso-export-btn" id="qso-export">Export ADIF</button>
+  </div>
+
+  <div class="qso-body" id="qso-body">
+    <table class="qso-table" id="qso-table">
+      <thead>
+        <tr>
+          <th data-sort="QSO_DATE">Date</th>
+          <th data-sort="TIME_ON">Time</th>
+          <th data-sort="CALL">Callsign</th>
+          <th data-sort="FREQ">Freq</th>
+          <th data-sort="MODE">Mode</th>
+          <th data-sort="BAND">Band</th>
+          <th>RST S</th>
+          <th>RST R</th>
+          <th data-sort="SIG_INFO">Park</th>
+          <th>Notes</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="qso-tbody"></tbody>
+    </table>
+    <p class="qso-empty hidden" id="qso-empty">No QSOs logged yet</p>
+  </div>
+
+  <div class="qso-footer">
+    <div class="qso-stats">
+      <span id="qso-stat-total"></span>
+      <span class="stat-sep">|</span>
+      <span id="qso-stat-calls"></span>
+      <span class="stat-sep">|</span>
+      <span id="qso-stat-bands"></span>
+      <span class="stat-sep">|</span>
+      <span id="qso-stat-modes"></span>
+    </div>
+    <div class="qso-footer-row">
+      <span class="qso-path-wrap" id="qso-path-wrap" title="">Log: <a href="#" id="qso-path-link"></a></span>
+    </div>
+  </div>
+
+  <div class="qso-toast" id="qso-toast"></div>
+
+  <script src="qso-popout.js"></script>
+</body>
+</html>

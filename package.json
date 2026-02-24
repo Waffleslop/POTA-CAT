@@ -1,6 +1,6 @@
 {
   "name": "potacat",
-  "version": "0.9.15",
+  "version": "0.9.16",
   "description": "POTA activator lookup with FlexRadio CAT control",
   "main": "main.js",
   "scripts": {
@@ -19,6 +19,7 @@
       "main.js",
       "preload.js",
       "preload-popout.js",
+      "preload-qso-popout.js",
       "lib/**/*",
       "renderer/**/*",
       "assets/icon.png",

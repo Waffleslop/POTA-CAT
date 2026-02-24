@@ -80,6 +80,7 @@
       </div>
       <button id="scan-btn" title="Scan through spots">Scan</button>
       <button id="settings-btn" title="Settings">Settings</button>
+      <button id="logbook-btn" title="View/Edit Logbook (F2)">Logbook</button>
       <div class="view-toggle">
         <button id="view-table-btn" class="view-btn active" title="Table view">Table</button>
         <button id="view-map-btn" class="view-btn" title="Map view">Map</button>
@@ -292,7 +293,7 @@
 
   <!-- Settings dialog -->
   <dialog id="settings-dialog">
-    <h3>Settings</h3>
+    <h3>Settings <span style="float:right;font-size:11px;font-weight:normal;color:#666;margin-top:4px;">ESC to close without saving</span></h3>
     <!-- 0. Connection Status (only visible when sources are enabled) -->
     <div id="settings-conn-status" class="settings-conn-bar hidden">
       <span id="conn-cluster" class="conn-pill hidden"><span class="conn-dot"></span> DX Cluster</span>
@@ -739,7 +740,7 @@
       <button id="settings-cancel">Cancel</button>
     </div>
     <div class="settings-footer">
-      <div class="settings-version">v0.9.15 beta &mdash; <a href="#" id="bio-link">Casey Stanton, K3SBP</a></div>
+      <div class="settings-version">v0.9.16 beta &mdash; <a href="#" id="bio-link">Casey Stanton, K3SBP</a></div>
       <div class="settings-coffee"><a href="#" id="coffee-link">Buy Me a Coffee</a></div>
       <div class="settings-links">
         <a href="#" id="discord-link">Discord</a>
@@ -799,16 +800,24 @@
     <div style="display:flex;gap:8px;">
       <label style="flex:1;">RST Sent:
         <div style="display:flex;gap:4px;align-items:center;margin-top:4px;">
-          <input type="text" id="log-rst-sent" maxlength="3" style="flex:1;">
-          <button type="button" class="rst-quick-btn" data-target="log-rst-sent" data-value="59">59</button>
-          <button type="button" class="rst-quick-btn" data-target="log-rst-sent" data-value="599">599</button>
+          <div class="rst-digits" id="rst-sent-digits">
+            <input type="text" class="rst-digit" maxlength="1" data-idx="0" inputmode="numeric">
+            <input type="text" class="rst-digit" maxlength="1" data-idx="1" inputmode="numeric">
+            <input type="text" class="rst-digit" maxlength="1" data-idx="2" inputmode="numeric">
+          </div>
+          <button type="button" class="rst-quick-btn" data-target="rst-sent-digits" data-value="59">59</button>
+          <button type="button" class="rst-quick-btn" data-target="rst-sent-digits" data-value="599">599</button>
         </div>
       </label>
       <label style="flex:1;">RST Received:
         <div style="display:flex;gap:4px;align-items:center;margin-top:4px;">
-          <input type="text" id="log-rst-rcvd" maxlength="3" style="flex:1;">
-          <button type="button" class="rst-quick-btn" data-target="log-rst-rcvd" data-value="59">59</button>
-          <button type="button" class="rst-quick-btn" data-target="log-rst-rcvd" data-value="599">599</button>
+          <div class="rst-digits" id="rst-rcvd-digits">
+            <input type="text" class="rst-digit" maxlength="1" data-idx="0" inputmode="numeric">
+            <input type="text" class="rst-digit" maxlength="1" data-idx="1" inputmode="numeric">
+            <input type="text" class="rst-digit" maxlength="1" data-idx="2" inputmode="numeric">
+          </div>
+          <button type="button" class="rst-quick-btn" data-target="rst-rcvd-digits" data-value="59">59</button>
+          <button type="button" class="rst-quick-btn" data-target="rst-rcvd-digits" data-value="599">599</button>
         </div>
       </label>
     </div>
@@ -851,57 +860,6 @@
     <div class="dialog-buttons">
       <button type="button" id="respot-cancel">Cancel</button>
       <button type="button" id="respot-send" class="log-save-btn">Send</button>
-    </div>
-  </dialog>
-
-  <!-- QSO Log Viewer (F2) -->
-  <dialog id="log-viewer-dialog">
-    <div class="log-dialog-header">
-      <h3>View/Edit Logbook</h3>
-      <button type="button" id="log-viewer-close" class="log-dialog-x" title="Close">&times;</button>
-    </div>
-    <div id="log-viewer-toolbar">
-      <input type="text" id="log-viewer-search" placeholder="Search callsign, park, notes..." autocomplete="off">
-      <span id="log-viewer-count"></span>
-    </div>
-    <div id="log-viewer-body">
-      <table id="log-viewer-table">
-        <thead>
-          <tr>
-            <th data-sort="QSO_DATE">Date</th>
-            <th data-sort="TIME_ON">Time</th>
-            <th data-sort="CALL">Callsign</th>
-            <th data-sort="FREQ">Freq</th>
-            <th data-sort="MODE">Mode</th>
-            <th data-sort="BAND">Band</th>
-            <th>RST S</th>
-            <th>RST R</th>
-            <th data-sort="SIG_INFO">Park</th>
-            <th>Notes</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="log-viewer-tbody"></tbody>
-      </table>
-      <p id="log-viewer-empty" class="hidden" style="text-align:center;color:var(--text-tertiary);margin:20px 0;">No QSOs logged yet</p>
-    </div>
-    <div id="log-viewer-footer">
-      <div id="log-viewer-stats">
-        <span id="log-viewer-stat-total"></span>
-        <span class="stat-sep">|</span>
-        <span id="log-viewer-stat-calls"></span>
-        <span class="stat-sep">|</span>
-        <span id="log-viewer-stat-bands"></span>
-        <span class="stat-sep">|</span>
-        <span id="log-viewer-stat-modes"></span>
-      </div>
-      <div id="log-viewer-footer-row">
-        <span id="log-viewer-path-wrap" title="">Log: <a href="#" id="log-viewer-path-link"></a></span>
-        <button type="button" id="log-viewer-export" title="Export filtered QSOs to ADIF file">Export ADIF</button>
-      </div>
-    </div>
-    <div class="dialog-buttons">
-      <button type="button" id="log-viewer-close-btn">Close</button>
     </div>
   </dialog>
 
@@ -1091,8 +1049,6 @@
       <button type="button" id="welcome-coffee-btn" class="coffee-btn">Buy Me a Coffee</button>
     </div>
   </dialog>
-
-  <div id="log-viewer-toast"></div>
 
   <script src="../node_modules/leaflet/dist/leaflet.js"></script>
   <script src="app.js"></script>

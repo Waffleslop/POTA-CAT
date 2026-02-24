@@ -1641,14 +1641,14 @@ dialog input, dialog select {
   color: #ff6b6b;
 }
 
-/* Already-worked spots */
+/* Already-worked spots — subtle tint, not dimmed */
 .already-worked {
-  color: #707088;
+  color: #9999aa;
 }
 
 .already-worked .freq-link,
 .already-worked .qrz-link {
-  color: #707088;
+  color: #9999aa;
 }
 
 .already-worked .callsign-cell::before {
@@ -1990,6 +1990,18 @@ dialog input, dialog select {
   font-weight: 500;
 }
 
+.rst-digits {
+  display: flex;
+  gap: 3px;
+}
+.rst-digit {
+  width: 28px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: bold;
+  padding: 4px 0;
+}
+
 .rst-quick-btn {
   font-size: 11px;
   padding: 2px 6px;
@@ -2013,115 +2025,6 @@ dialog input, dialog select {
 }
 
 /* QSO Log Viewer dialog */
-#log-viewer-dialog {
-  min-width: 780px;
-  max-width: 920px;
-  max-height: 80vh;
-}
-
-#log-viewer-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-
-#log-viewer-search {
-  flex: 1;
-  padding: 4px 8px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-primary);
-  border-radius: 4px;
-  color: var(--text-primary);
-  font-size: 12px;
-}
-
-#log-viewer-search:focus {
-  outline: none;
-  border-color: var(--accent-blue);
-}
-
-#log-viewer-count {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
-
-#log-viewer-body {
-  max-height: 60vh;
-  overflow-y: auto;
-}
-
-#log-viewer-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-  font-family: 'Consolas', 'Courier New', monospace;
-}
-
-#log-viewer-table th {
-  text-align: left;
-  padding: 4px 6px;
-  border-bottom: 1px solid var(--border-primary);
-  color: var(--text-secondary);
-  font-size: 11px;
-  white-space: nowrap;
-  position: sticky;
-  top: 0;
-  background: var(--bg-secondary);
-  z-index: 1;
-}
-
-#log-viewer-table th[data-sort] {
-  cursor: pointer;
-  user-select: none;
-}
-
-#log-viewer-table th[data-sort]:hover {
-  color: var(--accent-blue);
-}
-
-#log-viewer-table th.sort-asc::after {
-  content: ' \25B2';
-  font-size: 9px;
-}
-
-#log-viewer-table th.sort-desc::after {
-  content: ' \25BC';
-  font-size: 9px;
-}
-
-#log-viewer-table td {
-  padding: 3px 6px;
-  white-space: nowrap;
-  border-bottom: 1px solid var(--border-secondary);
-}
-
-#log-viewer-table td:nth-child(10) {
-  white-space: normal;
-  word-break: break-word;
-  max-width: 150px;
-}
-
-#log-viewer-table tr:last-child td {
-  border-bottom: none;
-}
-
-#log-viewer-table td.editable {
-  cursor: text;
-}
-
-#log-viewer-table td input {
-  width: 100%;
-  background: var(--bg-input);
-  border: 1px solid var(--accent-blue);
-  color: var(--text-primary);
-  padding: 1px 4px;
-  font-size: inherit;
-  font-family: inherit;
-  box-sizing: border-box;
-}
-
 .log-delete-btn {
   background: none;
   border: none;
@@ -2141,78 +2044,8 @@ dialog input, dialog select {
   font-weight: bold;
 }
 
-#log-viewer-footer {
-  margin-top: 8px;
-  font-size: 11px;
-  color: var(--text-tertiary);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-#log-viewer-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-}
-
 .stat-sep {
   opacity: 0.3;
-}
-
-#log-viewer-footer-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-#log-viewer-path-wrap {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-#log-viewer-footer a {
-  color: var(--accent-blue);
-}
-
-#log-viewer-export {
-  border: 1px solid var(--accent-green, #4ecca3);
-  color: var(--accent-green, #4ecca3);
-  background: transparent;
-  padding: 3px 10px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-#log-viewer-export:hover {
-  background: var(--accent-green, #4ecca3);
-  color: #fff;
-}
-
-#log-viewer-toast {
-  position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--bg-header);
-  color: var(--text-primary);
-  padding: 6px 16px;
-  border-radius: 4px;
-  font-size: 12px;
-  border: 1px solid var(--border-primary);
-  z-index: 10000;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-#log-viewer-toast.show {
-  opacity: 1;
 }
 
 /* Map popup log button */

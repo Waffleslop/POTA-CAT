@@ -44,12 +44,14 @@ let workedParksData = new Map(); // reference → full park data for stats
 let hideWorkedParks = false;
 let showBearing = false;
 let respotDefault = true; // default: re-spot on POTA after logging
-let respotTemplate = 'Thks fer {rst}. 73s {mycallsign} via POTACAT'; // park re-spot comment template
+let respotTemplate = '{rst} in {QTH} 73s {mycallsign} via POTACAT'; // park re-spot comment template
 let dxRespotTemplate = 'Heard in {QTH} 73s {mycallsign} via POTACAT'; // DX cluster spot comment template
 let quickRespotTemplate = 'Heard strong in {QTH}; 73s {callsign} via POTACAT'; // legacy — migrated below
+let grid = ''; // home grid square for {QTH} template substitution
 let myCallsign = '';
 let lastTunedSpot = null; // last clicked/tuned spot for quick respot
 let popoutOpen = false; // pop-out map window is open
+let qsoPopoutOpen = false; // pop-out QSO log window is open
 let dxccData = null;  // { entities: [...] } from main process
 let enableWsjtx = false;
 let wsjtxDecodes = []; // recent decodes from WSJT-X (FIFO, max 50)
@@ -113,6 +115,7 @@ const spotsHideParks = document.getElementById('spots-hide-parks');
 const spotsHideParksLabel = document.getElementById('spots-hide-parks-label');
 const spotsHideOob = document.getElementById('spots-hide-oob');
 const settingsBtn = document.getElementById('settings-btn');
+const logbookBtn = document.getElementById('logbook-btn');
 const settingsDialog = document.getElementById('settings-dialog');
 const settingsSave = document.getElementById('settings-save');
 const settingsCancel = document.getElementById('settings-cancel');
@@ -344,8 +347,19 @@ const logMode = document.getElementById('log-mode');
 const logDate = document.getElementById('log-date');
 const logTime = document.getElementById('log-time');
 const logPower = document.getElementById('log-power');
-const logRstSent = document.getElementById('log-rst-sent');
-const logRstRcvd = document.getElementById('log-rst-rcvd');
+// RST split-digit helpers
+function setRstDigits(containerId, value) {
+  const digits = document.querySelectorAll(`#${containerId} .rst-digit`);
+  const chars = String(value).split('');
+  digits[0].value = chars[0] || '';
+  digits[1].value = chars[1] || '';
+  digits[2].value = chars[2] || '';
+}
+function getRstDigits(containerId, fallback) {
+  const digits = document.querySelectorAll(`#${containerId} .rst-digit`);
+  const val = Array.from(digits).map(d => d.value).join('');
+  return val || fallback;
+}
 const logRefDisplay = document.getElementById('log-ref-display');
 const logComment = document.getElementById('log-comment');
 const logSaveBtn = document.getElementById('log-save');
@@ -490,7 +504,12 @@ function applyTheme(light) {
 
 async function loadPrefs() {
   const settings = await window.api.getSettings();
+  if (settings.appVersion) {
+    const ttEl = document.querySelector('.titlebar-title');
+    if (ttEl) ttEl.textContent = `POTACAT - v${settings.appVersion}`;
+  }
   applyTheme(settings.lightMode === true);
+  grid = settings.grid || '';
   distUnit = settings.distUnit || 'mi';
   scanDwell = parseInt(settings.scanDwell, 10) || 7;
   watchlist = parseWatchlist(settings.watchlist);
@@ -2655,10 +2674,10 @@ document.addEventListener('keydown', (e) => {
     document.getElementById('hotkeys-dialog').showModal();
     return;
   }
-  // F2 — QSO Log viewer
+  // F2 — QSO Log pop-out window
   if (e.key === 'F2' && !e.target.matches('input, select, textarea')) {
     e.preventDefault();
-    openLogViewer();
+    window.api.qsoPopoutOpen(); // opens or focuses existing pop-out
     return;
   }
   // F11 — Welcome screen
@@ -2896,314 +2915,9 @@ logCallsign.addEventListener('input', () => {
   }, 500);
 });
 
-// --- QSO Log Viewer (F2) ---
-let logViewerQsos = [];
-let logViewerFiltered = [];
-let logViewerSort = 'QSO_DATE';
-let logViewerAsc = false;
-let logViewerSearch = '';
-let logViewerToastTimer = null;
-
-// Editable ADIF field names per column index
-const LOG_VIEWER_EDITABLE = {
-  2: 'CALL',
-  3: 'FREQ',
-  4: 'MODE',
-  6: 'RST_SENT',
-  7: 'RST_RCVD',
-  8: 'SIG_INFO',
-  9: 'COMMENT',
-};
-
-function logViewerToast(msg) {
-  const el = document.getElementById('log-viewer-toast');
-  el.textContent = msg;
-  el.classList.add('show');
-  clearTimeout(logViewerToastTimer);
-  logViewerToastTimer = setTimeout(() => el.classList.remove('show'), 2000);
-}
-
-function freqMhzToBandLocal(mhz) {
-  const khz = parseFloat(mhz) * 1000;
-  return freqKhzToBand(khz);
-}
-
-function updateLogViewerStats(filtered) {
-  const totalEl = document.getElementById('log-viewer-stat-total');
-  const callsEl = document.getElementById('log-viewer-stat-calls');
-  const bandsEl = document.getElementById('log-viewer-stat-bands');
-  const modesEl = document.getElementById('log-viewer-stat-modes');
-
-  totalEl.textContent = `${filtered.length} QSOs`;
-  callsEl.textContent = `${new Set(filtered.map(q => (q.CALL || '').toUpperCase())).size} calls`;
-
-  // Bands — top 5
-  const bandCounts = {};
-  for (const q of filtered) if (q.BAND) bandCounts[q.BAND] = (bandCounts[q.BAND] || 0) + 1;
-  const topBands = Object.entries(bandCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  bandsEl.textContent = topBands.map(([b, c]) => `${b}: ${c}`).join(', ') || '-';
-
-  // Modes — top 4
-  const modeCounts = {};
-  for (const q of filtered) if (q.MODE) modeCounts[q.MODE] = (modeCounts[q.MODE] || 0) + 1;
-  const topModes = Object.entries(modeCounts).sort((a, b) => b[1] - a[1]).slice(0, 4);
-  modesEl.textContent = topModes.map(([m, c]) => `${m}: ${c}`).join(', ') || '-';
-}
-
-function renderLogViewer() {
-  const tbody = document.getElementById('log-viewer-tbody');
-  const table = document.getElementById('log-viewer-table');
-  const emptyMsg = document.getElementById('log-viewer-empty');
-  const countEl = document.getElementById('log-viewer-count');
-
-  // Filter
-  const search = logViewerSearch.toLowerCase();
-  let filtered = logViewerQsos;
-  if (search) {
-    filtered = logViewerQsos.filter(q => {
-      const hay = [q.CALL, q.SIG_INFO, q.COMMENT, q.MODE, q.BAND].join(' ').toLowerCase();
-      return hay.includes(search);
-    });
-  }
-
-  // Sort
-  const col = logViewerSort;
-  const dir = logViewerAsc ? 1 : -1;
-  filtered.sort((a, b) => {
-    let va = (a[col] || ''), vb = (b[col] || '');
-    if (col === 'FREQ') return (parseFloat(va) - parseFloat(vb)) * dir;
-    if (col === 'QSO_DATE') {
-      const ka = (a.QSO_DATE || '') + (a.TIME_ON || '');
-      const kb = (b.QSO_DATE || '') + (b.TIME_ON || '');
-      return ka.localeCompare(kb) * dir;
-    }
-    return va.localeCompare(vb) * dir;
-  });
-
-  // Update count
-  countEl.textContent = search
-    ? `${filtered.length} / ${logViewerQsos.length} QSOs`
-    : `${logViewerQsos.length} QSOs`;
-
-  logViewerFiltered = filtered;
-  updateLogViewerStats(filtered);
-
-  if (logViewerQsos.length === 0) {
-    table.classList.add('hidden');
-    emptyMsg.classList.remove('hidden');
-    return;
-  }
-  table.classList.remove('hidden');
-  emptyMsg.classList.add('hidden');
-
-  // Sort indicators on headers
-  table.querySelectorAll('th').forEach(th => {
-    th.classList.remove('sort-asc', 'sort-desc');
-    if (th.dataset.sort === col) {
-      th.classList.add(logViewerAsc ? 'sort-asc' : 'sort-desc');
-    }
-  });
-
-  // Build rows
-  const frag = document.createDocumentFragment();
-  for (const q of filtered) {
-    const tr = document.createElement('tr');
-    tr.dataset.idx = q.idx;
-
-    const date = q.QSO_DATE ? q.QSO_DATE.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3') : '';
-    const time = q.TIME_ON ? q.TIME_ON.slice(0, 2) + ':' + q.TIME_ON.slice(2, 4) : '';
-
-    const cells = [
-      date,                          // 0 Date
-      time,                          // 1 Time
-      q.CALL || '',                  // 2 Callsign
-      q.FREQ || '',                  // 3 Freq
-      q.MODE || '',                  // 4 Mode
-      q.BAND || '',                  // 5 Band
-      q.RST_SENT || '',             // 6 RST S
-      q.RST_RCVD || '',             // 7 RST R
-      q.SIG_INFO || '',             // 8 Park
-      q.COMMENT || '',              // 9 Notes
-    ];
-
-    for (let i = 0; i < cells.length; i++) {
-      const td = document.createElement('td');
-      td.textContent = cells[i];
-      if (LOG_VIEWER_EDITABLE[i]) {
-        td.dataset.field = LOG_VIEWER_EDITABLE[i];
-        td.classList.add('editable');
-      }
-      tr.appendChild(td);
-    }
-
-    // Delete button column
-    const tdDel = document.createElement('td');
-    const btn = document.createElement('button');
-    btn.className = 'log-delete-btn';
-    btn.textContent = '\u00D7';
-    btn.title = 'Delete QSO';
-    tdDel.appendChild(btn);
-    tr.appendChild(tdDel);
-
-    frag.appendChild(tr);
-  }
-  tbody.innerHTML = '';
-  tbody.appendChild(frag);
-}
-
-async function openLogViewer() {
-  const dlg = document.getElementById('log-viewer-dialog');
-  document.getElementById('log-viewer-search').value = '';
-  logViewerSearch = '';
-
-  logViewerQsos = await window.api.getAllQsos();
-  renderLogViewer();
-
-  // Show log file path
-  const pathLink = document.getElementById('log-viewer-path-link');
-  const settings = await window.api.getSettings();
-  const logPath = settings.adifLogPath || await window.api.getDefaultLogPath();
-  const pathName = logPath.split(/[/\\]/).pop();
-  pathLink.textContent = pathName;
-  pathLink.onclick = (e) => {
-    e.preventDefault();
-    window.api.openExternal('file://' + logPath);
-  };
-  document.getElementById('log-viewer-path-wrap').title = logPath;
-
-  dlg.showModal();
-}
-
-// Close buttons
-document.getElementById('log-viewer-close').addEventListener('click', () => {
-  document.getElementById('log-viewer-dialog').close();
-});
-document.getElementById('log-viewer-close-btn').addEventListener('click', () => {
-  document.getElementById('log-viewer-dialog').close();
-});
-
-// Column header sorting
-document.querySelectorAll('#log-viewer-table th[data-sort]').forEach(th => {
-  th.addEventListener('click', () => {
-    const col = th.dataset.sort;
-    if (logViewerSort === col) logViewerAsc = !logViewerAsc;
-    else { logViewerSort = col; logViewerAsc = col !== 'QSO_DATE'; }
-    renderLogViewer();
-  });
-});
-
-// Search with debounce
-{
-  let searchTimer = null;
-  document.getElementById('log-viewer-search').addEventListener('input', (e) => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => {
-      logViewerSearch = e.target.value.trim();
-      renderLogViewer();
-    }, 200);
-  });
-}
-
-// Inline editing — double-click on editable cells
-document.getElementById('log-viewer-tbody').addEventListener('dblclick', (e) => {
-  const td = e.target.closest('td.editable');
-  if (!td || td.querySelector('input')) return;
-  const tr = td.closest('tr');
-  const idx = parseInt(tr.dataset.idx, 10);
-  const field = td.dataset.field;
-  const original = td.textContent;
-
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.value = original;
-  td.textContent = '';
-  td.appendChild(input);
-  input.focus();
-  input.select();
-
-  function cancel() {
-    td.textContent = original;
-  }
-
-  async function save() {
-    const newVal = input.value.trim();
-    if (newVal === original) { cancel(); return; }
-
-    const fields = { [field]: newVal };
-    // If freq changed, recalculate band
-    if (field === 'FREQ') {
-      fields.BAND = freqMhzToBandLocal(newVal);
-    }
-
-    const result = await window.api.updateQso({ idx, fields });
-    if (result.success) {
-      // Update local data
-      const qso = logViewerQsos.find(q => q.idx === idx);
-      if (qso) Object.assign(qso, fields);
-      renderLogViewer();
-      logViewerToast(`Updated ${qso ? qso.CALL : 'QSO'}`);
-    } else {
-      cancel();
-      logViewerToast('Update failed: ' + (result.error || 'unknown error'));
-    }
-  }
-
-  input.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Enter') { ev.preventDefault(); save(); }
-    if (ev.key === 'Escape') { ev.preventDefault(); cancel(); }
-  });
-  input.addEventListener('blur', save);
-});
-
-// Delete — click on delete button, two-click confirmation
-document.getElementById('log-viewer-tbody').addEventListener('click', async (e) => {
-  const btn = e.target.closest('.log-delete-btn');
-  if (!btn) return;
-
-  if (btn.classList.contains('confirming')) {
-    // Second click — actually delete
-    const tr = btn.closest('tr');
-    const idx = parseInt(tr.dataset.idx, 10);
-    const qso = logViewerQsos.find(q => q.idx === idx);
-    const call = qso ? qso.CALL : '?';
-
-    const result = await window.api.deleteQso(idx);
-    if (result.success) {
-      logViewerQsos = logViewerQsos.filter(q => q.idx !== idx);
-      renderLogViewer();
-      logViewerToast(`Deleted QSO with ${call}`);
-    } else {
-      logViewerToast('Delete failed: ' + (result.error || 'unknown error'));
-    }
-  } else {
-    // First click — show confirmation
-    btn.classList.add('confirming');
-    btn.textContent = 'Sure?';
-    setTimeout(() => {
-      btn.classList.remove('confirming');
-      btn.textContent = '\u00D7';
-    }, 3000);
-  }
-});
-
-// Export ADIF button
-document.getElementById('log-viewer-export').addEventListener('click', async () => {
-  if (!logViewerFiltered.length) {
-    logViewerToast('No QSOs to export');
-    return;
-  }
-  try {
-    const result = await window.api.exportAdif(logViewerFiltered);
-    if (!result) return; // cancelled
-    if (result.success) {
-      const name = result.filePath.split(/[/\\]/).pop();
-      logViewerToast(`Exported ${result.count} QSOs to ${name}`);
-    } else {
-      logViewerToast('Export failed: ' + (result.error || 'unknown error'));
-    }
-  } catch (err) {
-    logViewerToast('Export failed: ' + err.message);
-  }
+// --- QSO Log Pop-out (F2) ---
+window.api.onQsoPopoutStatus((open) => {
+  qsoPopoutOpen = open;
 });
 
 // --- View Toggle ---
@@ -3611,7 +3325,7 @@ function render() {
         tr.classList.add('scan-highlight');
       }
       // Highlight row matching radio's current frequency or last tuned spot
-      if (radioFreqKhz !== null && Math.abs(parseFloat(s.frequency) - radioFreqKhz) < 1.5) {
+      if (radioFreqKhz !== null && Math.abs(parseFloat(s.frequency) - radioFreqKhz) < 0.5) {
         tr.classList.add('on-freq');
       } else if (lastTunedSpot && s.callsign === lastTunedSpot.callsign && s.frequency === lastTunedSpot.frequency) {
         tr.classList.add('on-freq');
@@ -3872,8 +3586,8 @@ function openLogPopup(spot) {
 
   // Pre-fill RST based on mode
   const defaultRst = CW_DIGI_MODES_SET.has(mode) ? '599' : '59';
-  logRstSent.value = defaultRst;
-  logRstRcvd.value = defaultRst;
+  setRstDigits('rst-sent-digits', defaultRst);
+  setRstDigits('rst-rcvd-digits', defaultRst);
   updateRstButtons();
 
   // Show park/summit reference if applicable
@@ -3936,8 +3650,27 @@ function updateRstButtons() {
 document.querySelectorAll('#log-dialog .rst-quick-btn').forEach((btn) => {
   btn.addEventListener('click', (e) => {
     e.preventDefault();
-    const target = document.getElementById(btn.dataset.target);
-    if (target) target.value = btn.dataset.value;
+    setRstDigits(btn.dataset.target, btn.dataset.value);
+  });
+});
+
+// RST digit auto-advance and backspace navigation
+document.querySelectorAll('.rst-digits').forEach((container) => {
+  const inputs = container.querySelectorAll('.rst-digit');
+  inputs.forEach((inp, i) => {
+    // Select content on focus so typing immediately overwrites
+    inp.addEventListener('focus', () => inp.select());
+    inp.addEventListener('input', () => {
+      // Keep only the last typed digit (handles overwrite)
+      if (inp.value.length > 1) inp.value = inp.value.slice(-1);
+      // Auto-advance to next digit
+      if (inp.value && i < inputs.length - 1) inputs[i + 1].focus();
+    });
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Backspace' && !inp.value && i > 0) {
+        inputs[i - 1].focus();
+      }
+    });
   });
 });
 
@@ -3945,8 +3678,8 @@ document.querySelectorAll('#log-dialog .rst-quick-btn').forEach((btn) => {
 logMode.addEventListener('change', () => {
   const mode = logMode.value.toUpperCase();
   const defaultRst = CW_DIGI_MODES_SET.has(mode) ? '599' : '59';
-  logRstSent.value = defaultRst;
-  logRstRcvd.value = defaultRst;
+  setRstDigits('rst-sent-digits', defaultRst);
+  setRstDigits('rst-rcvd-digits', defaultRst);
   updateRstButtons();
 });
 
@@ -4014,7 +3747,7 @@ logSaveBtn.addEventListener('click', async () => {
 
   // Determine WWFF reference for respot
   const respotWwffRef = currentLogSpot ? (currentLogSpot.wwffReference || (currentLogSpot.source === 'wwff' ? currentLogSpot.reference : '')) : '';
-  const commentText = respotComment.value.trim().replace(/\{rst\}/gi, logRstSent.value.trim() || '59').replace(/\{mycallsign\}/gi, myCallsign);
+  const commentText = respotComment.value.trim().replace(/\{rst\}/gi, getRstDigits('rst-sent-digits', '59')).replace(/\{QTH\}/gi, grid).replace(/\{mycallsign\}/gi, myCallsign);
 
   // Pull QRZ data for ADIF fields (name, state, county, grid)
   const logQrzInfo = qrzData.get(callsign.split('/')[0]);
@@ -4025,8 +3758,8 @@ logSaveBtn.addEventListener('click', async () => {
     mode,
     qsoDate,
     timeOn,
-    rstSent: logRstSent.value.trim() || '59',
-    rstRcvd: logRstRcvd.value.trim() || '59',
+    rstSent: getRstDigits('rst-sent-digits', '59'),
+    rstRcvd: getRstDigits('rst-rcvd-digits', '59'),
     txPower: logPower.value.trim(),
     band,
     sig,
@@ -4194,6 +3927,9 @@ document.querySelectorAll('thead th[data-sort]').forEach((th) => {
     render();
   });
 });
+
+// Logbook button
+logbookBtn.addEventListener('click', () => window.api.qsoPopoutOpen());
 
 // Settings dialog
 settingsBtn.addEventListener('click', async () => {
@@ -4537,6 +4273,7 @@ settingsSave.addEventListener('click', async () => {
     cwSidetonePitch: cwSidetonePitchVal,
     cwSidetoneVolume: cwSidetoneVolumeVal,
   });
+  grid = setGrid.value.trim();
   distUnit = setDistUnit.value;
   maxAgeMin = maxAgeVal;
   scanDwell = dwellVal;
@@ -4571,6 +4308,7 @@ settingsSave.addEventListener('click', async () => {
   updateLoggingVisibility();
   applyTheme(lightModeEnabled);
   if (popoutOpen) window.api.sendPopoutTheme(lightModeEnabled ? 'light' : 'dark');
+  if (qsoPopoutOpen) window.api.sendQsoPopoutTheme(lightModeEnabled ? 'light' : 'dark');
   enableDxcc = dxccEnabled;
   licenseClass = licenseClassVal;
   hideOutOfBand = hideOob;

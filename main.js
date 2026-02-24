@@ -52,6 +52,7 @@ function saveSettings(s) {
 let settings = null;
 let win = null;
 let popoutWin = null; // pop-out map window
+let qsoPopoutWin = null; // pop-out QSO log window
 let cat = null;
 let spotTimer = null;
 let solarTimer = null;
@@ -1847,7 +1848,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1100,
     height: 700,
-    title: 'POTACAT',
+    title: `POTACAT - v${require('./package.json').version}`,
     ...(isMac ? { titleBarStyle: 'hiddenInset' } : { frame: false }),
     icon: path.join(__dirname, 'assets', 'icon.png'),
     show: false,
@@ -1889,10 +1890,12 @@ function createWindow() {
     if (!win.isMaximized() && !win.isMinimized()) {
       settings.windowBounds = win.getBounds();
     }
-    // Remember whether pop-out map was open
+    // Remember whether pop-out windows were open
     settings.mapPopoutOpen = !!(popoutWin && !popoutWin.isDestroyed());
+    settings.qsoPopoutOpen = !!(qsoPopoutWin && !qsoPopoutWin.isDestroyed());
     saveSettings(settings);
     if (popoutWin && !popoutWin.isDestroyed()) popoutWin.close();
+    if (qsoPopoutWin && !qsoPopoutWin.isDestroyed()) qsoPopoutWin.close();
   });
 
   // Once the renderer is actually ready to listen, send current state
@@ -1931,6 +1934,10 @@ function createWindow() {
     // Auto-reopen pop-out map if it was open when the app last closed
     if (settings.mapPopoutOpen) {
       ipcMain.emit('popout-map-open');
+    }
+    // Auto-reopen pop-out QSO log if it was open when the app last closed
+    if (settings.qsoPopoutOpen) {
+      ipcMain.emit('qso-popout-open');
     }
   });
 }
@@ -2262,7 +2269,25 @@ function migrateRigSettings(s) {
     };
     s.rigs.push(rig);
     s.activeRigId = rig.id;
+    delete s.catTarget;
     saveSettings(s);
+  }
+  // Dedup rigs with identical catTarget (could happen from repeated migration)
+  if (s.rigs.length > 1) {
+    const seen = new Set();
+    const before = s.rigs.length;
+    s.rigs = s.rigs.filter(r => {
+      const key = JSON.stringify(r.catTarget);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    if (s.rigs.length < before) {
+      if (!s.rigs.find(r => r.id === s.activeRigId)) {
+        s.activeRigId = s.rigs[0]?.id || null;
+      }
+      saveSettings(s);
+    }
   }
 }
 
@@ -2412,6 +2437,84 @@ app.whenReady().then(() => {
     if (win && !win.isDestroyed()) {
       win.webContents.send('popout-open-log', spot);
       win.focus();
+    }
+  });
+
+  // --- QSO Pop-out window ---
+  ipcMain.on('qso-popout-open', () => {
+    if (qsoPopoutWin && !qsoPopoutWin.isDestroyed()) {
+      qsoPopoutWin.focus();
+      return;
+    }
+
+    const isMac = process.platform === 'darwin';
+    qsoPopoutWin = new BrowserWindow({
+      width: 900,
+      height: 600,
+      title: 'POTACAT Logbook',
+      show: false,
+      ...(isMac ? { titleBarStyle: 'hiddenInset' } : { frame: false }),
+      icon: path.join(__dirname, 'assets', 'icon.png'),
+      webPreferences: {
+        preload: path.join(__dirname, 'preload-qso-popout.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
+
+    // Restore saved bounds (DPI-aware)
+    const saved = settings.qsoPopoutBounds;
+    if (saved && saved.width > 200 && saved.height > 150 && isOnScreen(saved)) {
+      qsoPopoutWin.setBounds(saved);
+    }
+    qsoPopoutWin.show();
+
+    qsoPopoutWin.setMenuBarVisibility(false);
+    qsoPopoutWin.loadFile(path.join(__dirname, 'renderer', 'qso-popout.html'));
+
+    qsoPopoutWin.on('close', () => {
+      if (qsoPopoutWin && !qsoPopoutWin.isDestroyed()) {
+        if (!qsoPopoutWin.isMaximized() && !qsoPopoutWin.isMinimized()) {
+          settings.qsoPopoutBounds = qsoPopoutWin.getBounds();
+          saveSettings(settings);
+        }
+      }
+    });
+
+    qsoPopoutWin.on('closed', () => {
+      qsoPopoutWin = null;
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('qso-popout-status', false);
+      }
+    });
+
+    qsoPopoutWin.webContents.on('did-finish-load', () => {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('qso-popout-status', true);
+      }
+    });
+
+    // F12 opens DevTools in pop-out
+    qsoPopoutWin.webContents.on('before-input-event', (_e, input) => {
+      if (input.key === 'F12' && input.type === 'keyDown') {
+        qsoPopoutWin.webContents.toggleDevTools();
+      }
+    });
+  });
+
+  // QSO pop-out window controls
+  ipcMain.on('qso-popout-minimize', () => { if (qsoPopoutWin) qsoPopoutWin.minimize(); });
+  ipcMain.on('qso-popout-maximize', () => {
+    if (!qsoPopoutWin) return;
+    if (qsoPopoutWin.isMaximized()) qsoPopoutWin.unmaximize();
+    else qsoPopoutWin.maximize();
+  });
+  ipcMain.on('qso-popout-close', () => { if (qsoPopoutWin) qsoPopoutWin.close(); });
+
+  // Relay theme to QSO pop-out
+  ipcMain.on('qso-popout-theme', (_e, theme) => {
+    if (qsoPopoutWin && !qsoPopoutWin.isDestroyed()) {
+      qsoPopoutWin.webContents.send('qso-popout-theme', theme);
     }
   });
 
@@ -2749,9 +2852,10 @@ app.whenReady().then(() => {
     return result.filePath;
   });
 
-  ipcMain.handle('export-adif', async (_e, qsos) => {
+  ipcMain.handle('export-adif', async (event, qsos) => {
     try {
-      const result = await dialog.showSaveDialog(win, {
+      const parentWin = BrowserWindow.fromWebContents(event.sender) || win;
+      const result = await dialog.showSaveDialog(parentWin, {
         title: 'Export ADIF',
         defaultPath: path.join(app.getPath('documents'), 'potacat_export.adi'),
         filters: [
@@ -2931,6 +3035,11 @@ app.whenReady().then(() => {
       }
       const logPath = settings.adifLogPath || path.join(app.getPath('userData'), 'potacat_qso_log.adi');
       appendQso(logPath, qsoData);
+
+      // Notify QSO pop-out window
+      if (qsoPopoutWin && !qsoPopoutWin.isDestroyed()) {
+        qsoPopoutWin.webContents.send('qso-popout-added', qsoData);
+      }
 
       // Track QSO in telemetry (fire-and-forget)
       const qsoSource = (qsoData.sig || '').toLowerCase();
@@ -3158,7 +3267,7 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('update-qso', async (_e, { idx, fields }) => {
+  ipcMain.handle('update-qso', async (event, { idx, fields }) => {
     const logPath = settings.adifLogPath || path.join(app.getPath('userData'), 'potacat_qso_log.adi');
     try {
       const qsos = parseAllRawQsos(logPath);
@@ -3166,13 +3275,18 @@ app.whenReady().then(() => {
       Object.assign(qsos[idx], fields);
       rewriteAdifFile(logPath, qsos);
       loadWorkedQsos();
+      // Notify other windows about the change
+      const sender = event.sender;
+      if (qsoPopoutWin && !qsoPopoutWin.isDestroyed() && qsoPopoutWin.webContents !== sender) {
+        qsoPopoutWin.webContents.send('qso-popout-updated', { idx, fields });
+      }
       return { success: true };
     } catch (err) {
       return { success: false, error: err.message };
     }
   });
 
-  ipcMain.handle('delete-qso', async (_e, idx) => {
+  ipcMain.handle('delete-qso', async (event, idx) => {
     const logPath = settings.adifLogPath || path.join(app.getPath('userData'), 'potacat_qso_log.adi');
     try {
       const qsos = parseAllRawQsos(logPath);
@@ -3180,6 +3294,11 @@ app.whenReady().then(() => {
       qsos.splice(idx, 1);
       rewriteAdifFile(logPath, qsos);
       loadWorkedQsos();
+      // Notify QSO pop-out about the deletion
+      const sender = event.sender;
+      if (qsoPopoutWin && !qsoPopoutWin.isDestroyed() && qsoPopoutWin.webContents !== sender) {
+        qsoPopoutWin.webContents.send('qso-popout-deleted', idx);
+      }
       return { success: true };
     } catch (err) {
       return { success: false, error: err.message };
