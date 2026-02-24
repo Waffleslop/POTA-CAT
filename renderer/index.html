@@ -175,10 +175,10 @@
           </table>
           <div id="no-spots" class="hidden">No spots match current filters</div>
         </div>
-        <div id="dx-respot-bar" class="dx-respot-bar hidden">
-          <span id="dx-respot-call" class="dx-respot-call"></span>
-          <input type="text" id="dx-respot-comment" class="dx-respot-input" maxlength="60" placeholder="Respot comment...">
-          <button type="button" id="dx-respot-send" class="dx-respot-btn">Respot</button>
+        <div id="dx-command-bar" class="dx-command-bar hidden">
+          <span class="dx-command-label">DX&gt;</span>
+          <input type="text" id="dx-command-input" class="dx-command-input" maxlength="80" placeholder="e.g. DX 14025.0 W1AW great signal">
+          <button type="button" id="dx-command-send" class="dx-command-btn">Send</button>
         </div>
       </div>
       <div id="split-splitter" class="hidden"></div>
@@ -502,6 +502,8 @@
           <label>Port: <input type="number" id="set-cluster-custom-port" value="7373" min="1" max="65535"></label>
         </div>
         <span class="help-text" style="display:block;margin-top:6px;">Enable up to 3 nodes for simultaneous connections. Duplicate spots are automatically removed.</span>
+        <label class="checkbox-label" style="margin-top:6px;"><input type="checkbox" id="set-show-beacons"> Show /B beacon stations</label>
+        <label class="checkbox-label" style="margin-top:6px;"><input type="checkbox" id="set-show-dx-bar"> Show DX command bar below spot table</label>
       </div>
       <label class="checkbox-label"><input type="checkbox" id="set-enable-rbn"> Reverse Beacon Network</label>
       <div id="rbn-config" class="radio-sub hidden">
@@ -528,6 +530,9 @@
       <legend>Spot Filters</legend>
       <label>Max Spot Age (minutes):
         <input type="number" id="set-max-age" min="1" max="120" value="5">
+      </label>
+      <label>Refresh Interval (seconds):
+        <input type="number" id="set-refresh-interval" min="15" max="300" step="15" value="30">
       </label>
       <label class="checkbox-label"><input type="checkbox" id="set-hide-out-of-band"> Hide out-of-band spots</label>
       <label class="checkbox-label"><input type="checkbox" id="set-hide-worked"> Hide already-worked stations</label>
@@ -778,7 +783,7 @@
       <button id="settings-cancel">Cancel</button>
     </div>
     <div class="settings-footer">
-      <div class="settings-version">v0.9.18 beta &mdash; <a href="#" id="bio-link">Casey Stanton, K3SBP</a></div>
+      <div class="settings-version">v0.9.19 beta &mdash; <a href="#" id="bio-link">Casey Stanton, K3SBP</a></div>
       <div class="settings-coffee"><a href="#" id="coffee-link">Buy Me a Coffee</a></div>
       <div class="settings-links">
         <a href="#" id="discord-link">Discord</a>

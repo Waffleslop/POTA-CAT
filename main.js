@@ -469,6 +469,9 @@ function connectCluster() {
     const client = new DxClusterClient();
 
     client.on('spot', (raw) => {
+      // Filter beacon stations (/B suffix) unless user opted in
+      if (!settings.showBeacons && /\/B$/i.test(raw.callsign)) return;
+
       const spot = buildClusterSpot(raw, myPos, myEntity);
 
       // Watchlist notification
@@ -1118,6 +1121,7 @@ let lastSmartSdrPush = 0;
 
 function pushSpotsToSmartSdr(spots) {
   if (!smartSdr || !smartSdr.connected) return;
+  if (!settings.smartSdrSpots) return; // only push spots when explicitly enabled
   const now = Date.now();
   if (now - lastSmartSdrPush < 5000) return;
   lastSmartSdrPush = now;
@@ -2175,16 +2179,15 @@ function markEventRegion(eventId, region, qsoData) {
   pushEventsToRenderer();
 }
 
-/** Scan existing QSO log for contacts that match opted-in events */
+/** Scan existing QSO log for contacts that match opted-in events.
+ *  Rebuilds progress from scratch so only log-verified QSOs count. */
 function scanLogForEvents() {
   if (!activeEvents.length || !settings.events) return;
   const logPath = settings.adifLogPath || path.join(app.getPath('userData'), 'potacat_qso_log.adi');
-  let qsos;
+  let qsos = [];
   try {
-    if (!fs.existsSync(logPath)) return;
-    qsos = parseAllRawQsos(logPath);
-  } catch { return; }
-  if (!qsos.length) return;
+    if (fs.existsSync(logPath)) qsos = parseAllRawQsos(logPath);
+  } catch { /* ignore */ }
 
   let changed = false;
   for (const ev of activeEvents) {
@@ -2192,6 +2195,13 @@ function scanLogForEvents() {
     if (!state || !state.optedIn) continue;
 
     const board = ev.board || ev.tracking?.type || 'regions';
+    // Skip counter events — don't retroactively count old QSOs
+    if (board === 'counter') continue;
+
+    // Reset progress and rebuild purely from the log
+    const oldProgress = state.progress || {};
+    state.progress = {};
+    changed = true;
 
     for (const rec of qsos) {
       const call = (rec.CALL || '').toUpperCase();
@@ -2223,21 +2233,33 @@ function scanLogForEvents() {
         const items = (ev.tracking && ev.tracking.items) || [];
         const matchedItem = items.find(it => call === it.id.toUpperCase() || call.startsWith(it.id.toUpperCase() + '/'));
         if (!matchedItem || state.progress[matchedItem.id]) continue;
-        markEventRegion(ev.id, matchedItem.id, qsoData);
-        changed = true;
+        state.progress[matchedItem.id] = {
+          call: qsoData.callsign,
+          band: qsoData.band,
+          mode: qsoData.mode,
+          date: qsoData.qsoDate,
+          freq: qsoData.frequency,
+        };
       } else if (board === 'regions') {
         const matches = (ev.callsignPatterns || []).some(pattern => {
           if (pattern.endsWith('/*')) return call.startsWith(pattern.slice(0, -1));
           return call === pattern.toUpperCase();
         });
         if (!matches || state.progress[matchEntry.region]) continue;
-        markEventRegion(ev.id, matchEntry.region, qsoData);
-        changed = true;
+        state.progress[matchEntry.region] = {
+          call: qsoData.callsign,
+          band: qsoData.band,
+          mode: qsoData.mode,
+          date: qsoData.qsoDate,
+          freq: qsoData.frequency,
+        };
       }
-      // Skip 'counter' — don't retroactively count old QSOs for counter events
     }
   }
-  if (changed) pushEventsToRenderer();
+  if (changed) {
+    saveSettings(settings);
+    pushEventsToRenderer();
+  }
 }
 
 /** Check if a logged QSO matches any active event and auto-mark progress */
@@ -2818,7 +2840,8 @@ app.whenReady().then(() => {
 
   // Start spot fetching
   refreshSpots();
-  spotTimer = setInterval(refreshSpots, 30000);
+  const refreshMs = Math.max(15, settings.refreshInterval || 30) * 1000;
+  spotTimer = setInterval(refreshSpots, refreshMs);
 
   // Start solar data fetching (every 10 minutes)
   solarTimer = setInterval(fetchSolarData, 600000);
@@ -3045,6 +3068,10 @@ app.whenReady().then(() => {
     if (!isPartialSave) {
       if (!settings.enableWsjtx) connectCat();
       refreshSpots();
+      // Restart spot timer with new interval
+      if (spotTimer) clearInterval(spotTimer);
+      const newRefreshMs = Math.max(15, settings.refreshInterval || 30) * 1000;
+      spotTimer = setInterval(refreshSpots, newRefreshMs);
     }
 
     // Reconnect cluster if settings changed
@@ -3588,6 +3615,15 @@ app.whenReady().then(() => {
     } catch (err) {
       return { error: err.message };
     }
+  });
+
+  ipcMain.handle('send-cluster-command', async (_e, text) => {
+    let sent = 0;
+    for (const [, entry] of clusterClients) {
+      if (entry.client.sendCommand(text)) sent++;
+    }
+    if (sent === 0) return { error: 'No connected DX Cluster nodes' };
+    return { success: true, sent };
   });
 
   ipcMain.on('connect-cat', (_e, target) => {

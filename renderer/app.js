@@ -125,6 +125,7 @@ const settingsCancel = document.getElementById('settings-cancel');
 const setGrid = document.getElementById('set-grid');
 const setDistUnit = document.getElementById('set-dist-unit');
 const setMaxAge = document.getElementById('set-max-age');
+const setRefreshInterval = document.getElementById('set-refresh-interval');
 const setScanDwell = document.getElementById('set-scan-dwell');
 const setWatchlist = document.getElementById('set-watchlist');
 const setEnablePota = document.getElementById('set-enable-pota');
@@ -215,6 +216,8 @@ const clusterNodeList = document.getElementById('cluster-node-list');
 const clusterPresetSelect = document.getElementById('cluster-preset-select');
 const clusterAddBtn = document.getElementById('cluster-add-btn');
 const clusterCustomFields = document.getElementById('cluster-custom-fields');
+const setShowBeacons = document.getElementById('set-show-beacons');
+const setShowDxBar = document.getElementById('set-show-dx-bar');
 const rbnConfig = document.getElementById('rbn-config');
 // Settings connection pills
 const connBar = document.getElementById('settings-conn-status');
@@ -524,6 +527,8 @@ async function loadPrefs() {
   enableLlota = settings.enableLlota === true; // default false
   enableDxcc = settings.enableDxcc === true;  // default false
   enableCluster = settings.enableCluster === true; // default false
+  showDxBar = settings.showDxBar === true;
+  updateDxCommandBar();
   enableRbn = settings.enableRbn === true; // default false
   enablePskr = settings.enablePskr === true; // default false
   enableSolar = settings.enableSolar === true;   // default false
@@ -2577,7 +2582,7 @@ function bindPopupClickHandlers(mapInstance) {
         if (!isNaN(lat) && !isNaN(lon)) showTuneArc(lat, lon, btn.dataset.freq, btn.dataset.source);
         // Find matching spot in allSpots for quick respot
         const match = allSpots.find(s => s.frequency === btn.dataset.freq && s.callsign && s.mode === btn.dataset.mode);
-        if (match) { lastTunedSpot = match; updateDxRespotBar(); }
+        if (match) lastTunedSpot = match;
       });
     });
     container.querySelectorAll('.popup-qrz').forEach((link) => {
@@ -2666,7 +2671,6 @@ function scanStep() {
 
   const spot = list[scanIndex];
   lastTunedSpot = spot;
-  updateDxRespotBar();
   window.api.tune(spot.frequency, spot.mode, spot.bearing);
   if (spot.lat != null && spot.lon != null) showTuneArc(spot.lat, spot.lon, spot.frequency, spot.source);
   render();
@@ -2878,49 +2882,38 @@ document.getElementById('respot-cancel').addEventListener('click', () => {
   document.getElementById('respot-dialog').close();
 });
 
-// --- DX Respot Banner ---
-function updateDxRespotBar() {
-  const bar = document.getElementById('dx-respot-bar');
-  const callEl = document.getElementById('dx-respot-call');
-  if (lastTunedSpot && lastTunedSpot.source === 'dxc') {
-    callEl.textContent = lastTunedSpot.callsign;
-    bar.classList.remove('hidden');
-  } else {
-    bar.classList.add('hidden');
-  }
+// --- DX Command Bar ---
+function updateDxCommandBar() {
+  const bar = document.getElementById('dx-command-bar');
+  bar.classList.toggle('hidden', !enableCluster || !showDxBar);
 }
 
-async function sendDxRespot() {
-  if (!lastTunedSpot || lastTunedSpot.source !== 'dxc') return;
-  const btn = document.getElementById('dx-respot-send');
-  const input = document.getElementById('dx-respot-comment');
-  const comment = input.value.trim();
+let showDxBar = false;
+
+async function sendDxCommand() {
+  const btn = document.getElementById('dx-command-send');
+  const input = document.getElementById('dx-command-input');
+  const text = input.value.trim();
+  if (!text) return;
   btn.disabled = true;
   try {
-    const result = await window.api.quickRespot({
-      callsign: lastTunedSpot.callsign,
-      frequency: lastTunedSpot.frequency,
-      mode: lastTunedSpot.mode,
-      comment,
-      dxcRespot: true,
-    });
+    const result = await window.api.sendClusterCommand(text);
     if (result.error) {
-      showLogToast('Re-spot failed: ' + result.error, { warn: true, duration: 5000 });
+      showLogToast(result.error, { warn: true, duration: 5000 });
     } else {
-      btn.textContent = 'Sent!';
-      setTimeout(() => { btn.textContent = 'Respot'; }, 1500);
       input.value = '';
+      showLogToast('Sent to ' + result.sent + ' node' + (result.sent > 1 ? 's' : ''));
     }
   } catch (err) {
-    showLogToast('Re-spot failed: ' + err.message, { warn: true, duration: 5000 });
+    showLogToast('DX command failed: ' + err.message, { warn: true, duration: 5000 });
   } finally {
     btn.disabled = false;
   }
 }
 
-document.getElementById('dx-respot-send').addEventListener('click', sendDxRespot);
-document.getElementById('dx-respot-comment').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); sendDxRespot(); }
+document.getElementById('dx-command-send').addEventListener('click', sendDxCommand);
+document.getElementById('dx-command-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); sendDxCommand(); }
 });
 
 // --- Quick Log (Ctrl+L) ---
@@ -3402,7 +3395,6 @@ function render() {
       tr.addEventListener('click', () => {
         if (scanning) stopScan(); // clicking a row stops scan
         lastTunedSpot = s;
-        updateDxRespotBar();
         window.api.tune(s.frequency, s.mode, s.bearing);
         if (s.lat != null && s.lon != null) showTuneArc(s.lat, s.lon, s.frequency, s.source);
         render(); // highlight the clicked row immediately
@@ -3759,7 +3751,7 @@ logDialogClose.addEventListener('click', () => logDialog.close());
 
 // Enter key saves QSO from anywhere in the log dialog
 logDialog.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
+  if (e.key === 'Enter' && !logSaveBtn.disabled) {
     e.preventDefault();
     logSaveBtn.click();
   }
@@ -3861,6 +3853,8 @@ logSaveBtn.addEventListener('click', async () => {
   };
 
   logSaveBtn.disabled = true;
+  const origText = logSaveBtn.textContent;
+  logSaveBtn.textContent = 'Saving\u2026';
   try {
     const result = await window.api.saveQso(qsoData);
     if (result.success) {
@@ -3891,6 +3885,7 @@ logSaveBtn.addEventListener('click', async () => {
     showLogToast(`Error: ${err.message}`, { warn: true, duration: 5000 });
   } finally {
     logSaveBtn.disabled = false;
+    logSaveBtn.textContent = origText;
   }
 });
 
@@ -3980,6 +3975,7 @@ document.querySelector('.spots-dropdown-panel').addEventListener('change', async
   setHideOutOfBand.checked = hideOutOfBand;
 
   updateRbnButton();
+  updateDxCommandBar();
 
   // Save and let main process handle connect/disconnect
   await window.api.saveSettings({
@@ -4015,6 +4011,7 @@ settingsBtn.addEventListener('click', async () => {
   setGrid.value = s.grid || '';
   setDistUnit.value = s.distUnit || 'mi';
   setMaxAge.value = s.maxAgeMin || 5;
+  setRefreshInterval.value = s.refreshInterval || 30;
   setScanDwell.value = s.scanDwell || 7;
   setCwXit.value = s.cwXit || 0;
   setCwFilter.value = s.cwFilterWidth || 0;
@@ -4044,6 +4041,10 @@ settingsBtn.addEventListener('click', async () => {
   setQrzFullName.checked = s.qrzFullName === true;
   qrzConfig.classList.toggle('hidden', !s.enableQrz);
   setEnableCluster.checked = s.enableCluster === true;
+  setShowBeacons.checked = s.showBeacons === true;
+  setShowDxBar.checked = s.showDxBar === true;
+  showDxBar = s.showDxBar === true;
+  updateDxCommandBar();
   setEnableRbn.checked = s.enableRbn === true;
   setMyCallsign.value = s.myCallsign || '';
   // Load cluster nodes (migrate legacy if needed)
@@ -4157,6 +4158,7 @@ settingsCancel.addEventListener('click', async () => {
 settingsSave.addEventListener('click', async () => {
   const watchlistRaw = setWatchlist.value.trim();
   const maxAgeVal = parseInt(setMaxAge.value, 10) || 5;
+  const refreshIntervalVal = Math.max(15, parseInt(setRefreshInterval.value, 10) || 30);
   const dwellVal = parseInt(setScanDwell.value, 10) || 7;
   const cwXitVal = parseInt(setCwXit.value, 10) || 0;
   const cwFilterVal = parseInt(setCwFilter.value, 10) || 0;
@@ -4190,6 +4192,10 @@ settingsSave.addEventListener('click', async () => {
     alert('RBN requires a callsign. Please enter your callsign above.');
   }
   const clusterNodes = currentClusterNodes;
+  const showBeaconsEnabled = setShowBeacons.checked;
+  const showDxBarEnabled = setShowDxBar.checked;
+  showDxBar = showDxBarEnabled;
+  updateDxCommandBar();
   const wsjtxEnabled = setEnableWsjtx.checked;
   const wsjtxPortVal = parseInt(setWsjtxPort.value, 10) || 2237;
   const wsjtxHighlightEnabled = setWsjtxHighlight.checked;
@@ -4268,6 +4274,7 @@ settingsSave.addEventListener('click', async () => {
     grid: setGrid.value.trim() || 'FN20jb',
     distUnit: setDistUnit.value,
     maxAgeMin: maxAgeVal,
+    refreshInterval: refreshIntervalVal,
     scanDwell: dwellVal,
     cwXit: cwXitVal,
     cwFilterWidth: cwFilterVal,
@@ -4294,6 +4301,8 @@ settingsSave.addEventListener('click', async () => {
     wsjtxAutoLog: wsjtxAutoLogEnabled,
     myCallsign: myCallsign,
     clusterNodes: clusterNodes,
+    showBeacons: showBeaconsEnabled,
+    showDxBar: showDxBarEnabled,
     enableSolar: solarEnabled,
     enableBandActivity: bandActivityEnabled,
     showBearing: showBearingEnabled,
@@ -4761,14 +4770,6 @@ function renderRegionsBoard(event) {
       if (!progress[st]) tipParts.push('Active this week!');
     }
     cell.title = tipParts.join('\n');
-    cell.addEventListener('click', async () => {
-      if (progress[st]) return;
-      await window.api.markEventRegion({
-        eventId: event.id,
-        region: st,
-        qsoData: { callsign: 'MANUAL', band: '', mode: '', qsoDate: new Date().toISOString().slice(0, 10) },
-      });
-    });
     grid.appendChild(cell);
   }
   content.appendChild(grid);
@@ -4811,20 +4812,6 @@ function renderChecklistBoard(event) {
       info.style.cssText = 'margin-left:auto;font-size:10px;color:var(--text-tertiary);';
       info.textContent = [p.band, p.mode, p.date].filter(Boolean).join(' ');
       row.appendChild(info);
-    } else {
-      // Manual mark button
-      const markBtn = document.createElement('button');
-      markBtn.className = 'event-overlay-btn';
-      markBtn.style.cssText = 'margin-left:auto;font-size:9px;padding:1px 4px;';
-      markBtn.textContent = 'Mark';
-      markBtn.addEventListener('click', async () => {
-        await window.api.markEventRegion({
-          eventId: event.id,
-          region: item.id,
-          qsoData: { callsign: item.id, band: '', mode: '', qsoDate: new Date().toISOString().slice(0, 10) },
-        });
-      });
-      row.appendChild(markBtn);
     }
 
     content.appendChild(row);

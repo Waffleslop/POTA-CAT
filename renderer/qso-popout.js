@@ -270,6 +270,9 @@ document.getElementById('qso-export').addEventListener('click', async () => {
   document.getElementById('tb-min').addEventListener('click', () => window.api.minimize());
   document.getElementById('tb-max').addEventListener('click', () => window.api.maximize());
   document.getElementById('tb-close').addEventListener('click', () => window.api.close());
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') window.api.close();
+  });
 })();
 
 // --- Real-time listeners ---

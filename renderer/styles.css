@@ -2862,8 +2862,8 @@ dialog input, dialog select {
   filter: brightness(1.2);
 }
 
-/* DX Respot banner */
-.dx-respot-bar {
+/* DX Command bar */
+.dx-command-bar {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2872,8 +2872,8 @@ dialog input, dialog select {
   border-top: 1px solid var(--border-primary);
   flex-shrink: 0;
 }
-.dx-respot-bar.hidden { display: none; }
-.dx-respot-call { color: #e040fb; font-weight: 600; white-space: nowrap; }
-.dx-respot-input { width: 25ch; font-size: 12px; }
-.dx-respot-btn { font-size: 11px; padding: 2px 10px; }
+.dx-command-bar.hidden { display: none; }
+.dx-command-label { color: #e040fb; font-weight: 600; white-space: nowrap; font-size: 12px; }
+.dx-command-input { flex: 1; font-size: 12px; font-family: monospace; }
+.dx-command-btn { font-size: 11px; padding: 2px 10px; white-space: nowrap; }
 
