@@ -75,6 +75,8 @@ let wsjtxStatus = null; // last Status message from WSJT-X
 let wsjtxHighlightTimer = null; // throttle timer for highlight updates
 let donorCallsigns = new Set(); // supporter callsigns from potacat.com
 let expeditionCallsigns = new Set(); // active DX expeditions from Club Log
+let activeEvents = [];                // events fetched from remote endpoint
+const EVENTS_CACHE_PATH = path.join(app.getPath('userData'), 'events-cache.json');
 let pskr = null;
 let pskrSpots = [];       // streaming PSKReporter FreeDV spots (FIFO, max 500)
 let pskrFlushTimer = null; // throttle timer for PSKReporter → renderer updates
@@ -477,8 +479,8 @@ function connectCluster() {
         });
       }
 
-      // Dedupe: keep only the latest spot per callsign (across all nodes)
-      const idx = clusterSpots.findIndex(s => s.callsign === spot.callsign);
+      // Dedupe: keep only the latest spot per callsign+band (across all nodes)
+      const idx = clusterSpots.findIndex(s => s.callsign === spot.callsign && s.band === spot.band);
       if (idx !== -1) clusterSpots.splice(idx, 1);
       clusterSpots.push(spot);
       if (clusterSpots.length > 500) {
@@ -1325,9 +1327,9 @@ function processPotaSpots(raw) {
       comments: s.comments || '',
     };
   });
-  // Dedupe: keep latest spot per callsign
+  // Dedupe: keep latest spot per callsign+band (allows multi-band activations)
   const seen = new Map();
-  for (const s of all) { seen.set(s.callsign, s); }
+  for (const s of all) { seen.set(s.callsign + '_' + s.band, s); }
   return [...seen.values()];
 }
 
@@ -1385,9 +1387,9 @@ async function processSotaSpots(raw) {
       continent,
     };
   });
-  // Dedupe: keep latest spot per callsign
+  // Dedupe: keep latest spot per callsign+band (allows multi-band activations)
   const seen = new Map();
-  for (const s of all) { seen.set(s.callsign, s); }
+  for (const s of all) { seen.set(s.callsign + '_' + s.band, s); }
   return [...seen.values()];
 }
 
@@ -1443,9 +1445,9 @@ function processWwffSpots(raw) {
       continent,
     };
   });
-  // Dedupe: keep latest spot per callsign
+  // Dedupe: keep latest spot per callsign+band (allows multi-band activations)
   const seen = new Map();
-  for (const s of all) { seen.set(s.callsign, s); }
+  for (const s of all) { seen.set(s.callsign + '_' + s.band, s); }
   return [...seen.values()];
 }
 
@@ -1509,9 +1511,9 @@ function processLlotaSpots(raw) {
       continent,
     };
   });
-  // Dedupe: keep latest spot per callsign
+  // Dedupe: keep latest spot per callsign+band (allows multi-band activations)
   const seen = new Map();
-  for (const s of all) { seen.set(s.callsign, s); }
+  for (const s of all) { seen.set(s.callsign + '_' + s.band, s); }
   return [...seen.values()];
 }
 
@@ -1931,6 +1933,15 @@ function createWindow() {
     // Fetch active DX expeditions from Club Log
     fetchExpeditions();
     setInterval(fetchExpeditions, 3600000); // refresh every hour
+    // Fetch active events (contests, awards) from remote endpoint
+    const cachedEvents = loadEventsCache();
+    if (cachedEvents.events && cachedEvents.events.length) {
+      activeEvents = cachedEvents.events;
+    }
+    fetchActiveEvents();
+    setInterval(fetchActiveEvents, 4 * 3600000); // refresh every 4 hours
+    // Push cached events to renderer immediately
+    pushEventsToRenderer();
     // Auto-reopen pop-out map if it was open when the app last closed
     if (settings.mapPopoutOpen) {
       ipcMain.emit('popout-map-open');
@@ -1989,6 +2000,155 @@ function fetchExpeditions() {
   req.on('error', () => { /* silently ignore */ });
 }
 
+// --- Active Events (remote endpoint) ---
+// Built-in America 250 WAS schedule — remote endpoint overrides this.
+// Each activation runs Wed 0000z to Tue 2359z (7 days). Multiple states can overlap.
+// Confirmed dates from ARRL V0220 PDF + community reports. Update via potacat.com/events/active.json.
+const BUILTIN_EVENTS = {
+  events: [{
+    id: 'america250-2026',
+    name: 'ARRL America 250 WAS',
+    type: 'was',
+    url: 'https://www.arrl.org/america250-was',
+    badge: '250',
+    badgeColor: '#cf6a00',
+    callsignPatterns: ['W1AW/*'],
+    schedule: [
+      // Jan 2026
+      { region: 'NY', regionName: 'New York', start: '2026-01-07T00:00:00Z', end: '2026-01-13T23:59:59Z' },
+      { region: 'NE', regionName: 'Nebraska', start: '2026-01-07T00:00:00Z', end: '2026-01-13T23:59:59Z' },
+      { region: 'WV', regionName: 'West Virginia', start: '2026-01-14T00:00:00Z', end: '2026-01-20T23:59:59Z' },
+      { region: 'LA', regionName: 'Louisiana', start: '2026-01-14T00:00:00Z', end: '2026-01-20T23:59:59Z' },
+      { region: 'SC', regionName: 'South Carolina', start: '2026-01-14T00:00:00Z', end: '2026-01-20T23:59:59Z' },
+      { region: 'IL', regionName: 'Illinois', start: '2026-01-21T00:00:00Z', end: '2026-01-27T23:59:59Z' },
+      { region: 'ME', regionName: 'Maine', start: '2026-01-28T00:00:00Z', end: '2026-02-03T23:59:59Z' },
+      // Feb 2026
+      { region: 'CA', regionName: 'California', start: '2026-02-04T00:00:00Z', end: '2026-02-10T23:59:59Z' },
+      { region: 'MA', regionName: 'Massachusetts', start: '2026-02-11T00:00:00Z', end: '2026-02-17T23:59:59Z' },
+      { region: 'MI', regionName: 'Michigan', start: '2026-02-18T00:00:00Z', end: '2026-02-24T23:59:59Z' },
+      { region: 'AZ', regionName: 'Arizona', start: '2026-02-25T00:00:00Z', end: '2026-03-03T23:59:59Z' },
+      // Mar 2026
+      { region: 'AZ', regionName: 'Arizona', start: '2026-03-04T00:00:00Z', end: '2026-03-10T23:59:59Z' },
+      { region: 'VA', regionName: 'Virginia', start: '2026-03-11T00:00:00Z', end: '2026-03-17T23:59:59Z' },
+      { region: 'HI', regionName: 'Hawaii', start: '2026-03-18T00:00:00Z', end: '2026-03-24T23:59:59Z' },
+      { region: 'KY', regionName: 'Kentucky', start: '2026-03-18T00:00:00Z', end: '2026-03-24T23:59:59Z' },
+      { region: 'MN', regionName: 'Minnesota', start: '2026-03-18T00:00:00Z', end: '2026-03-24T23:59:59Z' },
+      { region: 'ND', regionName: 'North Dakota', start: '2026-03-25T00:00:00Z', end: '2026-03-31T23:59:59Z' },
+      { region: 'OK', regionName: 'Oklahoma', start: '2026-03-25T00:00:00Z', end: '2026-03-31T23:59:59Z' },
+      // Apr 2026
+      { region: 'NH', regionName: 'New Hampshire', start: '2026-04-29T00:00:00Z', end: '2026-05-05T23:59:59Z' },
+      // Remaining states will be filled from remote endpoint as schedule is confirmed
+    ],
+    tracking: { type: 'regions', total: 50, label: 'States' },
+  }],
+};
+
+function loadEventsCache() {
+  try {
+    const cached = JSON.parse(fs.readFileSync(EVENTS_CACHE_PATH, 'utf-8'));
+    if (cached.events && cached.events.length) return cached;
+  } catch { /* fall through */ }
+  return BUILTIN_EVENTS;
+}
+
+function saveEventsCache(data) {
+  try { fs.writeFileSync(EVENTS_CACHE_PATH, JSON.stringify(data, null, 2)); } catch { /* ignore */ }
+}
+
+function fetchActiveEvents() {
+  const https = require('https');
+  const req = https.get('https://potacat.com/events/active.json', (res) => {
+    let body = '';
+    res.on('data', (chunk) => { body += chunk; });
+    res.on('end', () => {
+      try {
+        const data = JSON.parse(body);
+        if (data && Array.isArray(data.events)) {
+          activeEvents = data.events;
+          saveEventsCache(data);
+          pushEventsToRenderer();
+        }
+      } catch { /* silently ignore parse errors */ }
+    });
+  });
+  req.on('error', () => { /* silently ignore — use cache */ });
+}
+
+function pushEventsToRenderer() {
+  if (!win || win.isDestroyed()) return;
+  // Merge event definitions with user opt-in/progress state from settings
+  const eventStates = settings.events || {};
+  const payload = activeEvents.map(ev => ({
+    ...ev,
+    optedIn: !!(eventStates[ev.id] && eventStates[ev.id].optedIn),
+    dismissed: !!(eventStates[ev.id] && eventStates[ev.id].dismissed),
+    progress: (eventStates[ev.id] && eventStates[ev.id].progress) || {},
+  }));
+  win.webContents.send('active-events', payload);
+}
+
+function getEventProgress(eventId) {
+  if (!settings.events || !settings.events[eventId]) return {};
+  return settings.events[eventId].progress || {};
+}
+
+function setEventOptIn(eventId, optedIn, dismissed) {
+  if (!settings.events) settings.events = {};
+  if (!settings.events[eventId]) settings.events[eventId] = { optedIn: false, dismissed: false, progress: {} };
+  if (optedIn !== undefined) settings.events[eventId].optedIn = optedIn;
+  if (dismissed !== undefined) settings.events[eventId].dismissed = dismissed;
+  saveSettings(settings);
+  pushEventsToRenderer();
+}
+
+function markEventRegion(eventId, region, qsoData) {
+  if (!settings.events) settings.events = {};
+  if (!settings.events[eventId]) settings.events[eventId] = { optedIn: true, dismissed: false, progress: {} };
+  settings.events[eventId].progress[region] = {
+    call: qsoData.callsign,
+    band: qsoData.band || '',
+    mode: qsoData.mode || '',
+    date: qsoData.qsoDate || new Date().toISOString().slice(0, 10),
+    freq: qsoData.frequency || '',
+  };
+  saveSettings(settings);
+  pushEventsToRenderer();
+}
+
+/** Check if a logged QSO matches any active event and auto-mark progress */
+function checkEventQso(qsoData) {
+  if (!activeEvents.length || !settings.events) return;
+  const call = (qsoData.callsign || '').toUpperCase();
+  const now = new Date();
+
+  for (const ev of activeEvents) {
+    const state = settings.events[ev.id];
+    if (!state || !state.optedIn) continue;
+
+    // Check callsign against event patterns
+    const matches = (ev.callsignPatterns || []).some(pattern => {
+      if (pattern.endsWith('/*')) {
+        return call.startsWith(pattern.slice(0, -1)); // W1AW/* matches W1AW/7
+      }
+      return call === pattern.toUpperCase();
+    });
+    if (!matches) continue;
+
+    // Find the active schedule entry
+    const activeEntry = (ev.schedule || []).find(s => {
+      const start = new Date(s.start);
+      const end = new Date(s.end);
+      return now >= start && now < end;
+    });
+    if (!activeEntry) continue;
+
+    // Don't overwrite if already worked
+    if (state.progress[activeEntry.region]) continue;
+
+    markEventRegion(ev.id, activeEntry.region, qsoData);
+  }
+}
+
 // --- Update check (electron-updater for installed, manual fallback for portable) ---
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = false;
@@ -2030,6 +2190,7 @@ autoUpdater.on('error', (err) => {
 
 ipcMain.on('start-download', () => { autoUpdater.downloadUpdate(); });
 ipcMain.on('install-update', () => { autoUpdater.quitAndInstall(); });
+ipcMain.on('check-for-updates', () => { checkForUpdates(); });
 
 // Fallback for portable builds where electron-updater is inactive
 function checkForUpdatesManual() {
@@ -2608,6 +2769,89 @@ app.whenReady().then(() => {
 
   ipcMain.handle('get-settings', () => ({ ...settings, appVersion: require('./package.json').version }));
 
+  // --- Events IPC ---
+  ipcMain.handle('get-active-events', () => {
+    const eventStates = settings.events || {};
+    return activeEvents.map(ev => ({
+      ...ev,
+      optedIn: !!(eventStates[ev.id] && eventStates[ev.id].optedIn),
+      dismissed: !!(eventStates[ev.id] && eventStates[ev.id].dismissed),
+      progress: (eventStates[ev.id] && eventStates[ev.id].progress) || {},
+    }));
+  });
+
+  ipcMain.handle('set-event-optin', (_e, { eventId, optedIn, dismissed }) => {
+    setEventOptIn(eventId, optedIn, dismissed);
+    return true;
+  });
+
+  ipcMain.handle('get-event-progress', (_e, eventId) => {
+    return getEventProgress(eventId);
+  });
+
+  ipcMain.handle('mark-event-region', (_e, { eventId, region, qsoData }) => {
+    markEventRegion(eventId, region, qsoData);
+    return true;
+  });
+
+  ipcMain.handle('reset-event-progress', (_e, eventId) => {
+    if (settings.events && settings.events[eventId]) {
+      settings.events[eventId].progress = {};
+      saveSettings(settings);
+      pushEventsToRenderer();
+    }
+    return true;
+  });
+
+  ipcMain.handle('export-event-adif', async (_e, { eventId }) => {
+    const state = settings.events && settings.events[eventId];
+    if (!state || !state.progress) return { success: false, error: 'No progress data' };
+    const event = activeEvents.find(ev => ev.id === eventId);
+    if (!event) return { success: false, error: 'Event not found' };
+
+    // Build ADIF records from progress entries
+    const records = [];
+    for (const [region, qso] of Object.entries(state.progress)) {
+      const entry = (event.schedule || []).find(s => s.region === region);
+      records.push({
+        CALL: qso.call,
+        QSO_DATE: (qso.date || '').replace(/-/g, ''),
+        TIME_ON: qso.time || '0000',
+        BAND: qso.band,
+        MODE: qso.mode,
+        FREQ: qso.freq ? (parseFloat(qso.freq) / 1000).toFixed(6) : '',
+        RST_SENT: qso.rstSent || '59',
+        RST_RCVD: qso.rstRcvd || '59',
+        STATE: region,
+        COMMENT: `${event.name} - ${entry ? entry.regionName : region}`,
+        STATION_CALLSIGN: settings.myCallsign || '',
+        OPERATOR: settings.myCallsign || '',
+      });
+    }
+
+    const parentWin = win;
+    const result = await dialog.showSaveDialog(parentWin, {
+      title: `Export ${event.name} ADIF for LOTW`,
+      defaultPath: path.join(app.getPath('documents'), `potacat_${eventId}.adi`),
+      filters: [
+        { name: 'ADIF Files', extensions: ['adi', 'adif'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+    if (result.canceled) return null;
+
+    let content = ADIF_HEADER;
+    for (const rec of records) {
+      const parts = [];
+      for (const [key, value] of Object.entries(rec)) {
+        if (value != null && value !== '') parts.push(adifField(key, value));
+      }
+      content += '\n' + parts.join(' ') + ' <EOR>\n';
+    }
+    fs.writeFileSync(result.filePath, content, 'utf-8');
+    return { success: true, filePath: result.filePath, count: records.length };
+  });
+
   ipcMain.handle('list-ports', async () => {
     return listSerialPorts();
   });
@@ -3044,6 +3288,9 @@ app.whenReady().then(() => {
       // Track QSO in telemetry (fire-and-forget)
       const qsoSource = (qsoData.sig || '').toLowerCase();
       trackQso(['pota', 'sota', 'wwff', 'llota'].includes(qsoSource) ? qsoSource : null);
+
+      // Check if QSO matches any active event and auto-mark progress
+      checkEventQso(qsoData);
 
       // Update worked QSOs map and notify renderer
       if (qsoData.callsign) {
