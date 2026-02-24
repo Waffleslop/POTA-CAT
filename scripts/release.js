@@ -18,7 +18,7 @@ const tag = `v${version}`;
 const distDir = path.join(__dirname, '..', 'dist');
 
 // Find installer, portable .exe, and update manifest
-const installerName = `POTACAT Setup ${version}.exe`;
+const installerName = `POTACAT-Setup-${version}.exe`;
 const portableName = `POTACAT-${version}-portable.exe`;
 const latestYmlName = 'latest.yml';
 const installerPath = path.join(distDir, installerName);
