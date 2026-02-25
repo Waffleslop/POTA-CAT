@@ -1898,19 +1898,21 @@ dialog input, dialog select {
 }
 
 /* Already-worked spots — subtle tint, not dimmed */
-.already-worked {
-  color: #9999aa;
-}
-
-.already-worked .freq-link,
-.already-worked .qrz-link {
-  color: #9999aa;
-}
-
+/* Checkmark for any previously worked callsign (any day) */
 .already-worked .callsign-cell::before {
   content: "\2713 ";
   color: #4ecca3;
   font-size: 11px;
+}
+
+/* Dim only if worked today (same UTC date) */
+.worked-today {
+  color: #9999aa;
+}
+
+.worked-today .freq-link,
+.worked-today .qrz-link {
+  color: #9999aa;
 }
 
 /* Band Activity Heatmap */

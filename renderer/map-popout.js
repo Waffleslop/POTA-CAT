@@ -373,7 +373,7 @@ function updateMapMarkers(spots) {
       ? { icon: expeditionIcon, zIndexOffset: 500 }
       : s.isOop
         ? { icon: oopIcon, opacity: 0.4 }
-        : { icon: sourceIcon, ...(s.isWorked ? { opacity: 0.5 } : {}) };
+        : { icon: sourceIcon, ...(s.isWorkedToday ? { opacity: 0.5 } : {}) };
 
     for (const offset of [-360, 0, 360]) {
       const marker = L.marker([s.lat, s.lon + offset], markerOptions).bindPopup(popupContent);

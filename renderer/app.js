@@ -2587,7 +2587,7 @@ function updateMapMarkers(filtered) {
       ? { icon: expeditionIcon, zIndexOffset: 500 }
       : oop
         ? { icon: oopIcon, opacity: 0.4 }
-        : { icon: sourceIcon, ...(worked ? { opacity: 0.5 } : {}) };
+        : { icon: sourceIcon, ...(worked && isWorkedSpot(s) ? { opacity: 0.5 } : {}) };
 
     // Plot marker at canonical position and one world-copy in each direction
     for (const offset of [-360, 0, 360]) {
@@ -3246,6 +3246,7 @@ function enrichSpotsForPopout(filtered) {
   return filtered.map(s => ({
     ...s,
     isWorked: workedQsos.has(s.callsign.toUpperCase()),
+    isWorkedToday: workedQsos.has(s.callsign.toUpperCase()) && isWorkedSpot(s),
     isExpedition: expeditionCallsigns.has(s.callsign.toUpperCase()),
     isNewPark: workedParksSet.size > 0 && (s.source === 'pota' || s.source === 'wwff') && s.reference && !workedParksSet.has(s.reference),
     isOop: isOutOfPrivilege(parseFloat(s.frequency), s.mode, licenseClass),
@@ -3402,7 +3403,8 @@ function render() {
     for (const s of filtered) {
       const tr = document.createElement('tr');
       const isWorked = workedQsos.has(s.callsign.toUpperCase());
-      const isSkipped = scanSkipped.has(s.frequency) || isWorked;
+      const isWorkedToday = isWorked && isWorkedSpot(s);
+      const isSkipped = scanSkipped.has(s.frequency) || isWorkedToday;
 
       // Source color-coding
       if (s.source === 'pota') tr.classList.add('spot-pota');
@@ -3420,9 +3422,10 @@ function render() {
         tr.classList.add('out-of-privilege');
       }
 
-      // Already-worked check
+      // Already-worked check — checkmark for any prior QSO, dim only if worked today
       if (isWorked) {
         tr.classList.add('already-worked');
+        if (isWorkedToday) tr.classList.add('worked-today');
       }
 
       // New park indicator (POTA/WWFF spot with a reference not in worked parks)
