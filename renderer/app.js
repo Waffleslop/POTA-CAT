@@ -281,6 +281,7 @@ const utcClockEl = document.getElementById('utc-clock');
 const sfiStatusEl = document.getElementById('sfi-status');
 const kStatusEl = document.getElementById('k-status');
 const aStatusEl = document.getElementById('a-status');
+const setColorRows = document.getElementById('set-color-rows');
 const setEnableSolar = document.getElementById('set-enable-solar');
 const setEnableBandActivity = document.getElementById('set-enable-band-activity');
 const setShowBearing = document.getElementById('set-show-bearing');
@@ -534,6 +535,8 @@ async function loadPrefs() {
   enableRbn = settings.enableRbn === true; // default false
   enablePskr = settings.enablePskr === true; // default false
   enableSolar = settings.enableSolar === true;   // default false
+  // Color rows — default true (on)
+  spotsTable.classList.toggle('no-source-tint', settings.colorRows === false);
   enableBandActivity = settings.enableBandActivity === true; // default false
   updateSolarVisibility();
   qrzFullName = settings.qrzFullName === true;
@@ -4142,6 +4145,7 @@ settingsBtn.addEventListener('click', async () => {
   loggingConfig.classList.toggle('hidden', !s.enableLogging);
   logbookConfig.classList.toggle('hidden', !s.sendToLogbook);
   updateLogbookPortConfig();
+  setColorRows.checked = s.colorRows !== false; // default true
   setEnableSolar.checked = s.enableSolar === true;
   setEnableBandActivity.checked = s.enableBandActivity === true;
   setShowBearing.checked = s.showBearing === true;
@@ -4261,6 +4265,7 @@ settingsSave.addEventListener('click', async () => {
   const wsjtxPortVal = parseInt(setWsjtxPort.value, 10) || 2237;
   const wsjtxHighlightEnabled = setWsjtxHighlight.checked;
   const wsjtxAutoLogEnabled = setWsjtxAutoLog.checked;
+  const colorRowsEnabled = setColorRows.checked;
   const solarEnabled = setEnableSolar.checked;
   const bandActivityEnabled = setEnableBandActivity.checked;
   const showBearingEnabled = setShowBearing.checked;
@@ -4364,6 +4369,7 @@ settingsSave.addEventListener('click', async () => {
     clusterNodes: clusterNodes,
     showBeacons: showBeaconsEnabled,
     showDxBar: showDxBarEnabled,
+    colorRows: colorRowsEnabled,
     enableSolar: solarEnabled,
     enableBandActivity: bandActivityEnabled,
     showBearing: showBearingEnabled,
@@ -4439,6 +4445,7 @@ settingsSave.addEventListener('click', async () => {
   enableWsjtx = wsjtxEnabled;
   updateWsjtxStatusVisibility();
   updateRbnButton();
+  spotsTable.classList.toggle('no-source-tint', !colorRowsEnabled);
   enableSolar = solarEnabled;
   updateSolarVisibility();
   enableBandActivity = bandActivityEnabled;

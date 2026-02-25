@@ -1196,6 +1196,17 @@ dialog input, dialog select {
   background: rgba(255, 107, 107, 0.06);
 }
 
+/* When row tinting is disabled, remove backgrounds but keep left borders */
+.no-source-tint .spot-pota,
+.no-source-tint .spot-sota,
+.no-source-tint .spot-dxc,
+.no-source-tint .spot-rbn,
+.no-source-tint .spot-wwff,
+.no-source-tint .spot-llota,
+.no-source-tint .spot-pskr {
+  background: transparent;
+}
+
 .potacat-respot {
   border-left: 3px solid #e94560 !important;
 }
