@@ -1214,6 +1214,12 @@ dialog input, dialog select {
 .source-badge-llota { background: #42a5f5; color: #000; }
 .source-badge-pskr { background: #ff6b6b; color: #000; }
 
+/* Hide source column when toggled off */
+.hide-source-col th[data-col="source"],
+.hide-source-col td[data-col="source"] {
+  display: none;
+}
+
 /* When row tinting is disabled, remove backgrounds but keep left borders */
 .no-source-tint .spot-pota,
 .no-source-tint .spot-sota,
