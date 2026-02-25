@@ -2880,6 +2880,11 @@ dialog input, dialog select {
   max-width: 340px;
 }
 
+#whats-new-dialog {
+  max-width: 500px;
+  width: 90vw;
+}
+
 .hotkeys-table {
   width: 100%;
   border-collapse: collapse;

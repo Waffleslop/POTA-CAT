@@ -2433,6 +2433,32 @@ function checkForUpdates() {
   }
 }
 
+// --- Fetch release notes for a specific version ---
+ipcMain.handle('get-release-notes', async (_event, version) => {
+  const https = require('https');
+  const tag = version.startsWith('v') ? version : `v${version}`;
+  return new Promise((resolve) => {
+    const options = {
+      hostname: 'api.github.com',
+      path: `/repos/Waffleslop/POTACAT/releases/tags/${tag}`,
+      headers: { 'User-Agent': 'POTACAT/' + require('./package.json').version },
+      timeout: 10000,
+    };
+    const req = https.get(options, (res) => {
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          resolve({ name: data.name || '', body: data.body || '' });
+        } catch { resolve(null); }
+      });
+    });
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+  });
+});
+
 // --- Anonymous telemetry (opt-in only) ---
 const TELEMETRY_URL = 'https://telemetry.potacat.com/ping';
 let sessionStartTime = Date.now();

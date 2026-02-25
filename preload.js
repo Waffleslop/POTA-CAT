@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('api', {
   onCatMode: (cb) => ipcRenderer.on('cat-mode', (_e, mode) => cb(mode)),
   onCatPower: (cb) => ipcRenderer.on('cat-power', (_e, watts) => cb(watts)),
   qrzLookup: (callsign) => ipcRenderer.invoke('qrz-lookup', callsign),
+  getReleaseNotes: (version) => ipcRenderer.invoke('get-release-notes', version),
   importAdif: () => ipcRenderer.invoke('import-adif'),
   parseAdif: () => ipcRenderer.invoke('parse-adif'),
   onDxccData: (cb) => ipcRenderer.on('dxcc-data', (_e, data) => cb(data)),

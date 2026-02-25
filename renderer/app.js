@@ -2738,6 +2738,11 @@ document.addEventListener('keydown', (e) => {
     showLogToast(enableSplit ? 'Split mode ON' : 'Split mode OFF', { duration: 1500 });
     return;
   }
+  // Ctrl+A — Prevent select-all
+  if (e.key === 'a' && (e.ctrlKey || e.metaKey) && !e.target.matches('input, select, textarea')) {
+    e.preventDefault();
+    return;
+  }
   // Ctrl+R / Cmd+R — Quick re-spot
   if (e.key === 'r' && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
@@ -6465,7 +6470,8 @@ document.getElementById('welcome-start').addEventListener('click', async () => {
 async function checkFirstRun(force = false) {
   const s = await window.api.getSettings();
   const isNewVersion = s.appVersion && s.lastVersion !== s.appVersion;
-  if (force || s.firstRun || isNewVersion) {
+
+  if (force || s.firstRun) {
     // Reset welcome rig state
     welcomeRig = null;
     const welcomeRigDisplay = document.getElementById('welcome-rig-display');
@@ -6473,8 +6479,8 @@ async function checkFirstRun(force = false) {
     welcomeRigDisplay.classList.add('hidden');
     document.getElementById('welcome-rig-add-btn').classList.remove('hidden');
     document.getElementById('welcome-rig-editor').classList.add('hidden');
-    // Pre-fill with existing settings on upgrade (not fresh install)
-    if (force || !s.firstRun) {
+    // Pre-fill with existing settings when forced (not fresh install)
+    if (force) {
       welcomeCallsignInput.value = s.myCallsign || '';
       welcomeGridInput.value = s.grid || '';
       if (s.distUnit) document.getElementById('welcome-dist-unit').value = s.distUnit;
@@ -6494,7 +6500,59 @@ async function checkFirstRun(force = false) {
       }
     }
     welcomeDialog.showModal();
+  } else if (isNewVersion) {
+    // Version changed — show "What's New" release notes, not the welcome screen
+    await window.api.saveSettings({ lastVersion: s.appVersion });
+    showWhatsNew(s.appVersion);
   }
+}
+
+async function showWhatsNew(version) {
+  const dialog = document.getElementById('whats-new-dialog');
+  const title = document.getElementById('whats-new-title');
+  const body = document.getElementById('whats-new-body');
+  const closeBtn = document.getElementById('whats-new-close');
+
+  title.textContent = `What's New in v${version}`;
+  body.innerHTML = '<em>Loading release notes...</em>';
+  dialog.showModal();
+
+  closeBtn.onclick = () => dialog.close();
+  dialog.addEventListener('click', (e) => {
+    if (e.target === dialog) dialog.close();
+  }, { once: true });
+
+  const data = await window.api.getReleaseNotes(version);
+  if (data && data.body) {
+    // Convert markdown-ish release notes to simple HTML
+    body.innerHTML = formatReleaseNotes(data.body);
+    // Open links externally
+    body.querySelectorAll('a').forEach(a => {
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (a.href) window.api.openExternal(a.href);
+      });
+    });
+  } else {
+    body.innerHTML = '<p>No release notes available for this version.</p>';
+  }
+}
+
+function formatReleaseNotes(md) {
+  // Strip everything from "## Install" or "## Checksums" onward
+  md = md.replace(/\n## (Install|Checksums)[\s\S]*/i, '').trim();
+
+  // Simple markdown → HTML for release notes
+  return md
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^## (.+)$/gm, '<h4 style="margin:12px 0 6px;color:var(--text-primary);">$1</h4>')
+    .replace(/^### (.+)$/gm, '<h5 style="margin:10px 0 4px;color:var(--text-primary);">$1</h5>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>.*<\/li>\n?)+/g, (m) => '<ul style="margin:4px 0;padding-left:20px;">' + m + '</ul>')
+    .replace(/```[\s\S]*?```/g, (m) => '<pre style="background:var(--bg-primary);padding:8px;border-radius:4px;font-size:11px;overflow-x:auto;">' + m.replace(/```\w*\n?/g, '').trim() + '</pre>')
+    .replace(/\n\n/g, '<br>')
+    .replace(/\n/g, '\n');
 }
 
 // Restore saved zoom level
