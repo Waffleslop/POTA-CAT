@@ -2630,7 +2630,7 @@ function bindPopupClickHandlers(mapInstance) {
         if (!isNaN(lat) && !isNaN(lon)) showTuneArc(lat, lon, btn.dataset.freq, btn.dataset.source);
         // Find matching spot in allSpots for quick respot
         const match = allSpots.find(s => s.frequency === btn.dataset.freq && s.callsign && s.mode === btn.dataset.mode);
-        if (match) lastTunedSpot = match;
+        if (match) { lastTunedSpot = match; prefillDxCommand(match); }
       });
     });
     container.querySelectorAll('.popup-qrz').forEach((link) => {
@@ -2719,6 +2719,7 @@ function scanStep() {
 
   const spot = list[scanIndex];
   lastTunedSpot = spot;
+  prefillDxCommand(spot);
   window.api.tune(spot.frequency, spot.mode, spot.bearing);
   if (spot.lat != null && spot.lon != null) showTuneArc(spot.lat, spot.lon, spot.frequency, spot.source);
   render();
@@ -2932,8 +2933,16 @@ document.getElementById('respot-cancel').addEventListener('click', () => {
 
 // --- DX Command Bar ---
 const dxCommandNode = document.getElementById('dx-command-node');
+const dxCommandInput = document.getElementById('dx-command-input');
 let showDxBar = false;
 let dxCommandPreferredNode = '';
+let dxSpotComment = localStorage.getItem('dx-spot-comment') || 'great signal';
+
+function prefillDxCommand(spot) {
+  if (!spot || spot.source !== 'dxc' || !showDxBar || !enableCluster) return;
+  const freq = parseFloat(spot.frequency).toFixed(1);
+  dxCommandInput.value = 'DX ' + freq + ' ' + spot.callsign + ' ' + dxSpotComment;
+}
 
 function updateDxCommandBar() {
   const bar = document.getElementById('dx-command-bar');
@@ -2967,9 +2976,14 @@ dxCommandNode.addEventListener('change', () => {
 
 async function sendDxCommand() {
   const btn = document.getElementById('dx-command-send');
-  const input = document.getElementById('dx-command-input');
-  const text = input.value.trim();
+  const text = dxCommandInput.value.trim();
   if (!text) return;
+  // Extract comment from "DX freq call comment..." and remember it
+  const dxMatch = text.match(/^DX\s+[\d.]+\s+\S+\s+(.+)$/i);
+  if (dxMatch) {
+    dxSpotComment = dxMatch[1].trim();
+    localStorage.setItem('dx-spot-comment', dxSpotComment);
+  }
   const nodeId = dxCommandNode.value || undefined;
   btn.disabled = true;
   try {
@@ -2977,7 +2991,7 @@ async function sendDxCommand() {
     if (result.error) {
       showLogToast(result.error, { warn: true, duration: 5000 });
     } else {
-      input.value = '';
+      dxCommandInput.value = '';
       const nodeName = nodeId ? dxCommandNode.options[dxCommandNode.selectedIndex].textContent : result.sent + ' node' + (result.sent > 1 ? 's' : '');
       showLogToast('Sent to ' + nodeName);
     }
@@ -3475,6 +3489,7 @@ function render() {
       tr.addEventListener('click', () => {
         if (scanning) stopScan(); // clicking a row stops scan
         lastTunedSpot = s;
+        prefillDxCommand(s);
         window.api.tune(s.frequency, s.mode, s.bearing);
         if (s.lat != null && s.lon != null) showTuneArc(s.lat, s.lon, s.frequency, s.source);
         render(); // highlight the clicked row immediately
