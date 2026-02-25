@@ -157,6 +157,9 @@ const hamlibConfig = document.getElementById('hamlib-config');
 const flexConfig = document.getElementById('flex-config');
 const tcpcatConfig = document.getElementById('tcpcat-config');
 const serialcatConfig = document.getElementById('serialcat-config');
+const rigctldnetConfig = document.getElementById('rigctldnet-config');
+const setRigctldnetHost = document.getElementById('set-rigctldnet-host');
+const setRigctldnetPort = document.getElementById('set-rigctldnet-port');
 const setTcpcatHost = document.getElementById('set-tcpcat-host');
 const setTcpcatPort = document.getElementById('set-tcpcat-port');
 const setFlexSlice = document.getElementById('set-flex-slice');
@@ -641,6 +644,7 @@ function updateRadioSubPanels() {
   tcpcatConfig.classList.toggle('hidden', type !== 'tcpcat');
   serialcatConfig.classList.toggle('hidden', type !== 'serialcat');
   hamlibConfig.classList.toggle('hidden', type !== 'hamlib');
+  rigctldnetConfig.classList.toggle('hidden', type !== 'rigctldnet');
   if (type === 'serialcat' && !serialcatPortsLoaded) {
     loadSerialcatPorts();
   }
@@ -674,6 +678,10 @@ async function populateRadioSection(currentTarget) {
     setRadioType('hamlib');
     hamlibFieldsLoaded = true;
     await populateHamlibFields(currentTarget);
+  } else if (currentTarget.type === 'rigctldnet') {
+    setRadioType('rigctldnet');
+    setRigctldnetHost.value = currentTarget.host || '127.0.0.1';
+    setRigctldnetPort.value = currentTarget.port || 4532;
   } else {
     setRadioType('flex');
   }
@@ -788,6 +796,9 @@ function describeRigTarget(target) {
     const rPort = target.rigctldPort && target.rigctldPort !== 4532 ? ` (port ${target.rigctldPort})` : '';
     return `Hamlib on ${comPort}${rPort}`;
   }
+  if (target.type === 'rigctldnet') {
+    return `rigctld on ${target.host || '127.0.0.1'}:${target.port || 4532}`;
+  }
   return 'Unknown';
 }
 
@@ -892,6 +903,12 @@ function buildCatTargetFromForm() {
       baudRate: parseInt(setRigBaud.value, 10),
       dtrOff: setRigDtrOff.checked,
       rigctldPort: parseInt(setRigctldPort.value, 10) || 4532,
+    };
+  } else if (radioType === 'rigctldnet') {
+    return {
+      type: 'rigctldnet',
+      host: setRigctldnetHost.value.trim() || '127.0.0.1',
+      port: parseInt(setRigctldnetPort.value, 10) || 4532,
     };
   }
   return null;
@@ -6144,6 +6161,7 @@ function updateWelcomeRadioSubPanels() {
   document.getElementById('welcome-tcpcat-config').classList.toggle('hidden', type !== 'tcpcat');
   document.getElementById('welcome-serialcat-config').classList.toggle('hidden', type !== 'serialcat');
   document.getElementById('welcome-hamlib-config').classList.toggle('hidden', type !== 'hamlib');
+  document.getElementById('welcome-rigctldnet-config').classList.toggle('hidden', type !== 'rigctldnet');
   if (type === 'serialcat' && !welcomeSerialcatLoaded) {
     welcomeSerialcatLoaded = true;
     loadWelcomeSerialcatPorts();
@@ -6211,6 +6229,12 @@ function buildWelcomeCatTarget() {
       serialPort: manual || document.getElementById('welcome-rig-port').value,
       baudRate: parseInt(document.getElementById('welcome-rig-baud').value, 10),
       dtrOff: document.getElementById('welcome-rig-dtr-off').checked,
+    };
+  } else if (type === 'rigctldnet') {
+    return {
+      type: 'rigctldnet',
+      host: document.getElementById('welcome-rigctldnet-host').value.trim() || '127.0.0.1',
+      port: parseInt(document.getElementById('welcome-rigctldnet-port').value, 10) || 4532,
     };
   }
   return null;

@@ -336,6 +336,19 @@ async function connectCat() {
     const rigctldPort = target.rigctldPort || 4532;
     sendCatLog(`Connecting to rigctld on 127.0.0.1:${rigctldPort}`);
     cat.connect({ type: 'rigctld', host: '127.0.0.1', port: rigctldPort });
+  } else if (target && target.type === 'rigctldnet') {
+    // Connect directly to remote rigctld server — no local spawn
+    cat = new RigctldClient();
+    cat.on('status', (s) => {
+      sendCatLog(`rigctld-net status: connected=${s.connected}${s.error ? ' error=' + s.error : ''}`);
+      sendCatStatus(s);
+    });
+    cat.on('frequency', sendCatFrequency);
+    cat.on('mode', sendCatMode);
+    const host = target.host || '127.0.0.1';
+    const port = target.port || 4532;
+    sendCatLog(`Connecting to remote rigctld on ${host}:${port}`);
+    cat.connect({ type: 'rigctldnet', host, port });
   } else {
     cat = new CatClient();
     cat._debug = true;
