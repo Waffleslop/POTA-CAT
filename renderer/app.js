@@ -7159,6 +7159,8 @@ async function exportPastActivation(act) {
     stationCallsign: myCallsign || '',
     operator: myCallsign || '',
     name: c.name || '',
+    sig: c.sig || '',
+    sigInfo: c.sigInfo || '',
   }));
   try {
     const result = await window.api.exportActivationAdif({ qsos, parkRef: act.parkRef, myCallsign: myCallsign || '' });

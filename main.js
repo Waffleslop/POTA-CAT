@@ -3858,6 +3858,7 @@ app.whenReady().then(() => {
           rstSent: q.RST_SENT || '',
           rstRcvd: q.RST_RCVD || '',
           name: q.NAME || '',
+          sig: q.SIG || '',
           sigInfo: q.SIG_INFO || '',
         });
       }
