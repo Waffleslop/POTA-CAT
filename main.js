@@ -4032,7 +4032,13 @@ app.whenReady().then(() => {
     for (const cs of callsigns) {
       const entity = resolveCallsign(cs, ctyDb);
       if (entity && entity.lat != null && entity.lon != null) {
-        result[cs] = { lat: entity.lat, lon: entity.lon, name: entity.name || '' };
+        // Use call-area regional coords for large countries instead of country centroid
+        const area = getCallAreaCoords(cs, entity.name);
+        if (area) {
+          result[cs] = { lat: area.lat, lon: area.lon, name: entity.name || '' };
+        } else {
+          result[cs] = { lat: entity.lat, lon: entity.lon, name: entity.name || '' };
+        }
       }
     }
     return result;
