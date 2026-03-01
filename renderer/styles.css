@@ -16,6 +16,7 @@
   --accent-red: #e94560;
   --accent-blue: #4fc3f7;
   --accent-green: #4ecca3;
+  --accent-green-btn: #4ecca3;
   --shadow: rgba(0,0,0,0.3);
   --shadow-heavy: rgba(0,0,0,0.5);
   --backdrop: rgba(0,0,0,0.6);
@@ -46,6 +47,7 @@
   --accent-red: #d32f2f;
   --accent-blue: #1976d2;
   --accent-green: #2e7d5a;
+  --accent-green-btn: #4ecca3;
   --shadow: rgba(0,0,0,0.1);
   --shadow-heavy: rgba(0,0,0,0.2);
   --backdrop: rgba(0,0,0,0.3);
@@ -3005,7 +3007,7 @@ dialog input, dialog select {
 }
 
 .activator-start-btn {
-  background: var(--accent-green);
+  background: var(--accent-green-btn);
   border: none;
   color: #111;
   padding: 4px 14px;
@@ -3451,7 +3453,7 @@ dialog input, dialog select {
   max-width: 300px;
 }
 .activator-grid {
-  width: 7ch;
+  width: 8ch;
   font-family: monospace;
   font-size: 13px;
   padding: 3px 6px;
@@ -3551,9 +3553,9 @@ dialog input, dialog select {
 }
 .activator-spots-btn:hover { background: var(--bg-hover); }
 .activator-spots-btn.active {
-  background: var(--accent-green);
+  background: var(--accent-green-btn);
   color: #111;
-  border-color: var(--accent-green);
+  border-color: var(--accent-green-btn);
   font-weight: 700;
 }
 
@@ -3638,7 +3640,7 @@ body.activator-spots-on #table-pane {
 }
 
 .activator-log-btn {
-  background: var(--accent-green);
+  background: var(--accent-green-btn);
   border: none;
   color: #111;
   padding: 6px 20px;

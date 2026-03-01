@@ -1807,20 +1807,26 @@ function sendN3fjpTcp(qsoData, host, port) {
     const record = buildAdifRecord(qsoData);
     const cmd = `<CMD><ADDADIFRECORD><VALUE>${record}</VALUE></CMD>\r\n`;
 
+    let settled = false;
     const sock = net.createConnection({ host, port }, () => {
       sock.write(cmd, 'utf-8', () => {
         sock.end();
-        resolve();
       });
+    });
+
+    // Wait for socket to fully close before resolving — N3FJP can't accept
+    // a new connection while the previous one is still tearing down
+    sock.on('close', () => {
+      if (!settled) { settled = true; resolve(); }
     });
 
     sock.setTimeout(5000);
     sock.on('timeout', () => {
       sock.destroy();
-      reject(new Error('N3FJP connection timed out'));
+      if (!settled) { settled = true; reject(new Error('N3FJP connection timed out')); }
     });
     sock.on('error', (err) => {
-      reject(new Error(`N3FJP: ${err.message}`));
+      if (!settled) { settled = true; reject(new Error(`N3FJP: ${err.message}`)); }
     });
   });
 }

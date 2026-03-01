@@ -7648,16 +7648,16 @@ if (activatorParkRefInput) {
         const item = document.createElement('div');
         item.className = 'activator-dropdown-item';
         item.innerHTML = `<span class="activator-dropdown-ref">${park.reference}</span><span class="activator-dropdown-name">${park.name || ''}</span><span class="activator-dropdown-loc">${park.locationDesc || ''}</span>`;
-        item.addEventListener('click', () => selectPark(park));
+        item.addEventListener('mousedown', (e) => { e.preventDefault(); selectPark(park); });
         activatorParkDropdown.appendChild(item);
       }
       activatorParkDropdown.classList.remove('hidden');
     }, 150);
   });
 
-  // Close dropdown on blur (delayed to allow click)
+  // Close dropdown on blur
   activatorParkRefInput.addEventListener('blur', () => {
-    setTimeout(() => activatorParkDropdown.classList.add('hidden'), 200);
+    setTimeout(() => activatorParkDropdown.classList.add('hidden'), 150);
   });
 
   // Allow Enter to select first dropdown item
@@ -8142,7 +8142,8 @@ function addMultiparkSlot(ref, name) {
         const item = document.createElement('div');
         item.className = 'activator-dropdown-item';
         item.innerHTML = `<span class="activator-dropdown-ref">${park.reference}</span><span class="activator-dropdown-name">${park.name || ''}</span><span class="activator-dropdown-loc">${park.locationDesc || ''}</span>`;
-        item.addEventListener('click', () => {
+        item.addEventListener('mousedown', (e) => {
+          e.preventDefault();
           input.value = park.reference;
           nameEl.textContent = park.name || '';
           dropdown.classList.add('hidden');
@@ -8153,7 +8154,7 @@ function addMultiparkSlot(ref, name) {
     }, 150);
   });
   input.addEventListener('blur', () => {
-    setTimeout(() => dropdown.classList.add('hidden'), 200);
+    setTimeout(() => dropdown.classList.add('hidden'), 150);
   });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
@@ -8245,7 +8246,8 @@ if (hunterParkInput) {
         const item = document.createElement('div');
         item.className = 'activator-dropdown-item';
         item.innerHTML = `<span class="activator-dropdown-ref">${park.reference}</span><span class="activator-dropdown-name">${park.name || ''}</span><span class="activator-dropdown-loc">${park.locationDesc || ''}</span>`;
-        item.addEventListener('click', () => {
+        item.addEventListener('mousedown', (e) => {
+          e.preventDefault();
           hunterParkRefs = [{ ref: park.reference, name: park.name || '' }];
           hunterParkInput.value = park.reference;
           hunterParkDropdown.classList.add('hidden');
@@ -8257,7 +8259,7 @@ if (hunterParkInput) {
     }, 150);
   });
   hunterParkInput.addEventListener('blur', () => {
-    setTimeout(() => hunterParkDropdown.classList.add('hidden'), 200);
+    setTimeout(() => hunterParkDropdown.classList.add('hidden'), 150);
   });
   hunterParkInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
