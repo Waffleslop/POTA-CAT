@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://*.tile.openstreetmap.org; connect-src 'self' https://*.tile.openstreetmap.org;">
   <title>POTACAT Logbook</title>
+  <link rel="stylesheet" href="../node_modules/leaflet/dist/leaflet.css">
   <link rel="stylesheet" href="styles.css">
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: var(--bg-primary); }
@@ -70,6 +71,39 @@
       z-index: 10000; pointer-events: none; opacity: 0; transition: opacity 0.2s;
     }
     .qso-toast.show { opacity: 1; }
+
+    /* --- Filter bar --- */
+    .qso-filter-bar {
+      display: flex; align-items: center; gap: 6px; padding: 4px 10px;
+      background: var(--bg-secondary); border-bottom: 1px solid var(--border-primary);
+      font-size: 11px; flex-wrap: wrap;
+    }
+    .qso-filter-bar label { color: var(--text-tertiary); white-space: nowrap; }
+    .qso-filter-bar select, .qso-filter-bar input[type="date"] {
+      padding: 2px 4px; background: var(--bg-input); border: 1px solid var(--border-primary);
+      border-radius: 3px; color: var(--text-primary); font-size: 11px;
+    }
+    .qso-filter-bar select:focus, .qso-filter-bar input[type="date"]:focus { outline: none; border-color: var(--accent-blue); }
+    .qso-filter-btn {
+      border: 1px solid var(--border-primary); color: var(--text-secondary);
+      background: transparent; padding: 2px 8px; border-radius: 3px; cursor: pointer;
+      font-size: 11px; white-space: nowrap;
+    }
+    .qso-filter-btn:hover { border-color: var(--accent-blue); color: var(--text-primary); }
+    .qso-filter-btn.active { border-color: var(--accent-blue); color: var(--accent-blue); background: rgba(79,195,247,0.1); }
+    .qso-clear-btn { color: var(--text-tertiary); cursor: pointer; background: transparent; border: none; font-size: 11px; }
+    .qso-clear-btn:hover { color: var(--text-primary); }
+
+    /* --- Map split pane --- */
+    #qso-map-splitter {
+      display: none; height: 5px; background: var(--border-primary); cursor: row-resize;
+      flex-shrink: 0;
+    }
+    #qso-map-splitter:hover { background: var(--accent-blue); }
+    #qso-map-container { display: none; flex-shrink: 0; overflow: hidden; }
+    #qso-map { width: 100%; height: 100%; }
+    body.map-visible #qso-map-splitter { display: block; }
+    body.map-visible #qso-map-container { display: block; }
   </style>
 </head>
 <body>
@@ -86,6 +120,34 @@
     <input type="text" id="qso-search" placeholder="Search callsign, park, notes..." autocomplete="off">
     <span class="qso-count" id="qso-count"></span>
     <button class="qso-export-btn" id="qso-export">Export ADIF</button>
+  </div>
+
+  <div class="qso-filter-bar" id="qso-filter-bar">
+    <label>Band</label>
+    <select id="qso-filter-band">
+      <option value="">All</option>
+      <option>160m</option><option>80m</option><option>60m</option><option>40m</option>
+      <option>30m</option><option>20m</option><option>17m</option><option>15m</option>
+      <option>12m</option><option>10m</option><option>6m</option>
+    </select>
+    <label>Mode</label>
+    <select id="qso-filter-mode">
+      <option value="">All</option>
+      <option>CW</option><option>SSB</option><option>FT8</option><option>FT4</option>
+      <option>FM</option><option>RTTY</option><option>AM</option><option>DIGI</option>
+    </select>
+    <label>Region</label>
+    <select id="qso-filter-region">
+      <option value="">All</option>
+      <option>AF</option><option>AS</option><option>EU</option>
+      <option>NA</option><option>OC</option><option>SA</option>
+    </select>
+    <label>From</label>
+    <input type="date" id="qso-filter-from">
+    <label>To</label>
+    <input type="date" id="qso-filter-to">
+    <button class="qso-filter-btn" id="qso-map-toggle" title="Show map">Map</button>
+    <button class="qso-clear-btn" id="qso-filter-clear" title="Clear all filters">Clear</button>
   </div>
 
   <div class="qso-body" id="qso-body">
@@ -110,6 +172,9 @@
     <p class="qso-empty hidden" id="qso-empty">No QSOs logged yet</p>
   </div>
 
+  <div id="qso-map-splitter"></div>
+  <div id="qso-map-container"><div id="qso-map"></div></div>
+
   <div class="qso-footer">
     <div class="qso-stats">
       <span id="qso-stat-total"></span>
@@ -127,6 +192,7 @@
 
   <div class="qso-toast" id="qso-toast"></div>
 
+  <script src="../node_modules/leaflet/dist/leaflet.js"></script>
   <script src="qso-popout.js"></script>
 </body>
 </html>

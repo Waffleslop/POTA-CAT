@@ -1763,11 +1763,10 @@ function forwardToLogbook(qsoData) {
   const port = parseInt(settings.logbookPort, 10);
 
   if (type === 'log4om') {
-    // Log4OM watches the ADIF file directly — no network forwarding needed
-    return Promise.resolve();
+    return sendUdpAdif(qsoData, host, port || 2237);
   }
   if (type === 'hrd') {
-    return sendHrdUdp(qsoData, host, port || 2333);
+    return sendUdpAdif(qsoData, host, port || 2333);
   }
   if (type === 'n3fjp') {
     return sendN3fjpTcp(qsoData, host, port || 1100);
@@ -1779,9 +1778,10 @@ function forwardToLogbook(qsoData) {
 }
 
 /**
- * Send a QSO to HRD Logbook via plain UDP ADIF on port 2333.
+ * Send a QSO via plain UDP ADIF packet.
+ * Used by Log4OM 2 (port 2237) and HRD Logbook (port 2333).
  */
-function sendHrdUdp(qsoData, host, port) {
+function sendUdpAdif(qsoData, host, port) {
   return new Promise((resolve, reject) => {
     const dgram = require('dgram');
     const record = buildAdifRecord(qsoData);
@@ -4041,9 +4041,9 @@ app.whenReady().then(() => {
         // Use call-area regional coords for large countries instead of country centroid
         const area = getCallAreaCoords(cs, entity.name);
         if (area) {
-          result[cs] = { lat: area.lat, lon: area.lon, name: entity.name || '' };
+          result[cs] = { lat: area.lat, lon: area.lon, name: entity.name || '', continent: entity.continent || '' };
         } else {
-          result[cs] = { lat: entity.lat, lon: entity.lon, name: entity.name || '' };
+          result[cs] = { lat: entity.lat, lon: entity.lon, name: entity.name || '', continent: entity.continent || '' };
         }
       }
     }

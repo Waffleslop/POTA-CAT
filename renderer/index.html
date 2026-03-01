@@ -137,19 +137,20 @@
       <span id="hotkeys-hint" class="hotkeys-hint" title="Keyboard shortcuts (F1)">F1 Hotkeys</span>
       <span id="spot-count"></span>
     </div>
-    <div id="cat-popover" class="cat-popover hidden">
-      <div class="cat-popover-rigs" id="cat-popover-rigs"></div>
-      <div class="cat-popover-divider"></div>
-      <label class="cat-popover-wsjtx">
-        <input type="checkbox" id="cat-popover-wsjtx"> WSJT-X Mode
-      </label>
-      <div id="cat-popover-wsjtx-port" class="cat-popover-port hidden">
-        <label>UDP Port:
-          <input type="number" id="cat-popover-wsjtx-port-input" min="1024" max="65535" style="width:70px;">
-        </label>
-      </div>
-    </div>
   </header>
+
+  <div id="cat-popover" class="cat-popover hidden">
+    <div class="cat-popover-rigs" id="cat-popover-rigs"></div>
+    <div class="cat-popover-divider"></div>
+    <label class="cat-popover-wsjtx">
+      <input type="checkbox" id="cat-popover-wsjtx"> WSJT-X Mode
+    </label>
+    <div id="cat-popover-wsjtx-port" class="cat-popover-port hidden">
+      <label>UDP Port:
+        <input type="number" id="cat-popover-wsjtx-port-input" min="1024" max="65535" style="width:70px;">
+      </label>
+    </div>
+  </div>
 
   <div id="update-banner" class="hidden">
     <span id="update-message"></span>
@@ -181,18 +182,10 @@
       <span id="activator-park-name" class="activator-park-name"></span>
       <input type="text" id="activator-grid" class="activator-grid" placeholder="Grid" maxlength="6" spellcheck="false" autocomplete="off" title="Park grid square (editable)">
       <span id="activator-park-extra" class="activator-park-extra hidden" title="Additional parks"></span>
-      <button id="activator-start-btn" class="activator-start-btn">Start Activation</button>
-      <button id="activator-continue-btn" class="activator-continue-btn hidden">Continue</button>
-      <button id="activator-stop-btn" class="activator-stop-btn hidden">Stop Activation</button>
-      <button id="activator-history-btn" class="activator-history-btn" title="Past Activations">Past</button>
-      <div class="activator-toolbar-sep"></div>
       <div class="activator-freq-group">
         <input type="text" id="activator-freq" placeholder="14.074" maxlength="10" spellcheck="false" autocomplete="off" title="Frequency in MHz — type and press Enter to tune radio">
         <span id="activator-band-label" class="activator-band-label">--</span>
       </div>
-      <button id="activator-map-btn" class="activator-map-btn" title="Open activation map">Map</button>
-      <button id="activator-spots-btn" class="activator-spots-btn" title="Show/hide hunter spots">Spots</button>
-      <button id="activator-spots-popout-btn" class="activator-spots-btn" title="Pop out spots window" style="padding:4px 6px;font-size:11px;">&#x2197;</button>
       <select id="activator-mode">
         <option value="SSB">SSB</option>
         <option value="CW">CW</option>
@@ -202,10 +195,20 @@
         <option value="RTTY">RTTY</option>
         <option value="PSK31">PSK31</option>
       </select>
+      <button id="activator-start-btn" class="activator-start-btn">Start Activation</button>
+      <button id="activator-continue-btn" class="activator-continue-btn hidden">Continue</button>
+      <button id="activator-stop-btn" class="activator-stop-btn hidden">Stop Activation</button>
       <div id="activator-counter" class="activator-counter" title="Contacts logged (10 = valid activation)">0</div>
+      <button id="activator-map-btn" class="activator-map-btn" title="Open activation map">Map</button>
+      <button id="activator-spots-btn" class="activator-spots-btn" title="Show/hide hunter spots">Spots</button>
+      <button id="activator-spots-popout-btn" class="activator-spots-btn" title="Pop out spots window" style="padding:4px 6px;font-size:11px;">&#x2197;</button>
+      <button id="activator-history-btn" class="activator-history-btn" title="Past Activations">Past</button>
       <span id="activator-timer" class="activator-timer" title="Activation duration">--:--</span>
       <span id="activator-utc" class="activator-utc"></span>
       <button id="activator-export" class="activator-export-btn" title="Export activation ADIF">Export ADIF</button>
+      <button id="activator-logbook-btn" class="activator-export-btn" title="View/Edit Logbook (F2)">Logbook</button>
+      <button id="activator-settings-btn" class="activator-export-btn" title="Open Settings">Settings</button>
+      <span id="activator-cat-status" class="status disconnected" title="Disconnected" style="cursor:pointer;font-size:11px;margin-left:4px;">CAT</span>
     </div>
     <div id="activator-quick-log" class="activator-quick-log hidden">
       <input type="text" id="activator-callsign" placeholder="Callsign(s)" maxlength="60" spellcheck="false" autocomplete="off" style="text-transform:uppercase;">
@@ -925,7 +928,7 @@
       <button id="settings-cancel">Cancel</button>
     </div>
     <div class="settings-footer">
-      <div class="settings-version">v0.9.26 beta &mdash; <a href="#" id="bio-link">Casey Stanton, K3SBP</a></div>
+      <div class="settings-version">v0.9.27 beta &mdash; <a href="#" id="bio-link">Casey Stanton, K3SBP</a></div>
       <div class="settings-coffee"><a href="#" id="coffee-link">Buy Me a Coffee</a></div>
       <div class="settings-links">
         <a href="#" id="discord-link">Discord</a>

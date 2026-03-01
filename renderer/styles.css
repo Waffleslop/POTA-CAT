@@ -2719,8 +2719,8 @@ dialog input, dialog select {
 
 /* CAT Popover — rig switcher dropdown */
 .cat-popover {
-  position: absolute;
-  top: 100%;
+  position: fixed;
+  top: 0;
   right: auto;
   z-index: 10001;
   background: var(--bg-secondary);
@@ -3206,6 +3206,12 @@ dialog input, dialog select {
   white-space: nowrap;
 }
 .activator-history-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.activator-history-btn.active {
+  background: var(--accent-green-btn);
+  color: #111;
+  border-color: var(--accent-green-btn);
+  font-weight: 700;
+}
 
 .activator-history-panel {
   border-bottom: 2px solid var(--border-primary);
@@ -3573,18 +3579,27 @@ dialog input, dialog select {
 }
 .activator-spots-splitter.hidden { display: none; }
 
-/* Activator + Spots split layout */
+/* Activator + Spots split layout — reorder so header sits between activator and spots table */
 body.activator-spots-on #activator-view {
   flex: 0 0 auto;
   overflow: hidden;
+  order: 1;
+}
+body.activator-spots-on #activator-spots-splitter {
+  order: 2;
 }
 body.activator-spots-on header {
   display: flex !important;
+  order: 3;
+}
+body.activator-spots-on .status-bar {
+  display: none !important;
 }
 body.activator-spots-on main {
   display: block !important;
   flex: 1;
   min-height: 0;
+  order: 4;
 }
 /* Hide map pane in activator-spots mode — table only */
 body.activator-spots-on #map-pane,
@@ -3593,6 +3608,22 @@ body.activator-spots-on #split-splitter {
 }
 body.activator-spots-on #table-pane {
   flex: 1 !important;
+}
+/* Hide redundant header elements in activator-spots mode (already on activator toolbar) */
+body.activator-spots-on .view-toggle,
+body.activator-spots-on #spot-count,
+body.activator-spots-on #utc-clock,
+body.activator-spots-on #settings-dropdown,
+body.activator-spots-on #logbook-btn,
+body.activator-spots-on #hotkeys-hint,
+body.activator-spots-on #parks-stats-toggle,
+body.activator-spots-on #cat-log-toggle,
+body.activator-spots-on #cat-status,
+body.activator-spots-on #wsjtx-status,
+body.activator-spots-on #cw-keyer-status,
+body.activator-spots-on #cw-text-display,
+body.activator-spots-on .solar-pill {
+  display: none !important;
 }
 
 /* Quick-log bar */

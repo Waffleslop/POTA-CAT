@@ -442,14 +442,17 @@ const catPopoverWsjtxPort = document.getElementById('cat-popover-wsjtx-port');
 const catPopoverWsjtxPortInput = document.getElementById('cat-popover-wsjtx-port-input');
 let catPopoverOpen = false;
 
+let _catPopoverAnchor = catStatusEl; // which element the popover is anchored to
+
 function positionCatPopover() {
-  const rect = catStatusEl.getBoundingClientRect();
-  const headerRect = catStatusEl.closest('header').getBoundingClientRect();
-  catPopover.style.top = (rect.bottom - headerRect.top + 4) + 'px';
-  catPopover.style.left = (rect.left - headerRect.left) + 'px';
+  const anchor = _catPopoverAnchor || catStatusEl;
+  const rect = anchor.getBoundingClientRect();
+  catPopover.style.top = (rect.bottom + 4) + 'px';
+  catPopover.style.left = rect.left + 'px';
 }
 
-async function openCatPopover() {
+async function openCatPopover(anchor) {
+  if (anchor) _catPopoverAnchor = anchor;
   const settings = await window.api.getSettings();
   const rigs = settings.rigs || [];
   const activeId = settings.activeRigId || null;
@@ -540,7 +543,7 @@ catPopoverWsjtxPortInput.addEventListener('click', (e) => e.stopPropagation());
 
 // Close popover on outside click
 document.addEventListener('click', (e) => {
-  if (catPopoverOpen && !catPopover.contains(e.target) && e.target !== catStatusEl) {
+  if (catPopoverOpen && !catPopover.contains(e.target) && e.target !== catStatusEl && e.target !== document.getElementById('activator-cat-status')) {
     closeCatPopover();
   }
 });
@@ -1516,8 +1519,8 @@ setSendToLogbook.addEventListener('change', () => {
 // Logbook type dropdown — show port config and contextual help
 const LOGBOOK_DEFAULTS = {
   log4om: {
-    fileWatch: true,
-    instructions: 'In Log4OM 2: Settings > Program Configuration > Software Integration > ADIF Functions. In the ADIF Monitor tab, check "Enable ADIF monitor". Click the folder icon next to "ADIF file" and select the same ADIF log file used in POTACAT. Press the green + button to add it to the list, then press "Save and apply". Log4OM will automatically import new QSOs as they are saved.\n\nNote: If you import an existing log into POTACAT, pause the ADIF Monitor in Log4OM first to avoid duplicates. If duplicates occur, use Log4OM\'s deduplicate function to clean them up.',
+    port: 2237,
+    help: 'In Log4OM 2: Settings > Program Configuration > Software Integration > UDP Inbound tab. Click the green "+" button to add a new entry. Set Type to "ADIF-MESSAGE" and Port to "2237". Click "Save and apply". Leave Host at 127.0.0.1 in POTACAT. Log4OM must be running to receive QSOs. Only live-logged QSOs are forwarded — importing logs into POTACAT will not create duplicates.',
   },
   dxkeeper: { port: 52001, help: 'In DXKeeper: Configuration > Defaults tab > Network Service panel. The default base port is 52000 (DXKeeper listens on base + 1 = 52001). DXKeeper must be running to receive QSOs. QSOs will be logged with missing fields auto-deduced from callbook/entity databases.' },
   n3fjp: { port: 1100, help: 'In N3FJP: Settings > Application Program Interface > check "TCP API Enabled". Set the port to 1100 (default). N3FJP must be running to receive QSOs.' },
@@ -1679,9 +1682,11 @@ serialcatTestBtn.addEventListener('click', async () => {
   }
 });
 
+
 // Close dropdowns when clicking outside
 document.addEventListener('click', () => {
   document.querySelectorAll('.multi-dropdown.open').forEach((d) => d.classList.remove('open'));
+  closeActivatorSettingsPanel();
 });
 
 // --- Filtering ---
@@ -3168,6 +3173,14 @@ window.api.onQsoPopoutStatus((open) => {
 // --- Spots Pop-out ---
 window.api.onSpotsPopoutStatus((open) => {
   spotsPopoutOpen = open;
+  // In activator mode, close inline spots when pop-out opens, restore when it closes
+  if (appMode === 'activator') {
+    if (open && activatorSpotsVisible) {
+      toggleActivatorSpots(); // hide inline
+    } else if (!open && !activatorSpotsVisible) {
+      toggleActivatorSpots(); // restore inline
+    }
+  }
 });
 
 // --- Activation Map Pop-out ---
@@ -4360,11 +4373,13 @@ quickActivatorMode.addEventListener('change', async () => {
   const mode = quickActivatorMode.checked ? 'activator' : 'hunter';
   setAppMode(mode);
   settingsDropdown.classList.remove('open');
+  closeActivatorSettingsPanel();
   await window.api.saveSettings({ appMode: mode });
 });
 
 openSettingsBtn.addEventListener('click', () => {
   settingsDropdown.classList.remove('open');
+  closeActivatorSettingsPanel();
   openSettingsDialog();
 });
 
@@ -4780,6 +4795,19 @@ window.api.onSpotsError((msg) => {
 let catConnected = false; // track CAT state for WSJT-X tune decisions
 let catDisconnectTimer = null; // grace period before showing red pill
 
+/** Sync activator toolbar CAT pill with main CAT status */
+function syncActivatorCatPill(className, title) {
+  const el = document.getElementById('activator-cat-status');
+  if (el) {
+    el.className = className;
+    el.style.cursor = 'pointer';
+    el.style.fontSize = '11px';
+    el.style.marginLeft = '4px';
+    el.textContent = 'CAT';
+    el.title = title;
+  }
+}
+
 window.api.onCatStatus(({ connected, error, wsjtxMode }) => {
   catConnected = connected;
   if (wsjtxMode) {
@@ -4787,6 +4815,7 @@ window.api.onCatStatus(({ connected, error, wsjtxMode }) => {
     catStatusEl.textContent = 'CAT';
     catStatusEl.className = 'status connected';
     catStatusEl.title = 'Radio controlled by WSJT-X';
+    syncActivatorCatPill('status connected', 'Radio controlled by WSJT-X');
     return;
   }
   if (connected) {
@@ -4794,7 +4823,9 @@ window.api.onCatStatus(({ connected, error, wsjtxMode }) => {
     if (catDisconnectTimer) { clearTimeout(catDisconnectTimer); catDisconnectTimer = null; }
     catStatusEl.textContent = 'CAT';
     catStatusEl.className = 'status connected';
-    catStatusEl.title = activeRigName ? `Connected to ${activeRigName}` : 'Connected';
+    const connTitle = activeRigName ? `Connected to ${activeRigName}` : 'Connected';
+    catStatusEl.title = connTitle;
+    syncActivatorCatPill('status connected', connTitle);
   } else {
     // Grace period: delay showing red so transient reconnects don't flash
     if (!catDisconnectTimer) {
@@ -4802,7 +4833,9 @@ window.api.onCatStatus(({ connected, error, wsjtxMode }) => {
         catDisconnectTimer = null;
         catStatusEl.textContent = 'CAT';
         catStatusEl.className = 'status disconnected';
-        catStatusEl.title = error || 'Disconnected';
+        const discTitle = error || 'Disconnected';
+        catStatusEl.title = discTitle;
+        syncActivatorCatPill('status disconnected', discTitle);
         if (error) {
           showLogToast(`CAT: ${error}`, { warn: true, sticky: true });
         }
@@ -4940,6 +4973,8 @@ function getEventForCallsign(callsign) {
   return null;
 }
 
+let eventBannerSessionDismissed = false; // dismissal persists across mode switches within session
+
 function updateEventBanner() {
   const banner = document.getElementById('event-banner');
   const message = document.getElementById('event-message');
@@ -4947,6 +4982,11 @@ function updateEventBanner() {
   const optinBtn = document.getElementById('event-optin-btn');
   const progressBtn = document.getElementById('event-progress-btn');
   const badge = document.getElementById('event-badge');
+
+  if (eventBannerSessionDismissed) {
+    banner.classList.add('hidden');
+    return;
+  }
 
   // Find first event with an active or upcoming schedule entry
   let activeEvent = null;
@@ -5318,6 +5358,7 @@ document.getElementById('event-optin-btn').addEventListener('click', async () =>
 document.getElementById('event-dismiss').addEventListener('click', async () => {
   const ev = findBannerEvent();
   if (ev) {
+    eventBannerSessionDismissed = true;
     if (ev.optedIn) {
       document.getElementById('event-banner').classList.add('hidden');
     } else {
@@ -6887,7 +6928,68 @@ function toggleActivatorSpots() {
 activatorSpotsBtn.addEventListener('click', toggleActivatorSpots);
 
 document.getElementById('activator-spots-popout-btn').addEventListener('click', () => {
+  // Close inline spots immediately when popping out
+  if (activatorSpotsVisible) toggleActivatorSpots();
   window.api.spotsPopoutOpen();
+});
+
+// --- Activator toolbar: Logbook, Settings, CAT ---
+const activatorCatStatusEl = document.getElementById('activator-cat-status');
+
+document.getElementById('activator-logbook-btn').addEventListener('click', () => {
+  window.api.qsoPopoutOpen();
+});
+
+const activatorSettingsPanel = settingsDropdown.querySelector('.settings-dropdown-panel');
+let activatorSettingsPanelOpen = false;
+
+function closeActivatorSettingsPanel() {
+  if (!activatorSettingsPanelOpen) return;
+  activatorSettingsPanelOpen = false;
+  // Move panel back into its original parent and reset styles
+  settingsDropdown.appendChild(activatorSettingsPanel);
+  activatorSettingsPanel.style.display = '';
+  activatorSettingsPanel.style.position = '';
+  activatorSettingsPanel.style.top = '';
+  activatorSettingsPanel.style.right = '';
+}
+
+document.getElementById('activator-settings-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  // Close other open dropdowns
+  document.querySelectorAll('.multi-dropdown.open').forEach((d) => d.classList.remove('open'));
+
+  if (activatorSettingsPanelOpen) {
+    closeActivatorSettingsPanel();
+    return;
+  }
+
+  // Sync switches to current state
+  quickLightMode.checked = document.documentElement.getAttribute('data-theme') === 'light';
+  quickActivatorMode.checked = appMode === 'activator';
+
+  // Move panel to body so it's not blocked by hidden header ancestor
+  document.body.appendChild(activatorSettingsPanel);
+  const btnRect = e.currentTarget.getBoundingClientRect();
+  activatorSettingsPanel.style.display = 'block';
+  activatorSettingsPanel.style.position = 'fixed';
+  activatorSettingsPanel.style.top = (btnRect.bottom + 4) + 'px';
+  activatorSettingsPanel.style.right = (window.innerWidth - btnRect.right) + 'px';
+  activatorSettingsPanelOpen = true;
+});
+
+// Prevent clicks inside the settings panel from closing it via document click handler
+activatorSettingsPanel.addEventListener('click', (e) => {
+  if (activatorSettingsPanelOpen) e.stopPropagation();
+});
+
+activatorCatStatusEl.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (catPopoverOpen) {
+    closeCatPopover();
+  } else {
+    openCatPopover(activatorCatStatusEl);
+  }
 });
 
 // --- Activator-spots splitter drag ---
@@ -7359,11 +7461,23 @@ if (activatorStopBtn) {
   activatorStopBtn.addEventListener('click', stopActivation);
 }
 if (activatorHistoryBtn) {
-  activatorHistoryBtn.addEventListener('click', showPastActivations);
+  activatorHistoryBtn.addEventListener('click', () => {
+    if (activatorHistoryPanel.classList.contains('hidden')) {
+      showPastActivations();
+      activatorHistoryBtn.classList.add('active');
+    } else {
+      activatorHistoryPanel.classList.add('hidden');
+      activatorHistoryBtn.classList.remove('active');
+      if (!activationActive && activatorContacts.length === 0) {
+        activatorIdleMsg.classList.remove('hidden');
+      }
+    }
+  });
 }
 if (activatorHistoryClose) {
   activatorHistoryClose.addEventListener('click', () => {
     activatorHistoryPanel.classList.add('hidden');
+    activatorHistoryBtn.classList.remove('active');
     // Restore idle message if appropriate
     if (!activationActive && activatorContacts.length === 0) {
       activatorIdleMsg.classList.remove('hidden');

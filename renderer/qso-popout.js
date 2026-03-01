@@ -19,6 +19,28 @@ function freqMhzToBandLocal(mhz) {
   return freqKhzToBand(parseFloat(mhz) * 1000);
 }
 
+// --- Grid to lat/lon (duplicated — no Node in renderer) ---
+function gridToLatLonLocal(grid) {
+  if (!grid || grid.length < 4) return null;
+  const g = grid.toUpperCase();
+  const lonField = g.charCodeAt(0) - 65;
+  const latField = g.charCodeAt(1) - 65;
+  const lonSquare = parseInt(g[2], 10);
+  const latSquare = parseInt(g[3], 10);
+  let lon = lonField * 20 + lonSquare * 2 - 180;
+  let lat = latField * 10 + latSquare * 1 - 90;
+  if (grid.length >= 6) {
+    const lonSub = g.charCodeAt(4) - 65;
+    const latSub = g.charCodeAt(5) - 65;
+    lon += lonSub * (2 / 24) + (1 / 24);
+    lat += latSub * (1 / 24) + (1 / 48);
+  } else {
+    lon += 1;
+    lat += 0.5;
+  }
+  return { lat, lon };
+}
+
 // --- Editable columns ---
 const EDITABLE = {
   2: 'CALL', 3: 'FREQ', 4: 'MODE',
@@ -32,6 +54,23 @@ let sortCol = 'QSO_DATE';
 let sortAsc = false;
 let searchText = '';
 let toastTimer = null;
+let callsignInfo = {}; // { CALL: { lat, lon, continent, name } }
+let homeGrid = '';
+
+// --- Filter state ---
+let filterBand = '';
+let filterMode = '';
+let filterRegion = '';
+let filterFrom = '';
+let filterTo = '';
+
+// --- Map state ---
+let map = null;
+let mapMarkers = [];
+let homeMarker = null;
+let mapVisible = false;
+let hoverArcs = []; // Leaflet polyline layers for hover arcs
+let parkLocationCache = {}; // { 'K-1234': { lat, lon } }
 
 // --- Elements ---
 const tbody = document.getElementById('qso-tbody');
@@ -39,6 +78,14 @@ const table = document.getElementById('qso-table');
 const emptyMsg = document.getElementById('qso-empty');
 const countEl = document.getElementById('qso-count');
 const searchInput = document.getElementById('qso-search');
+const filterBandEl = document.getElementById('qso-filter-band');
+const filterModeEl = document.getElementById('qso-filter-mode');
+const filterRegionEl = document.getElementById('qso-filter-region');
+const filterFromEl = document.getElementById('qso-filter-from');
+const filterToEl = document.getElementById('qso-filter-to');
+const mapToggleBtn = document.getElementById('qso-map-toggle');
+const mapContainer = document.getElementById('qso-map-container');
+const mapSplitter = document.getElementById('qso-map-splitter');
 
 // --- Toast ---
 function toast(msg) {
@@ -68,15 +115,50 @@ function updateStats(list) {
     topModes.map(([m, c]) => `${m}: ${c}`).join(', ') || '-';
 }
 
+// --- Check if any filter is active ---
+function hasActiveFilters() {
+  return searchText || filterBand || filterMode || filterRegion || filterFrom || filterTo;
+}
+
 // --- Render ---
 function render() {
   const search = searchText.toLowerCase();
   filtered = allQsos;
+
+  // Text search
   if (search) {
-    filtered = allQsos.filter(q => {
+    filtered = filtered.filter(q => {
       const hay = [q.CALL, q.SIG_INFO, q.COMMENT, q.MODE, q.BAND].join(' ').toLowerCase();
       return hay.includes(search);
     });
+  }
+
+  // Band filter
+  if (filterBand) {
+    filtered = filtered.filter(q => (q.BAND || '') === filterBand);
+  }
+
+  // Mode filter
+  if (filterMode) {
+    filtered = filtered.filter(q => (q.MODE || '').toUpperCase() === filterMode);
+  }
+
+  // Region filter (continent from cty.dat)
+  if (filterRegion) {
+    filtered = filtered.filter(q => {
+      const info = callsignInfo[(q.CALL || '').toUpperCase()];
+      return info && info.continent === filterRegion;
+    });
+  }
+
+  // Date range (YYYYMMDD string compare)
+  if (filterFrom) {
+    const from = filterFrom.replace(/-/g, '');
+    filtered = filtered.filter(q => (q.QSO_DATE || '') >= from);
+  }
+  if (filterTo) {
+    const to = filterTo.replace(/-/g, '');
+    filtered = filtered.filter(q => (q.QSO_DATE || '') <= to);
   }
 
   // Sort
@@ -93,7 +175,7 @@ function render() {
   });
 
   // Count
-  countEl.textContent = search
+  countEl.textContent = hasActiveFilters()
     ? `${filtered.length} / ${allQsos.length} QSOs`
     : `${allQsos.length} QSOs`;
 
@@ -102,6 +184,7 @@ function render() {
   if (allQsos.length === 0) {
     table.classList.add('hidden');
     emptyMsg.classList.remove('hidden');
+    updateMap();
     return;
   }
   table.classList.remove('hidden');
@@ -153,6 +236,8 @@ function render() {
   }
   tbody.innerHTML = '';
   tbody.appendChild(frag);
+
+  updateMap();
 }
 
 // --- Column sorting ---
@@ -170,6 +255,230 @@ searchInput.addEventListener('input', () => {
   searchText = searchInput.value.trim();
   render();
 });
+
+// --- Filter bar events ---
+filterBandEl.addEventListener('change', () => { filterBand = filterBandEl.value; render(); });
+filterModeEl.addEventListener('change', () => { filterMode = filterModeEl.value; render(); });
+filterRegionEl.addEventListener('change', () => { filterRegion = filterRegionEl.value; render(); });
+filterFromEl.addEventListener('change', () => { filterFrom = filterFromEl.value; render(); });
+filterToEl.addEventListener('change', () => { filterTo = filterToEl.value; render(); });
+
+// --- Clear filters ---
+document.getElementById('qso-filter-clear').addEventListener('click', () => {
+  searchInput.value = '';
+  searchText = '';
+  filterBandEl.value = '';
+  filterBand = '';
+  filterModeEl.value = '';
+  filterMode = '';
+  filterRegionEl.value = '';
+  filterRegion = '';
+  filterFromEl.value = '';
+  filterFrom = '';
+  filterToEl.value = '';
+  filterTo = '';
+  render();
+});
+
+// --- Map toggle ---
+mapToggleBtn.addEventListener('click', () => {
+  mapVisible = !mapVisible;
+  document.body.classList.toggle('map-visible', mapVisible);
+  mapToggleBtn.classList.toggle('active', mapVisible);
+
+  if (mapVisible) {
+    if (!map) initMap();
+    const saved = parseInt(localStorage.getItem('pota-cat-qso-map-height'), 10);
+    mapContainer.style.height = (saved || 250) + 'px';
+    setTimeout(() => { map.invalidateSize(); updateMap(); }, 50);
+  } else {
+    mapContainer.style.height = '';
+  }
+});
+
+// --- Splitter drag ---
+(function setupSplitter() {
+  let startY = 0, startH = 0;
+
+  mapSplitter.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    startY = e.clientY;
+    startH = mapContainer.offsetHeight;
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  function onMove(e) {
+    const delta = startY - e.clientY; // dragging up = bigger map
+    const newH = Math.max(80, Math.min(window.innerHeight - 200, startH + delta));
+    mapContainer.style.height = newH + 'px';
+    if (map) map.invalidateSize();
+  }
+
+  function onUp() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    localStorage.setItem('pota-cat-qso-map-height', mapContainer.offsetHeight);
+  }
+})();
+
+// --- Great circle arc (duplicated — no Node in renderer) ---
+function greatCircleArc(lat1, lon1, lat2, lon2, numPoints) {
+  const toRad = Math.PI / 180;
+  const toDeg = 180 / Math.PI;
+  const p1 = lat1 * toRad, l1 = lon1 * toRad;
+  const p2 = lat2 * toRad, l2 = lon2 * toRad;
+  const d = 2 * Math.asin(Math.sqrt(
+    Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin((l2 - l1) / 2) ** 2
+  ));
+  if (d < 1e-10) return [[lat1, lon1]];
+  const pts = [];
+  for (let i = 0; i <= numPoints; i++) {
+    const f = i / numPoints;
+    const A = Math.sin((1 - f) * d) / Math.sin(d);
+    const B = Math.sin(f * d) / Math.sin(d);
+    const x = A * Math.cos(p1) * Math.cos(l1) + B * Math.cos(p2) * Math.cos(l2);
+    const y = A * Math.cos(p1) * Math.sin(l1) + B * Math.cos(p2) * Math.sin(l2);
+    const z = A * Math.sin(p1) + B * Math.sin(p2);
+    pts.push([Math.atan2(z, Math.sqrt(x * x + y * y)) * toDeg, Math.atan2(y, x) * toDeg]);
+  }
+  return pts;
+}
+
+function drawArc(fromLat, fromLon, toLat, toLon, color) {
+  const arcPoints = greatCircleArc(fromLat, fromLon, toLat, toLon, 50);
+  // Split at antimeridian discontinuities
+  const segments = [[arcPoints[0]]];
+  for (let i = 1; i < arcPoints.length; i++) {
+    if (Math.abs(arcPoints[i][1] - arcPoints[i - 1][1]) > 180) {
+      segments.push([]);
+    }
+    segments[segments.length - 1].push(arcPoints[i]);
+  }
+  const layers = [];
+  for (const seg of segments) {
+    if (seg.length < 2) continue;
+    for (const offset of [-360, 0, 360]) {
+      const offsetPts = seg.map(([lat, lon]) => [lat, lon + offset]);
+      layers.push(
+        L.polyline(offsetPts, {
+          color, weight: 1.5, opacity: 0.5, dashArray: '6,4', interactive: false,
+        }).addTo(map)
+      );
+    }
+  }
+  return layers;
+}
+
+function clearHoverArcs() {
+  for (const l of hoverArcs) map.removeLayer(l);
+  hoverArcs = [];
+}
+
+// Determine "from" location for a QSO: park coords if activating, else home QTH
+function getQsoOrigin(q) {
+  const parkRef = (q.MY_SIG_INFO || '').toUpperCase();
+  if (parkRef && parkLocationCache[parkRef]) {
+    return parkLocationCache[parkRef];
+  }
+  // Fall back to home QTH
+  if (homeGrid) return gridToLatLonLocal(homeGrid);
+  return null;
+}
+
+// Show arcs on hover — from origin(s) to the hovered callsign's location
+function showArcsForCall(call, toLat, toLon) {
+  clearHoverArcs();
+  const qsos = filtered.filter(q => (q.CALL || '').toUpperCase() === call);
+  // Collect unique origins
+  const origins = new Map(); // key → {lat,lon}
+  for (const q of qsos) {
+    const origin = getQsoOrigin(q);
+    if (!origin) continue;
+    const key = `${origin.lat.toFixed(4)},${origin.lon.toFixed(4)}`;
+    if (!origins.has(key)) origins.set(key, origin);
+  }
+  for (const origin of origins.values()) {
+    const arcs = drawArc(origin.lat, origin.lon, toLat, toLon, '#4fc3f7');
+    hoverArcs.push(...arcs);
+  }
+}
+
+// --- Map initialization ---
+function initMap() {
+  map = L.map('qso-map', { zoomControl: true, attributionControl: false }).setView([20, 0], 2);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    className: 'dark-tiles',
+    maxZoom: 18,
+  }).addTo(map);
+
+  // Home marker
+  if (homeGrid) {
+    const pos = gridToLatLonLocal(homeGrid);
+    if (pos) {
+      homeMarker = L.circleMarker([pos.lat, pos.lon], {
+        radius: 6, fillColor: '#e94560', color: '#e94560', fillOpacity: 0.9, weight: 2,
+      }).addTo(map).bindPopup(`Home: ${homeGrid}`);
+    }
+  }
+}
+
+// --- Map marker update ---
+function updateMap() {
+  if (!map || !mapVisible) return;
+
+  // Clear old markers and arcs
+  clearHoverArcs();
+  for (const m of mapMarkers) map.removeLayer(m);
+  mapMarkers = [];
+
+  // Group filtered QSOs by callsign for popup aggregation
+  const byCall = {};
+  for (const q of filtered) {
+    const call = (q.CALL || '').toUpperCase();
+    if (!call) continue;
+
+    // Determine lat/lon: prefer GRIDSQUARE from QSO, then cty.dat
+    let lat = null, lon = null;
+    if (q.GRIDSQUARE) {
+      const pos = gridToLatLonLocal(q.GRIDSQUARE);
+      if (pos) { lat = pos.lat; lon = pos.lon; }
+    }
+    if (lat == null) {
+      const info = callsignInfo[call];
+      if (info && info.lat != null) { lat = info.lat; lon = info.lon; }
+    }
+    if (lat == null) continue;
+
+    if (!byCall[call]) byCall[call] = { lat, lon, qsos: [] };
+    byCall[call].qsos.push(q);
+  }
+
+  // Create markers
+  for (const [call, data] of Object.entries(byCall)) {
+    const { lat, lon, qsos } = data;
+
+    // Build popup content
+    const lines = qsos.slice(0, 8).map(q => {
+      const d = q.QSO_DATE ? q.QSO_DATE.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3') : '';
+      const parts = [d, q.FREQ ? q.FREQ + ' MHz' : '', q.MODE || '', q.SIG_INFO || ''].filter(Boolean);
+      return parts.join(' &middot; ');
+    });
+    if (qsos.length > 8) lines.push(`... +${qsos.length - 8} more`);
+    const popup = `<b>${call}</b> (${qsos.length} QSO${qsos.length > 1 ? 's' : ''})<br>${lines.join('<br>')}`;
+
+    // World wrapping offsets
+    for (const offset of [-360, 0, 360]) {
+      const marker = L.circleMarker([lat, lon + offset], {
+        radius: 5, fillColor: '#4ecca3', color: '#4ecca3', fillOpacity: 0.8, weight: 1,
+      }).bindPopup(popup);
+      marker.on('mouseover', () => showArcsForCall(call, lat, lon));
+      marker.on('mouseout', () => clearHoverArcs());
+      marker.addTo(map);
+      mapMarkers.push(marker);
+    }
+  }
+}
 
 // --- Inline edit (dblclick) ---
 tbody.addEventListener('dblclick', (e) => {
@@ -230,6 +539,8 @@ tbody.addEventListener('click', async (e) => {
     const result = await window.api.deleteQso(idx);
     if (result.success) {
       allQsos = allQsos.filter(q => q.idx !== idx);
+      // Re-index to match the rewritten file
+      allQsos.forEach((q, i) => { q.idx = i; });
       render();
       toast(`Deleted QSO with ${call}`);
     } else {
@@ -277,8 +588,23 @@ document.getElementById('qso-export').addEventListener('click', async () => {
 
 // --- Real-time listeners ---
 window.api.onQsoAdded(async (qso) => {
-  // Re-fetch full list to get correct indices
   allQsos = await window.api.getAllQsos();
+  // Resolve new callsign if needed
+  const call = (qso.CALL || '').toUpperCase();
+  if (call && !callsignInfo[call]) {
+    const info = await window.api.resolveCallsignLocations([call]);
+    if (info[call]) callsignInfo[call] = info[call];
+  }
+  // Resolve park location if activating
+  const parkRef = (qso.MY_SIG_INFO || '').toUpperCase();
+  if (parkRef && !parkLocationCache[parkRef]) {
+    try {
+      const park = await window.api.getPark(parkRef);
+      if (park && park.latitude && park.longitude) {
+        parkLocationCache[parkRef] = { lat: parseFloat(park.latitude), lon: parseFloat(park.longitude) };
+      }
+    } catch (_) { /* park not found */ }
+  }
   render();
   toast(`Logged ${qso.CALL || 'QSO'}`);
 });
@@ -292,7 +618,6 @@ window.api.onQsoUpdated(async ({ idx, fields }) => {
 });
 
 window.api.onQsoDeleted(async () => {
-  // Re-fetch full list (indices shifted)
   allQsos = await window.api.getAllQsos();
   render();
 });
@@ -313,15 +638,40 @@ async function showLogPath() {
   document.getElementById('qso-path-wrap').title = logPath;
 }
 
+// --- Resolve callsigns for region filter + map ---
+async function resolveAllCallsigns() {
+  const calls = [...new Set(allQsos.map(q => (q.CALL || '').toUpperCase()).filter(Boolean))];
+  if (!calls.length) return;
+  callsignInfo = await window.api.resolveCallsignLocations(calls);
+}
+
+// --- Resolve park locations for arc origins ---
+async function resolveAllParkLocations() {
+  const refs = [...new Set(
+    allQsos.map(q => (q.MY_SIG_INFO || '').toUpperCase()).filter(Boolean)
+  )];
+  for (const ref of refs) {
+    if (parkLocationCache[ref]) continue;
+    try {
+      const park = await window.api.getPark(ref);
+      if (park && park.latitude && park.longitude) {
+        parkLocationCache[ref] = { lat: parseFloat(park.latitude), lon: parseFloat(park.longitude) };
+      }
+    } catch (_) { /* park not found */ }
+  }
+}
+
 // --- Initial load ---
 (async function init() {
-  // Apply theme from settings
   const settings = await window.api.getSettings();
   if (settings.lightMode) {
     document.documentElement.setAttribute('data-theme', 'light');
   }
+  homeGrid = settings.grid || '';
 
   allQsos = await window.api.getAllQsos();
+  await resolveAllCallsigns();
+  await resolveAllParkLocations();
   render();
   showLogPath();
 })();

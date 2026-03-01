@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('api', {
   onQsoUpdated: (cb) => ipcRenderer.on('qso-popout-updated', (_e, data) => cb(data)),
   onQsoDeleted: (cb) => ipcRenderer.on('qso-popout-deleted', (_e, idx) => cb(idx)),
   onTheme: (cb) => ipcRenderer.on('qso-popout-theme', (_e, theme) => cb(theme)),
+  resolveCallsignLocations: (callsigns) => ipcRenderer.invoke('resolve-callsign-locations', callsigns),
+  getPark: (ref) => ipcRenderer.invoke('get-park', ref),
   openExternal: (url) => ipcRenderer.send('open-external', url),
   minimize: () => ipcRenderer.send('qso-popout-minimize'),
   maximize: () => ipcRenderer.send('qso-popout-maximize'),
