@@ -2838,6 +2838,12 @@ document.addEventListener('keydown', (e) => {
     window.api.qsoPopoutOpen(); // opens or focuses existing pop-out
     return;
   }
+  // F4 — Test cat celebration animation
+  if (e.key === 'F4' && !e.target.matches('input, select, textarea')) {
+    e.preventDefault();
+    showCatCelebration('Meow! You hit 10 QSOs! \ud83c\udf89');
+    return;
+  }
   // F5 — Check for updates
   if (e.key === 'F5' && !e.target.matches('input, select, textarea')) {
     e.preventDefault();
@@ -4272,6 +4278,19 @@ function showLogToast(message, opts) {
   }
 }
 
+// --- Cat Celebration ---
+function showCatCelebration(message) {
+  const existing = document.querySelector('.cat-celebration');
+  if (existing) existing.remove();
+  const container = document.createElement('div');
+  container.className = 'cat-celebration';
+  container.innerHTML = `<div class="cat-speech">${message}</div><div class="cat-emoji">\ud83d\udc08\u200d\u2b1b</div>`;
+  document.body.appendChild(container);
+  container.addEventListener('animationend', () => container.remove());
+}
+
+const celebratedCallsigns = new Set();
+
 // --- Events ---
 // Band/mode dropdowns already wired via initMultiDropdown()
 // --- Spots dropdown panel ---
@@ -4818,6 +4837,14 @@ window.api.onSpots((spots) => {
   if (scanning) {
     pendingSpots = spots;
     return;
+  }
+  // Check for activators crossing 10 QSOs
+  for (const s of spots) {
+    if (s.count === 10 && s.source === 'pota' && !celebratedCallsigns.has(s.callsign)) {
+      celebratedCallsigns.add(s.callsign);
+      showCatCelebration(`${s.callsign} hit 10 QSOs at ${s.reference}!`);
+      break; // one celebration at a time
+    }
   }
   allSpots = spots;
   render();
@@ -7954,8 +7981,12 @@ async function activatorLogContact() {
     }
 
     // Save all cross-product records via existing pipeline
+    // Only forward the first record to external logbook — ACLog etc. only
+    // need one QSO per physical contact, not one per park ref
     try {
-      for (const qsoData of allQsoData) {
+      for (let qi = 0; qi < allQsoData.length; qi++) {
+        const qsoData = allQsoData[qi];
+        if (qi > 0) qsoData.skipLogbookForward = true;
         await window.api.saveQso(qsoData);
       }
     } catch (err) {
@@ -7978,6 +8009,10 @@ async function activatorLogContact() {
       qsoDataList: allQsoData, // all cross-product records for export
     };
     activatorContacts.push(contact);
+
+    if (activatorContacts.length === 10) {
+      showCatCelebration('Meow! You hit 10 QSOs! \ud83c\udf89');
+    }
 
     // Push to activation map pop-out
     if (actmapPopoutOpen) {

@@ -12,7 +12,7 @@ const { CatClient, RigctldClient, listSerialPorts } = require('./lib/cat');
 const { gridToLatLon, haversineDistanceMiles, bearing } = require('./lib/grid');
 const { freqToBand } = require('./lib/bands');
 const { loadCtyDat, resolveCallsign, getAllEntities } = require('./lib/cty');
-const { parseAdifFile, parseWorkedQsos, parseAllQsos, parseAllRawQsos, parseSqliteFile, parseSqliteConfirmed, isSqliteFile } = require('./lib/adif');
+const { parseAdifFile, parseWorkedQsos, parseAllQsos, parseAllRawQsos, parseSqliteFile, parseSqliteConfirmed, isSqliteFile, parseRecord: parseAdifRecord } = require('./lib/adif');
 const { DxClusterClient } = require('./lib/dxcluster');
 const { RbnClient } = require('./lib/rbn');
 const { appendQso, buildAdifRecord, appendImportedQso, rewriteAdifFile, ADIF_HEADER, adifField } = require('./lib/adif-writer');
@@ -993,7 +993,7 @@ function connectWsjtx() {
     }
   });
 
-  wsjtx.on('logged-adif', ({ adif }) => {
+  wsjtx.on('logged-adif', async ({ adif }) => {
     if (!settings.wsjtxAutoLog) return;
     // Append the raw ADIF record to our log file
     const logPath = settings.adifLogPath || path.join(app.getPath('userData'), 'potacat_qso_log.adi');
@@ -1007,6 +1007,34 @@ function connectWsjtx() {
       loadWorkedQsos();
     } catch (err) {
       console.error('Failed to append WSJT-X ADIF:', err.message);
+    }
+
+    // Forward to external logbook (ACLog, Log4OM, etc.) if enabled
+    if (settings.sendToLogbook && settings.logbookType) {
+      try {
+        const f = parseAdifRecord(adif);
+        const freqMHz = parseFloat(f.FREQ || '0');
+        const qsoData = {
+          callsign: f.CALL || '',
+          frequency: String(Math.round(freqMHz * 1000)),
+          mode: f.MODE || '',
+          qsoDate: f.QSO_DATE || '',
+          timeOn: f.TIME_ON || '',
+          rstSent: f.RST_SENT || '',
+          rstRcvd: f.RST_RCVD || '',
+          txPower: f.TX_PWR || '',
+          band: f.BAND || '',
+          sig: f.SIG || '',
+          sigInfo: f.SIG_INFO || '',
+          name: f.NAME || '',
+          gridsquare: f.GRIDSQUARE || '',
+          comment: f.COMMENT || '',
+          operator: f.OPERATOR || settings.myCallsign || '',
+        };
+        await forwardToLogbook(qsoData);
+      } catch (fwdErr) {
+        console.error('WSJT-X logbook forwarding failed:', fwdErr.message);
+      }
     }
   });
 
@@ -1343,6 +1371,7 @@ function processPotaSpots(raw) {
       spotTime: s.spotTime || '',
       continent,
       comments: s.comments || '',
+      count: typeof s.count === 'number' ? s.count : null,
     };
   });
   // Dedupe: keep latest spot per callsign+band (allows multi-band activations)
@@ -3701,7 +3730,9 @@ app.whenReady().then(() => {
       }
 
       // Forward to external logbook if enabled
-      if (settings.sendToLogbook && settings.logbookType) {
+      // skipLogbookForward: multi-park activations send one ADIF record per park ref,
+      // but external logbooks only need one QSO per physical contact
+      if (settings.sendToLogbook && settings.logbookType && !qsoData.skipLogbookForward) {
         try {
           await forwardToLogbook(qsoData);
         } catch (fwdErr) {
