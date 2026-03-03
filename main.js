@@ -3732,9 +3732,13 @@ app.whenReady().then(() => {
     const { rigId, serialPort, baudRate, dtrOff } = config;
     let testProc = null;
     const net = require('net');
+    // Kill live rigctld first — two rigctld instances can't share a serial port
+    const hadLiveRigctld = !!rigctldProc;
+    killRigctld();
+    // Brief delay for OS to release the serial port
+    if (hadLiveRigctld) await new Promise((r) => setTimeout(r, 300));
 
     try {
-      // Spawn rigctld on port 4533 to avoid conflict with live instance on 4532
       testProc = await spawnRigctld({ rigId, serialPort, baudRate, dtrOff, verbose: true }, '4533');
 
       // Give rigctld time to initialize and open the serial port
@@ -3788,6 +3792,10 @@ app.whenReady().then(() => {
     } finally {
       if (testProc) {
         try { testProc.kill(); } catch { /* ignore */ }
+      }
+      // Restart live rigctld if one was running before the test
+      if (hadLiveRigctld && settings.catTarget && settings.catTarget.type === 'rigctld') {
+        connectCat();
       }
     }
   });
