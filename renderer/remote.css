@@ -756,6 +756,461 @@ html, body {
 
 .welcome-ok:active { opacity: 0.8; }
 
+/* --- Activation Banner (shown during active activation) --- */
+#activation-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-header);
+  border-bottom: 1px solid #333;
+  flex-shrink: 0;
+}
+
+.activation-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.activation-ref {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--pota);
+  flex-shrink: 0;
+}
+
+.activation-ref.sota { color: var(--sota); }
+.activation-ref.other { color: var(--rbn); }
+
+.activation-name {
+  font-size: 12px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activation-banner-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.activation-timer {
+  font-size: 14px;
+  font-family: monospace;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.end-activation-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.end-activation-btn:active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* --- Tab Bar --- */
+#tab-bar {
+  display: flex;
+  flex-shrink: 0;
+  background: var(--bg);
+  border-bottom: 1px solid #333;
+}
+
+#tab-bar .tab {
+  flex: 1;
+  padding: 10px 0;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  position: relative;
+}
+
+#tab-bar .tab.active {
+  color: #fff;
+  border-bottom-color: var(--accent);
+}
+
+.tab-badge {
+  display: inline-block;
+  min-width: 18px;
+  padding: 1px 5px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--pota);
+  color: #000;
+  border-radius: 9px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* --- Activation Setup Screen --- */
+#activation-setup {
+  padding: 20px 16px;
+  flex-shrink: 0;
+}
+
+.setup-header {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.setup-type-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.setup-type-btn {
+  flex: 1;
+  padding: 10px 0;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  background: var(--bg-card);
+  color: var(--text-dim);
+  border: 2px solid #333;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.setup-type-btn.active {
+  color: var(--type-color);
+  border-color: var(--type-color);
+  background: var(--bg-header);
+}
+
+.setup-label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.setup-ref-wrap {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+#setup-ref-input {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 16px;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: var(--bg-card);
+  border: 1px solid #444;
+  border-radius: 8px;
+  color: #fff;
+  outline: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+#setup-ref-input:focus { border-color: var(--pota); }
+
+.setup-dropdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% - 8px);
+  max-height: 200px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--bg-card);
+  border: 1px solid #555;
+  border-radius: 0 0 8px 8px;
+  z-index: 50;
+}
+
+.setup-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #2a2a4a;
+}
+
+.setup-dropdown-item:last-child { border-bottom: none; }
+
+.setup-dropdown-item:active {
+  background: var(--bg-header);
+}
+
+.sdi-ref {
+  font-weight: 700;
+  font-family: monospace;
+  font-size: 13px;
+  color: var(--pota);
+  flex-shrink: 0;
+}
+
+.sdi-name {
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.sdi-loc {
+  font-size: 11px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.setup-ref-name {
+  font-size: 13px;
+  color: var(--pota);
+  margin-top: 6px;
+  min-height: 18px;
+}
+
+.start-activation-btn {
+  display: block;
+  width: 100%;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: 700;
+  background: var(--pota);
+  color: #000;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+}
+
+.start-activation-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.start-activation-btn:not(:disabled):active { opacity: 0.8; }
+
+/* --- Activator Log View --- */
+#log-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+#quick-log-form {
+  padding: 10px 10px 6px;
+  background: var(--bg-header);
+  flex-shrink: 0;
+}
+
+.ql-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.ql-row-small { gap: 6px; }
+
+#ql-call {
+  flex: 1;
+  padding: 10px 12px;
+  font-size: 18px;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: var(--bg);
+  border: 1px solid #444;
+  border-radius: 8px;
+  color: #fff;
+  outline: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+#ql-call:focus { border-color: var(--pota); }
+
+.ql-log-btn {
+  padding: 10px 20px;
+  font-size: 16px;
+  font-weight: 700;
+  background: var(--pota);
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  letter-spacing: 1px;
+}
+
+.ql-log-btn:active { opacity: 0.8; }
+
+.ql-freq {
+  flex: 2;
+  padding: 6px 8px;
+  font-size: 14px;
+  font-family: monospace;
+  background: var(--bg);
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: var(--text);
+  outline: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.ql-mode {
+  flex: 1.5;
+  padding: 6px 8px;
+  font-size: 14px;
+  background: var(--bg);
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: var(--text);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.ql-rst {
+  width: 42px;
+  flex-shrink: 0;
+  padding: 6px 4px;
+  font-size: 14px;
+  text-align: center;
+  background: var(--bg);
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: var(--text);
+  outline: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* --- Contact List --- */
+#contact-list {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 4px 8px;
+  min-height: 0;
+}
+
+.contact-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  margin-bottom: 3px;
+  background: var(--bg-card);
+  border-radius: 6px;
+  border-left: 3px solid var(--pota);
+  font-size: 13px;
+}
+
+.contact-row.offline {
+  opacity: 0.6;
+  border-left-color: #f0a500;
+}
+
+.contact-nr {
+  font-size: 11px;
+  color: var(--text-dim);
+  min-width: 22px;
+  text-align: right;
+}
+
+.contact-time {
+  font-size: 12px;
+  font-family: monospace;
+  color: var(--text-dim);
+  min-width: 44px;
+}
+
+.contact-call {
+  font-weight: 700;
+  color: #fff;
+  flex: 1;
+}
+
+.contact-freq {
+  font-size: 12px;
+  font-family: monospace;
+  color: var(--text);
+  min-width: 55px;
+}
+
+.contact-mode {
+  font-size: 11px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #333;
+  color: var(--text-dim);
+}
+
+.contact-rst {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* --- Log Footer --- */
+#log-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  padding-bottom: calc(8px + var(--safe-bottom));
+  background: var(--bg-header);
+  border-top: 1px solid #333;
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
+#log-footer-count {
+  font-weight: 600;
+  color: var(--text);
+}
+
+#log-footer-queued {
+  color: #f0a500;
+  font-weight: 600;
+}
+
+.export-adif-btn {
+  margin-left: auto;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid #555;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.export-adif-btn:active {
+  background: var(--bg-header);
+  border-color: var(--pota);
+}
+
 /* --- Reconnecting overlay --- */
 #reconnecting {
   position: fixed;

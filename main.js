@@ -1338,6 +1338,17 @@ function disconnectTci() {
 }
 
 // --- ECHO CAT ---
+function pushActivatorStateToPhone() {
+  if (!remoteServer || !remoteServer.hasClient()) return;
+  const parkRefs = (settings.activatorParkRefs || []).filter(p => p && p.ref).map(p => ({ ref: p.ref, name: p.name || '' }));
+  remoteServer.broadcastActivatorState({
+    appMode: settings.appMode || 'hunter',
+    parkRefs,
+    grid: settings.grid || '',
+  });
+  remoteServer.sendSessionContacts();
+}
+
 function connectRemote() {
   disconnectRemote();
   if (!settings.enableRemote) return;
@@ -1366,6 +1377,8 @@ function connectRemote() {
     // Send rig list so phone can switch rigs
     const rigs = (settings.rigs || []).map(r => ({ id: r.id, name: r.name }));
     remoteServer.sendRigsToClient(rigs, settings.activeRigId || null);
+    // Push activator state
+    pushActivatorStateToPhone();
     if (win && !win.isDestroyed()) {
       win.webContents.send('remote-status', { connected: true });
     }
@@ -1425,6 +1438,45 @@ function connectRemote() {
     console.log('[Echo CAT] Switched rig to:', rig.name);
   });
 
+  remoteServer.on('set-activator-park', async ({ parkRef, activationType, activationName: actName, sig }) => {
+    console.log('[Echo CAT] Set activator park:', parkRef || actName, 'type:', activationType);
+    settings.appMode = 'activator';
+    if (parkRef) {
+      settings.activatorParkRefs = [{ id: parkRef, ref: parkRef, name: '' }];
+      // Look up park name
+      let parkName = '';
+      try {
+        const park = getParkDb(parksMap, parkRef);
+        if (park && park.name) parkName = park.name;
+      } catch {}
+      if (parkName) {
+        settings.activatorParkRefs[0].name = parkName;
+      }
+    } else {
+      settings.activatorParkRefs = [];
+    }
+    saveSettings(settings);
+
+    // Push updated state to phone
+    pushActivatorStateToPhone();
+    // Sync desktop UI
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('reload-prefs');
+    }
+    // Reset session contacts for new activation
+    remoteServer.resetSessionContacts();
+  });
+
+  remoteServer.on('search-parks', ({ query }) => {
+    try {
+      const results = searchParksDb(parksArray, query);
+      remoteServer.sendParkResults(results || []);
+    } catch (err) {
+      console.error('[Echo CAT] Park search error:', err.message);
+      remoteServer.sendParkResults([]);
+    }
+  });
+
   remoteServer.on('log-qso', async (data) => {
     if (!data || !data.callsign) {
       remoteServer.sendLogResult({ success: false, error: 'Missing callsign' });
@@ -1451,8 +1503,73 @@ function connectRemote() {
         sigInfo: data.sigInfo || '',
       };
 
-      const result = await saveQsoRecord(qsoData);
-      remoteServer.sendLogResult({ ...result, callsign: qsoData.callsign });
+      // Add station fields from settings
+      if (settings.myCallsign) {
+        qsoData.stationCallsign = settings.myCallsign.toUpperCase();
+      }
+      if (settings.txPower) {
+        qsoData.txPower = String(settings.txPower);
+      }
+
+      // Activator mode: inject mySig fields from phone or desktop settings
+      const mySig = data.mySig || '';
+      const mySigInfo = data.mySigInfo || '';
+      const myGrid = data.myGridsquare || settings.grid || '';
+
+      if (mySig && mySigInfo) {
+        // Phone sent explicit park ref — use multi-park cross-product from desktop
+        const parkRefs = (settings.activatorParkRefs || []).filter(p => p && p.ref);
+        if (mySig === 'POTA' && parkRefs.length > 1) {
+          // Cross-product: one ADIF record per park
+          for (let i = 0; i < parkRefs.length; i++) {
+            const parkQso = { ...qsoData, mySig: 'POTA', mySigInfo: parkRefs[i].ref, myGridsquare: myGrid };
+            if (i > 0) parkQso.skipLogbookForward = true;
+            await saveQsoRecord(parkQso);
+          }
+        } else {
+          qsoData.mySig = mySig;
+          qsoData.mySigInfo = mySigInfo;
+          qsoData.myGridsquare = myGrid;
+          await saveQsoRecord(qsoData);
+        }
+      } else if (settings.appMode === 'activator') {
+        // Desktop is in activator mode but phone didn't send mySig — use desktop park refs
+        const parkRefs = (settings.activatorParkRefs || []).filter(p => p && p.ref);
+        if (parkRefs.length > 0) {
+          for (let i = 0; i < parkRefs.length; i++) {
+            const parkQso = { ...qsoData, mySig: 'POTA', mySigInfo: parkRefs[i].ref, myGridsquare: myGrid };
+            if (i > 0) parkQso.skipLogbookForward = true;
+            await saveQsoRecord(parkQso);
+          }
+        } else {
+          await saveQsoRecord(qsoData);
+        }
+      } else {
+        await saveQsoRecord(qsoData);
+      }
+
+      // Track session contact and send enhanced log-ok
+      const contactData = {
+        callsign: qsoData.callsign,
+        timeUtc: qsoTime,
+        freqKhz: String(freqKhz),
+        mode: qsoData.mode,
+        band,
+        rstSent: qsoData.rstSent,
+        rstRcvd: qsoData.rstRcvd,
+      };
+      const contact = remoteServer.addSessionContact(contactData);
+      remoteServer.sendLogResult({
+        success: true,
+        callsign: qsoData.callsign,
+        nr: contact.nr,
+        timeUtc: contact.timeUtc,
+        freqKhz: contact.freqKhz,
+        mode: contact.mode,
+        band: contact.band,
+        rstSent: contact.rstSent,
+        rstRcvd: contact.rstRcvd,
+      });
     } catch (err) {
       console.error('[Echo CAT] Log QSO error:', err.message);
       remoteServer.sendLogResult({ success: false, error: err.message });
@@ -3872,6 +3989,9 @@ app.whenReady().then(() => {
       (has('cwWpm') && newSettings.cwWpm !== settings.cwWpm) ||
       (has('cwSwapPaddles') && newSettings.cwSwapPaddles !== settings.cwSwapPaddles);
 
+    const activatorStateChanged = (has('appMode') && newSettings.appMode !== settings.appMode) ||
+      (has('activatorParkRefs') && JSON.stringify(newSettings.activatorParkRefs) !== JSON.stringify(settings.activatorParkRefs));
+
     const isPartialSave = !has('enablePota'); // hotkey saves only send 1-2 keys
 
     settings = { ...settings, ...newSettings };
@@ -3921,6 +4041,11 @@ app.whenReady().then(() => {
       } else {
         disconnectRemote();
       }
+    }
+
+    // Push activator state to phone when park refs or app mode change
+    if (activatorStateChanged) {
+      pushActivatorStateToPhone();
     }
 
     // Reconnect CW keyer if settings changed

@@ -52,6 +52,24 @@
     <!-- TX indicator banner -->
     <div id="tx-banner" class="hidden">TRANSMITTING</div>
 
+    <!-- Active activation banner (shown during activation) -->
+    <div id="activation-banner" class="hidden">
+      <div class="activation-banner-left">
+        <span id="activation-ref" class="activation-ref"></span>
+        <span id="activation-name" class="activation-name"></span>
+      </div>
+      <div class="activation-banner-right">
+        <span id="activation-timer" class="activation-timer">0:00</span>
+        <button type="button" id="end-activation-btn" class="end-activation-btn">End</button>
+      </div>
+    </div>
+
+    <!-- Tab bar -->
+    <div id="tab-bar" class="hidden">
+      <button class="tab active" data-tab="spots">Spots</button>
+      <button class="tab" data-tab="log">Log <span id="tab-log-badge" class="tab-badge hidden">0</span></button>
+    </div>
+
     <!-- Source toggles -->
     <div id="source-bar">
       <button class="source-chip active" data-src="pota" style="--src-color:#4ecca3">POTA</button>
@@ -81,6 +99,65 @@
 
     <!-- Spot list -->
     <div id="spot-list"></div>
+
+    <!-- Activator log view (hidden by default) -->
+    <div id="log-view" class="hidden">
+
+      <!-- Start activation screen (shown when no activation running) -->
+      <div id="activation-setup">
+        <div class="setup-header">Start Activation</div>
+
+        <!-- Activation type chooser -->
+        <div class="setup-type-row">
+          <button class="setup-type-btn active" data-type="pota" style="--type-color:#4ecca3">POTA</button>
+          <button class="setup-type-btn" data-type="sota" style="--type-color:#f0a500">SOTA</button>
+          <button class="setup-type-btn" data-type="other" style="--type-color:#4fc3f7">Other</button>
+        </div>
+
+        <!-- Reference input with autocomplete -->
+        <div class="setup-ref-wrap">
+          <label id="setup-ref-label" class="setup-label">Park Reference</label>
+          <input type="text" id="setup-ref-input" placeholder="US-1234"
+                 autocapitalize="characters" autocorrect="off" spellcheck="false">
+          <div id="setup-ref-dropdown" class="setup-dropdown hidden"></div>
+          <div id="setup-ref-name" class="setup-ref-name"></div>
+        </div>
+
+        <button type="button" id="start-activation-btn" class="start-activation-btn" disabled>Start Activation</button>
+      </div>
+
+      <!-- Quick-log form (shown during activation) -->
+      <div id="quick-log-form" class="hidden">
+        <div class="ql-row">
+          <input type="text" id="ql-call" placeholder="Callsign" autocapitalize="characters" autocorrect="off" spellcheck="false">
+          <button type="button" id="ql-log-btn" class="ql-log-btn">LOG</button>
+        </div>
+        <div class="ql-row ql-row-small">
+          <input type="text" id="ql-freq" inputmode="decimal" placeholder="kHz" class="ql-freq">
+          <select id="ql-mode" class="ql-mode">
+            <option value="SSB">SSB</option>
+            <option value="CW">CW</option>
+            <option value="FT8">FT8</option>
+            <option value="FT4">FT4</option>
+            <option value="FM">FM</option>
+            <option value="RTTY">RTTY</option>
+            <option value="AM">AM</option>
+          </select>
+          <input type="text" id="ql-rst-sent" inputmode="numeric" maxlength="3" placeholder="S" class="ql-rst" value="59">
+          <input type="text" id="ql-rst-rcvd" inputmode="numeric" maxlength="3" placeholder="R" class="ql-rst" value="59">
+        </div>
+      </div>
+
+      <!-- Contact list -->
+      <div id="contact-list"></div>
+
+      <!-- Log footer -->
+      <div id="log-footer" class="hidden">
+        <span id="log-footer-count">0 QSOs</span>
+        <span id="log-footer-queued" class="hidden">0 queued</span>
+        <button type="button" id="export-adif-btn" class="export-adif-btn">Export ADIF</button>
+      </div>
+    </div>
 
     <!-- Bottom controls -->
     <div id="bottom-bar">

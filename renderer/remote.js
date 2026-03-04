@@ -54,9 +54,53 @@
   const logToast = document.getElementById('log-toast');
   const rigBar = document.getElementById('rig-bar');
   const rigSelect = document.getElementById('rig-select');
-  let currentFreqKhz = 0; // track current freq for pre-fill
-  let currentMode = '';    // track current mode
-  let tunedFreqKhz = ''; // last tuned spot freq for highlight
+  let currentFreqKhz = 0;
+  let currentMode = '';
+  let tunedFreqKhz = '';
+
+  // --- Activator state ---
+  let activeTab = 'spots';
+  let activationRunning = false;
+  let activationType = 'pota';   // 'pota' | 'sota' | 'other'
+  let activationRef = '';        // e.g. 'US-1234' or 'W4C/CM-001' or free text
+  let activationName = '';       // resolved name from server
+  let activationSig = '';        // 'POTA', 'SOTA', or ''
+  let phoneGrid = '';
+  let activationStartTime = 0;  // Date.now() when activation started
+  let activationTimerInterval = null;
+  let sessionContacts = [];
+  let offlineQueue = JSON.parse(localStorage.getItem('echocat-offline-queue') || '[]');
+  let searchDebounce = null;
+
+  // --- Activator elements ---
+  const activationBanner = document.getElementById('activation-banner');
+  const activationRefEl = document.getElementById('activation-ref');
+  const activationNameEl = document.getElementById('activation-name');
+  const activationTimerEl = document.getElementById('activation-timer');
+  const endActivationBtn = document.getElementById('end-activation-btn');
+  const tabBar = document.getElementById('tab-bar');
+  const tabLogBadge = document.getElementById('tab-log-badge');
+  const logView = document.getElementById('log-view');
+  const activationSetup = document.getElementById('activation-setup');
+  const setupRefInput = document.getElementById('setup-ref-input');
+  const setupRefLabel = document.getElementById('setup-ref-label');
+  const setupRefDropdown = document.getElementById('setup-ref-dropdown');
+  const setupRefName = document.getElementById('setup-ref-name');
+  const startActivationBtn = document.getElementById('start-activation-btn');
+  const quickLogForm = document.getElementById('quick-log-form');
+  const qlCall = document.getElementById('ql-call');
+  const qlFreq = document.getElementById('ql-freq');
+  const qlMode = document.getElementById('ql-mode');
+  const qlRstSent = document.getElementById('ql-rst-sent');
+  const qlRstRcvd = document.getElementById('ql-rst-rcvd');
+  const qlLogBtn = document.getElementById('ql-log-btn');
+  const contactList = document.getElementById('contact-list');
+  const logFooter = document.getElementById('log-footer');
+  const logFooterCount = document.getElementById('log-footer-count');
+  const logFooterQueued = document.getElementById('log-footer-queued');
+  const exportAdifBtn = document.getElementById('export-adif-btn');
+  const sourceBar = document.getElementById('source-bar');
+  const filterBar = document.getElementById('filter-bar');
 
   // --- Connect ---
   connectBtn.addEventListener('click', () => {
@@ -82,7 +126,6 @@
     ws = new WebSocket(`${proto}//${location.host}`);
 
     ws.onopen = () => {
-      // Send auth with token (server ignores if token not required)
       if (token) {
         ws.send(JSON.stringify({ type: 'auth', token }));
       }
@@ -98,18 +141,14 @@
       clearInterval(pingInterval);
       pingInterval = null;
       if (mainUI.classList.contains('hidden')) {
-        // Still on connect screen
         connectBtn.textContent = 'Connect';
         connectBtn.disabled = false;
       } else {
-        // Was connected — show reconnecting state
         scheduleReconnect();
       }
     };
 
-    ws.onerror = () => {
-      // onclose will fire after this
-    };
+    ws.onerror = () => {};
   }
 
   function handleMessage(msg) {
@@ -117,10 +156,12 @@
       case 'auth-ok':
         connectScreen.classList.add('hidden');
         mainUI.classList.remove('hidden');
+        tabBar.classList.remove('hidden');
         connectBtn.textContent = 'Connect';
         connectBtn.disabled = false;
         startPing();
         showWelcome();
+        drainOfflineQueue();
         break;
 
       case 'auth-fail':
@@ -159,7 +200,6 @@
         break;
 
       case 'sources':
-        // Sync source toggles from POTACAT settings
         if (msg.data) {
           const map = { pota: 'pota', sota: 'sota', wwff: 'wwff', llota: 'llota', cluster: 'dxc' };
           for (const [settingKey, srcAttr] of Object.entries(map)) {
@@ -178,9 +218,26 @@
         if (msg.success) {
           closeLogSheet();
           showLogToast('Logged ' + (msg.callsign || ''));
+          if (msg.nr !== undefined) {
+            handleLogOkContact(msg);
+          }
         } else {
           showLogToast(msg.error || 'Log failed', true);
         }
+        break;
+
+      case 'activator-state':
+        handleActivatorState(msg);
+        break;
+
+      case 'session-contacts':
+        sessionContacts = msg.contacts || [];
+        renderContacts();
+        updateLogBadge();
+        break;
+
+      case 'park-results':
+        showSearchResults(msg.results || []);
         break;
 
       case 'signal':
@@ -198,7 +255,6 @@
     if (s.mode) {
       modeBadge.textContent = s.mode;
       currentMode = s.mode;
-      // Hide PTT controls when mode is not SSB
       const m = s.mode.toUpperCase();
       const isSSB = (m === 'SSB' || m === 'USB' || m === 'LSB');
       pttBtn.classList.toggle('hidden', !isSSB);
@@ -211,7 +267,6 @@
     if (s.txState !== undefined) {
       txBanner.classList.toggle('hidden', !s.txState);
       if (!s.txState && pttDown) {
-        // Server forced RX
         pttDown = false;
         pttBtn.classList.remove('active');
         muteRxAudio(false);
@@ -220,7 +275,6 @@
   }
 
   function formatFreq(hz) {
-    // Format Hz as "14.074.000"
     const mhz = Math.floor(hz / 1e6);
     const khz = Math.floor((hz % 1e6) / 1e3);
     const sub = Math.floor(hz % 1e3);
@@ -239,7 +293,6 @@
       return;
     }
 
-    // Sort by age (newest first)
     filtered.sort((a, b) => {
       const ta = parseSpotTime(a.spotTime);
       const tb = parseSpotTime(b.spotTime);
@@ -273,7 +326,6 @@
 
   function parseSpotTime(t) {
     if (!t) return 0;
-    // POTA times may lack Z suffix
     const s = t.endsWith('Z') ? t : t + 'Z';
     return new Date(s).getTime() || 0;
   }
@@ -296,7 +348,6 @@
 
   // --- Tune (tap on spot) or Log ---
   spotList.addEventListener('click', (e) => {
-    // Check if Log button was tapped
     const logTarget = e.target.closest('.spot-log-btn');
     if (logTarget) {
       const card = logTarget.closest('.spot-card');
@@ -321,14 +372,12 @@
       mode,
       bearing: card.dataset.bearing ? parseFloat(card.dataset.bearing) : undefined,
     }));
-    // Optimistic update — show tuned freq immediately
     const hz = parseFloat(freqKhz) * 1000;
     if (hz > 0) {
       freqDisplay.textContent = formatFreq(hz);
       currentFreqKhz = parseFloat(freqKhz);
     }
     if (mode) modeBadge.textContent = mode;
-    // Highlight tuned spot
     tunedFreqKhz = freqKhz;
     spotList.querySelectorAll('.spot-card.tuned').forEach(c => c.classList.remove('tuned'));
     card.classList.add('tuned');
@@ -339,7 +388,6 @@
     const chip = e.target.closest('.source-chip');
     if (!chip) return;
     chip.classList.toggle('active');
-    // Send updated source state to POTACAT
     const sources = {};
     document.querySelectorAll('#source-bar .source-chip').forEach(c => {
       sources[c.dataset.src] = c.classList.contains('active');
@@ -359,7 +407,7 @@
     renderSpots();
   });
 
-  // --- Frequency direct input (tap freq display to edit) ---
+  // --- Frequency direct input ---
   freqDisplay.addEventListener('click', () => {
     statusBar.classList.add('editing');
     freqInput.value = currentFreqKhz ? Math.round(currentFreqKhz * 10) / 10 : '';
@@ -385,14 +433,11 @@
   }
 
   freqGo.addEventListener('click', submitFreq);
-
   freqInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); submitFreq(); }
     if (e.key === 'Escape') { e.preventDefault(); cancelFreqEdit(); }
   });
-
   freqInput.addEventListener('blur', () => {
-    // Small delay so Go button click registers before blur hides it
     setTimeout(() => {
       if (statusBar.classList.contains('editing')) cancelFreqEdit();
     }, 200);
@@ -400,7 +445,6 @@
 
   // --- PTT ---
   function muteRxAudio(mute) {
-    // Mute the incoming RX audio during TX to prevent hearing your own voice back
     if (remoteAudio) remoteAudio.muted = mute;
   }
 
@@ -426,17 +470,13 @@
     }
   }
 
-  // Touch events (hold-to-talk)
   pttBtn.addEventListener('touchstart', (e) => { e.preventDefault(); pttStart(); });
   pttBtn.addEventListener('touchend', (e) => { e.preventDefault(); pttStop(); });
   pttBtn.addEventListener('touchcancel', (e) => { e.preventDefault(); pttStop(); });
-
-  // Mouse fallback (for testing in desktop browser)
   pttBtn.addEventListener('mousedown', (e) => { e.preventDefault(); pttStart(); });
   pttBtn.addEventListener('mouseup', (e) => { e.preventDefault(); pttStop(); });
   pttBtn.addEventListener('mouseleave', (e) => { if (pttDown) pttStop(); });
 
-  // Emergency stop
   estopBtn.addEventListener('click', () => {
     pttDown = false;
     pttBtn.classList.remove('active');
@@ -453,7 +493,6 @@
       stopAudio();
     } else {
       await startAudio();
-      // If mic permission prompt consumed the gesture, auto-retry connection
       if (micReady && !audioEnabled) {
         await startAudio();
       }
@@ -461,31 +500,18 @@
   });
 
   const audioLabel = audioBtn.querySelector('.audio-label');
+  function setAudioStatus(text) { audioLabel.textContent = text; }
 
-  function setAudioStatus(text) {
-    audioLabel.textContent = text;
-  }
-
-  // Audio requires two phases on iOS:
-  // Phase 1 (user gesture): get mic permission + prime <audio> element for playback
-  // Phase 2 (user gesture): connect WebRTC (iOS may invalidate gesture context after mic prompt)
   let micReady = false;
 
   async function startAudio() {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
-    // Phase 1: acquire mic + prime audio element
     if (!micReady) {
       try {
         setAudioStatus('Mic...');
         localAudioStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: false,
-          },
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
         });
-        // Prime the <audio> element during user gesture so iOS allows playback later
         remoteAudio = document.getElementById('remote-audio');
         remoteAudio.srcObject = new MediaStream();
         await remoteAudio.play().catch(() => {});
@@ -501,46 +527,32 @@
         return;
       }
     }
-
-    // Phase 2: connect WebRTC
     try {
       setAudioStatus('Wait...');
-
       pc = new RTCPeerConnection({ iceServers: [] });
-
-      // Add phone mic track
       for (const track of localAudioStream.getTracks()) {
         pc.addTrack(track, localAudioStream);
       }
-
-      // Receive radio RX audio — element already primed, just swap srcObject
       pc.ontrack = (event) => {
         setAudioStatus('Live');
         remoteAudio.srcObject = event.streams[0];
         remoteAudio.play().catch(() => {});
       };
-
-      // ICE candidates
       pc.onicecandidate = (event) => {
         if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'signal', data: { type: 'ice', candidate: event.candidate } }));
         }
       };
-
       pc.onconnectionstatechange = () => {
         const state = pc ? pc.connectionState : 'closed';
         audioDot.classList.toggle('connected', state === 'connected');
         if (state === 'connected') setAudioStatus('Live');
         else if (state === 'failed' || state === 'disconnected') stopAudio();
       };
-
-      // Tell server to start audio bridge
       ws.send(JSON.stringify({ type: 'signal', data: { type: 'start-audio' } }));
-
       audioEnabled = true;
       audioBtn.classList.add('active');
       audioDot.classList.remove('hidden');
-
     } catch (err) {
       console.error('Audio error:', err);
       setAudioStatus('Error');
@@ -561,10 +573,8 @@
 
   function handleSignal(data) {
     if (!data) return;
-
     if (data.type === 'sdp') {
       if (!pc) return;
-      // Pass plain object — RTCSessionDescription constructor hangs on iOS WebKit
       pc.setRemoteDescription(data.sdp)
         .then(() => {
           if (data.sdp.type === 'offer') {
@@ -575,15 +585,9 @@
             });
           }
         })
-        .catch(err => {
-          console.error('SDP error:', err);
-          setAudioStatus('Error');
-        });
+        .catch(err => { console.error('SDP error:', err); setAudioStatus('Error'); });
     } else if (data.type === 'ice') {
-      if (pc) {
-        // Plain object — RTCIceCandidate constructor also deprecated on iOS
-        pc.addIceCandidate(data.candidate).catch(() => {});
-      }
+      if (pc) pc.addIceCandidate(data.candidate).catch(() => {});
     }
   }
 
@@ -599,7 +603,7 @@
   }
 
   // --- Reconnect ---
-  let noTokenMode = false; // set true when server auto-authenticates without token
+  let noTokenMode = false;
   function scheduleReconnect() {
     if (reconnectTimer) return;
     latencyEl.textContent = '--ms';
@@ -609,7 +613,7 @@
     }, 3000);
   }
 
-  // --- Log QSO Sheet ---
+  // --- Log QSO Sheet (hunter mode) ---
   function srcToSig(src) {
     const map = { pota: 'POTA', sota: 'SOTA', wwff: 'WWFF', llota: 'LLOTA' };
     return map[src] || '';
@@ -632,7 +636,6 @@
     logSig.value = p.sig || '';
     logSigInfo.value = p.sigInfo || '';
     logSaveBtn.disabled = false;
-
     logSheet.classList.remove('hidden', 'slide-down');
     logBackdrop.classList.remove('hidden');
     if (!p.callsign) logCall.focus();
@@ -647,14 +650,12 @@
     }, 250);
   }
 
-  // Update RST defaults when mode changes
   logMode.addEventListener('change', () => {
     const rst = defaultRst(logMode.value);
     logRstSent.value = rst;
     logRstRcvd.value = rst;
   });
 
-  // Bottom bar Log button — manual QSO with current freq/mode
   logBtn.addEventListener('click', () => {
     openLogSheet({
       freqKhz: currentFreqKhz ? String(Math.round(currentFreqKhz * 10) / 10) : '',
@@ -671,7 +672,6 @@
     const freq = logFreq.value.trim();
     if (!call) { logCall.focus(); return; }
     if (!freq || isNaN(parseFloat(freq))) { logFreq.focus(); return; }
-
     logSaveBtn.disabled = true;
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({
@@ -702,6 +702,459 @@
         logToast.classList.remove('fade-out', 'error');
       }, 400);
     }, 2500);
+  }
+
+  // =============================================
+  // ACTIVATOR MODE
+  // =============================================
+
+  // --- Activator state from desktop ---
+  function handleActivatorState(msg) {
+    const refs = msg.parkRefs || [];
+    phoneGrid = msg.grid || '';
+    // If desktop is in activator mode with a park, auto-start activation
+    if (msg.appMode === 'activator' && refs.length > 0 && refs[0].ref) {
+      if (!activationRunning || activationRef !== refs[0].ref) {
+        activationRef = refs[0].ref;
+        activationName = refs[0].name || '';
+        activationSig = 'POTA';
+        activationType = 'pota';
+        beginActivation();
+      }
+    }
+  }
+
+  // --- Tab Switching ---
+  tabBar.addEventListener('click', (e) => {
+    const tab = e.target.closest('.tab');
+    if (!tab) return;
+    switchTab(tab.dataset.tab);
+  });
+
+  function switchTab(tab) {
+    activeTab = tab;
+    tabBar.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    if (tab === 'spots') {
+      spotList.classList.remove('hidden');
+      sourceBar.classList.remove('hidden');
+      filterBar.classList.remove('hidden');
+      logView.classList.add('hidden');
+    } else {
+      spotList.classList.add('hidden');
+      sourceBar.classList.add('hidden');
+      filterBar.classList.add('hidden');
+      logView.classList.remove('hidden');
+      updateLogViewState();
+    }
+  }
+
+  function updateLogViewState() {
+    if (activationRunning) {
+      activationSetup.classList.add('hidden');
+      quickLogForm.classList.remove('hidden');
+      logFooter.classList.remove('hidden');
+      if (currentFreqKhz) qlFreq.value = String(Math.round(currentFreqKhz * 10) / 10);
+      if (currentMode) qlMode.value = currentMode;
+      qlCall.focus();
+    } else {
+      activationSetup.classList.remove('hidden');
+      quickLogForm.classList.add('hidden');
+      logFooter.classList.add('hidden');
+      setupRefInput.focus();
+    }
+  }
+
+  // --- Activation Type Chooser ---
+  document.querySelector('.setup-type-row').addEventListener('click', (e) => {
+    const btn = e.target.closest('.setup-type-btn');
+    if (!btn) return;
+    activationType = btn.dataset.type;
+    document.querySelectorAll('.setup-type-btn').forEach(b => b.classList.toggle('active', b === btn));
+    // Update label and placeholder
+    if (activationType === 'pota') {
+      setupRefLabel.textContent = 'Park Reference';
+      setupRefInput.placeholder = 'US-1234';
+    } else if (activationType === 'sota') {
+      setupRefLabel.textContent = 'Summit Reference';
+      setupRefInput.placeholder = 'W4C/CM-001';
+    } else {
+      setupRefLabel.textContent = 'Activation Name';
+      setupRefInput.placeholder = 'Field Day, VOTA, etc.';
+    }
+    // Reset
+    setupRefInput.value = '';
+    setupRefName.textContent = '';
+    setupRefDropdown.classList.add('hidden');
+    startActivationBtn.disabled = true;
+  });
+
+  // --- Reference Input with Autocomplete ---
+  setupRefInput.addEventListener('input', () => {
+    const query = setupRefInput.value.trim();
+    setupRefName.textContent = '';
+    activationName = '';
+
+    if (activationType === 'other') {
+      // Free text — no autocomplete, enable start when non-empty
+      startActivationBtn.disabled = !query;
+      setupRefDropdown.classList.add('hidden');
+      return;
+    }
+
+    if (query.length < 2) {
+      setupRefDropdown.classList.add('hidden');
+      startActivationBtn.disabled = true;
+      return;
+    }
+
+    // Enable button for typed refs (user might know the exact ref)
+    startActivationBtn.disabled = false;
+
+    // Debounced search
+    if (searchDebounce) clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'search-parks', query }));
+      }
+    }, 150);
+  });
+
+  setupRefInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      setupRefDropdown.classList.add('hidden');
+      if (!startActivationBtn.disabled) doStartActivation();
+    }
+  });
+
+  // Close dropdown when tapping outside
+  document.addEventListener('click', (e) => {
+    if (!setupRefDropdown.contains(e.target) && e.target !== setupRefInput) {
+      setupRefDropdown.classList.add('hidden');
+    }
+  });
+
+  function showSearchResults(results) {
+    if (!results.length) {
+      setupRefDropdown.classList.add('hidden');
+      return;
+    }
+    setupRefDropdown.innerHTML = results.slice(0, 8).map((r, i) =>
+      `<div class="setup-dropdown-item" data-idx="${i}">
+        <span class="sdi-ref">${esc(r.reference)}</span>
+        <span class="sdi-name">${esc(r.name || '')}</span>
+        <span class="sdi-loc">${esc(r.locationDesc || '')}</span>
+      </div>`
+    ).join('');
+    setupRefDropdown._results = results;
+    setupRefDropdown.classList.remove('hidden');
+  }
+
+  setupRefDropdown.addEventListener('click', (e) => {
+    const item = e.target.closest('.setup-dropdown-item');
+    if (!item) return;
+    const idx = parseInt(item.dataset.idx, 10);
+    const results = setupRefDropdown._results || [];
+    const park = results[idx];
+    if (!park) return;
+    setupRefInput.value = park.reference;
+    activationName = park.name || '';
+    setupRefName.textContent = activationName;
+    setupRefDropdown.classList.add('hidden');
+    startActivationBtn.disabled = false;
+  });
+
+  // --- Start Activation ---
+  startActivationBtn.addEventListener('click', doStartActivation);
+
+  function doStartActivation() {
+    const ref = setupRefInput.value.trim().toUpperCase();
+    if (!ref && activationType !== 'other') return;
+    const refOrName = activationType === 'other' ? setupRefInput.value.trim() : ref;
+    if (!refOrName) return;
+
+    activationRef = refOrName;
+    if (activationType === 'pota') activationSig = 'POTA';
+    else if (activationType === 'sota') activationSig = 'SOTA';
+    else activationSig = '';
+
+    // Tell server
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'set-activator-park',
+        parkRef: activationType !== 'other' ? ref : '',
+        activationType,
+        activationName: activationType === 'other' ? refOrName : '',
+        sig: activationSig,
+      }));
+    }
+
+    beginActivation();
+  }
+
+  function beginActivation() {
+    activationRunning = true;
+    activationStartTime = Date.now();
+    sessionContacts = [];
+
+    // Show banner
+    activationBanner.classList.remove('hidden');
+    activationRefEl.textContent = activationRef;
+    activationRefEl.className = 'activation-ref' + (activationType === 'sota' ? ' sota' : activationType === 'other' ? ' other' : '');
+    activationNameEl.textContent = activationName;
+    updateActivationTimer();
+    if (activationTimerInterval) clearInterval(activationTimerInterval);
+    activationTimerInterval = setInterval(updateActivationTimer, 1000);
+
+    // Update log view
+    updateLogViewState();
+    renderContacts();
+    updateLogBadge();
+    updateLogFooter();
+
+    // Auto-switch to log tab
+    switchTab('log');
+  }
+
+  function updateActivationTimer() {
+    const elapsed = Math.floor((Date.now() - activationStartTime) / 1000);
+    const h = Math.floor(elapsed / 3600);
+    const m = Math.floor((elapsed % 3600) / 60);
+    const s = elapsed % 60;
+    if (h > 0) {
+      activationTimerEl.textContent = `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    } else {
+      activationTimerEl.textContent = `${m}:${String(s).padStart(2, '0')}`;
+    }
+  }
+
+  // --- End Activation ---
+  endActivationBtn.addEventListener('click', () => {
+    if (sessionContacts.length > 0) {
+      if (!confirm(`End activation? ${sessionContacts.length} QSO${sessionContacts.length !== 1 ? 's' : ''} logged.`)) return;
+    }
+    endActivation();
+  });
+
+  function endActivation() {
+    activationRunning = false;
+    activationRef = '';
+    activationName = '';
+    activationSig = '';
+    if (activationTimerInterval) { clearInterval(activationTimerInterval); activationTimerInterval = null; }
+    activationBanner.classList.add('hidden');
+    // Reset setup form
+    setupRefInput.value = '';
+    setupRefName.textContent = '';
+    startActivationBtn.disabled = true;
+    updateLogViewState();
+  }
+
+  // --- Quick Log Form ---
+  qlLogBtn.addEventListener('click', submitQuickLog);
+  qlCall.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); submitQuickLog(); }
+  });
+
+  qlMode.addEventListener('change', () => {
+    const rst = defaultRst(qlMode.value);
+    qlRstSent.value = rst;
+    qlRstRcvd.value = rst;
+  });
+
+  function submitQuickLog() {
+    const call = qlCall.value.trim().toUpperCase();
+    if (!call) { qlCall.focus(); return; }
+    const freq = qlFreq.value.trim();
+    const mode = qlMode.value;
+    const rstSent = qlRstSent.value || defaultRst(mode);
+    const rstRcvd = qlRstRcvd.value || defaultRst(mode);
+
+    const data = {
+      callsign: call,
+      freqKhz: freq,
+      mode,
+      rstSent,
+      rstRcvd,
+    };
+
+    // Add activator fields
+    if (activationSig && activationRef) {
+      data.mySig = activationSig;
+      data.mySigInfo = activationRef;
+    }
+    if (phoneGrid) {
+      data.myGridsquare = phoneGrid;
+    }
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'log-qso', data }));
+      qlLogBtn.disabled = true;
+      setTimeout(() => { qlLogBtn.disabled = false; }, 3000);
+    } else {
+      // Offline — queue locally
+      const now = new Date();
+      offlineQueue.push({ ...data, _offline: true, _ts: now.toISOString() });
+      localStorage.setItem('echocat-offline-queue', JSON.stringify(offlineQueue));
+      sessionContacts.push({
+        nr: sessionContacts.length + 1,
+        callsign: call,
+        timeUtc: now.toISOString().slice(11, 16).replace(':', ''),
+        freqKhz: freq,
+        mode,
+        rstSent,
+        rstRcvd,
+        _offline: true,
+      });
+      renderContacts();
+      updateLogBadge();
+      showLogToast('Queued offline');
+    }
+
+    qlCall.value = '';
+    qlCall.focus();
+    if (currentFreqKhz) qlFreq.value = String(Math.round(currentFreqKhz * 10) / 10);
+  }
+
+  function handleLogOkContact(msg) {
+    const contact = {
+      nr: msg.nr,
+      callsign: msg.callsign || '',
+      timeUtc: msg.timeUtc || '',
+      freqKhz: msg.freqKhz || '',
+      mode: msg.mode || '',
+      band: msg.band || '',
+      rstSent: msg.rstSent || '',
+      rstRcvd: msg.rstRcvd || '',
+    };
+    const offIdx = sessionContacts.findIndex(c => c._offline && c.callsign === contact.callsign);
+    if (offIdx >= 0) sessionContacts.splice(offIdx, 1);
+    sessionContacts.push(contact);
+    renderContacts();
+    updateLogBadge();
+    qlLogBtn.disabled = false;
+  }
+
+  // --- Contact List ---
+  function renderContacts() {
+    if (sessionContacts.length === 0) {
+      contactList.innerHTML = '<div class="spot-empty">No contacts yet</div>';
+    } else {
+      const sorted = [...sessionContacts].reverse();
+      contactList.innerHTML = sorted.map(c => {
+        const offClass = c._offline ? ' offline' : '';
+        const time = c.timeUtc ? c.timeUtc.slice(0, 2) + ':' + c.timeUtc.slice(2, 4) : '';
+        const freq = c.freqKhz ? parseFloat(c.freqKhz).toFixed(1) : '';
+        return `<div class="contact-row${offClass}">
+          <span class="contact-nr">${c.nr || ''}</span>
+          <span class="contact-time">${esc(time)}</span>
+          <span class="contact-call">${esc(c.callsign)}</span>
+          <span class="contact-freq">${freq}</span>
+          <span class="contact-mode">${esc(c.mode || '')}</span>
+          <span class="contact-rst">${esc(c.rstSent || '')}/${esc(c.rstRcvd || '')}</span>
+        </div>`;
+      }).join('');
+    }
+    updateLogFooter();
+  }
+
+  function updateLogBadge() {
+    const count = sessionContacts.length;
+    tabLogBadge.textContent = count;
+    tabLogBadge.classList.toggle('hidden', count === 0);
+  }
+
+  function updateLogFooter() {
+    const total = sessionContacts.length;
+    const queued = offlineQueue.length;
+    logFooterCount.textContent = total + ' QSO' + (total !== 1 ? 's' : '');
+    if (queued > 0) {
+      logFooterQueued.textContent = queued + ' queued';
+      logFooterQueued.classList.remove('hidden');
+    } else {
+      logFooterQueued.classList.add('hidden');
+    }
+  }
+
+  // --- Offline Queue Drain ---
+  function drainOfflineQueue() {
+    if (offlineQueue.length === 0) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    showLogToast('Syncing ' + offlineQueue.length + ' offline QSO' + (offlineQueue.length > 1 ? 's' : '') + '...');
+    drainNext();
+  }
+
+  function drainNext() {
+    if (offlineQueue.length === 0) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const item = offlineQueue.shift();
+    localStorage.setItem('echocat-offline-queue', JSON.stringify(offlineQueue));
+    const data = { ...item };
+    delete data._offline;
+    delete data._ts;
+    ws.send(JSON.stringify({ type: 'log-qso', data }));
+    updateLogFooter();
+    setTimeout(drainNext, 300);
+  }
+
+  // --- ADIF Export ---
+  exportAdifBtn.addEventListener('click', exportAdif);
+
+  function exportAdif() {
+    const lines = ['POTACAT ECHO CAT ADIF Export\n<ADIF_VER:5>3.1.4\n<PROGRAMID:7>POTACAT\n<EOH>\n'];
+    for (const c of sessionContacts) {
+      if (c._offline) continue;
+      let rec = '';
+      rec += af('CALL', c.callsign);
+      if (c.freqKhz) rec += af('FREQ', (parseFloat(c.freqKhz) / 1000).toFixed(6));
+      if (c.mode) rec += af('MODE', c.mode);
+      if (c.band) rec += af('BAND', c.band);
+      if (c.timeUtc) {
+        const d = new Date();
+        const dateStr = d.getUTCFullYear() + String(d.getUTCMonth() + 1).padStart(2, '0') + String(d.getUTCDate()).padStart(2, '0');
+        rec += af('QSO_DATE', dateStr);
+        rec += af('TIME_ON', c.timeUtc);
+      }
+      if (c.rstSent) rec += af('RST_SENT', c.rstSent);
+      if (c.rstRcvd) rec += af('RST_RCVD', c.rstRcvd);
+      if (activationSig) rec += af('MY_SIG', activationSig);
+      if (activationRef) rec += af('MY_SIG_INFO', activationRef);
+      if (phoneGrid) rec += af('MY_GRIDSQUARE', phoneGrid);
+      rec += '<EOR>\n';
+      lines.push(rec);
+    }
+    for (const c of offlineQueue) {
+      let rec = '';
+      rec += af('CALL', c.callsign);
+      if (c.freqKhz) rec += af('FREQ', (parseFloat(c.freqKhz) / 1000).toFixed(6));
+      if (c.mode) rec += af('MODE', c.mode);
+      if (c.rstSent) rec += af('RST_SENT', c.rstSent);
+      if (c.rstRcvd) rec += af('RST_RCVD', c.rstRcvd);
+      if (c._ts) {
+        const d = new Date(c._ts);
+        const dateStr = d.getUTCFullYear() + String(d.getUTCMonth() + 1).padStart(2, '0') + String(d.getUTCDate()).padStart(2, '0');
+        rec += af('QSO_DATE', dateStr);
+        rec += af('TIME_ON', String(d.getUTCHours()).padStart(2, '0') + String(d.getUTCMinutes()).padStart(2, '0'));
+      }
+      if (activationSig) rec += af('MY_SIG', activationSig);
+      if (activationRef) rec += af('MY_SIG_INFO', activationRef);
+      if (phoneGrid) rec += af('MY_GRIDSQUARE', phoneGrid);
+      rec += '<EOR>\n';
+      lines.push(rec);
+    }
+    const blob = new Blob([lines.join('')], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (activationRef || 'echocat') + '_' + new Date().toISOString().slice(0, 10) + '.adi';
+    a.click();
+    URL.revokeObjectURL(url);
+    showLogToast('ADIF exported');
+  }
+
+  function af(name, val) {
+    if (!val) return '';
+    return `<${name}:${val.length}>${val}\n`;
   }
 
   // Refresh spot ages every 30s
@@ -744,7 +1197,6 @@
     ws.send(JSON.stringify({ type: 'switch-rig', rigId }));
   });
 
-  // Auto-connect on page load — if server doesn't require a token,
-  // it sends auth-ok immediately and we skip the token screen
+  // Auto-connect on page load
   connect('');
 })();
