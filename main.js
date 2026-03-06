@@ -4847,12 +4847,15 @@ app.whenReady().then(() => {
   });
 
   // --- QRZ Logbook API ---
-  ipcMain.handle('qrz-check-sub', async () => {
+  ipcMain.handle('qrz-check-sub', async (_e, force) => {
     if (!qrz.configured || !settings.enableQrz) {
       return { subscriber: false, expiry: '', error: 'QRZ not configured' };
     }
+    // Use cached subscription info if available (unless force recheck)
+    if (!force && qrz.subscriptionExpiry) {
+      return { subscriber: qrz.isSubscriber, expiry: qrz.subscriptionExpiry };
+    }
     try {
-      // Force fresh login to get current SubExp
       qrz._sessionKey = null;
       await qrz.login();
       return { subscriber: qrz.isSubscriber, expiry: qrz.subscriptionExpiry };

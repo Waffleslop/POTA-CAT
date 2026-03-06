@@ -1434,7 +1434,7 @@ qrzRecheckBtn.addEventListener('click', async () => {
   qrzSubStatus.style.color = '';
   qrzRecheckBtn.disabled = true;
   try {
-    const result = await window.api.qrzCheckSub();
+    const result = await window.api.qrzCheckSub(true);
     if (result.error) {
       qrzSubStatus.textContent = result.error;
       qrzSubStatus.style.color = '#e94560';

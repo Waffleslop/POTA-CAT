@@ -19,7 +19,7 @@ contextBridge.exposeInMainWorld('api', {
   onCatMode: (cb) => ipcRenderer.on('cat-mode', (_e, mode) => cb(mode)),
   onCatPower: (cb) => ipcRenderer.on('cat-power', (_e, watts) => cb(watts)),
   qrzLookup: (callsign) => ipcRenderer.invoke('qrz-lookup', callsign),
-  qrzCheckSub: () => ipcRenderer.invoke('qrz-check-sub'),
+  qrzCheckSub: (force) => ipcRenderer.invoke('qrz-check-sub', force),
   qrzVerifyApiKey: (key) => ipcRenderer.invoke('qrz-verify-api-key', key),
   getReleaseNotes: (version) => ipcRenderer.invoke('get-release-notes', version),
   importAdif: () => ipcRenderer.invoke('import-adif'),
