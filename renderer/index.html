@@ -104,7 +104,7 @@
           <div class="spots-panel-divider"></div>
           <div class="echo-cat-quick">
             <label class="switch-label compact">
-              <span>ECHO CAT</span>
+              <span>ECHOCAT</span>
               <div class="switch"><input type="checkbox" id="quick-echo-cat"><span class="switch-slider"></span></div>
             </label>
             <div id="echo-cat-info" class="echo-cat-info hidden">
@@ -132,7 +132,7 @@
     <div class="status-bar">
       <span id="utc-clock" class="utc-clock"></span>
       <span id="cat-status" class="status disconnected">CAT</span>
-      <span id="remote-tx-indicator" class="status hidden" style="background:#e94560;color:#fff;font-weight:bold;animation:tx-blink 1s ease-in-out infinite;">ECHO CAT TX</span>
+      <span id="remote-tx-indicator" class="status hidden" style="background:#e94560;color:#fff;font-weight:bold;animation:tx-blink 1s ease-in-out infinite;">ECHOCAT TX</span>
       <span id="wsjtx-status" class="status disconnected hidden">WSJT-X</span>
       <span id="cw-keyer-status" class="status hidden" style="background:#b8860b;color:#fff;cursor:pointer;">CW</span>
       <span id="cw-text-display" class="hidden" style="font-family:monospace;font-size:11px;color:#4fc3f7;margin-left:4px;max-width:300px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;direction:rtl;text-align:left;"></span>
@@ -676,7 +676,7 @@
           <label>Port: <input type="number" id="set-rigctldnet-port" min="1" max="65535" value="4532"></label>
         </div>
         <details id="rig-audio-details" style="margin-top:8px;">
-          <summary style="cursor:pointer;font-size:13px;color:#4fc3f7;">ECHO CAT Audio (optional)</summary>
+          <summary style="cursor:pointer;font-size:13px;color:#4fc3f7;">ECHOCAT Audio (optional)</summary>
           <div style="margin-top:6px;margin-left:4px;">
             <label>Audio Input (radio RX &rarr; phone):
               <select id="rig-remote-audio-input" style="width:100%;margin-top:2px;"><option value="">-- system default --</option></select>
@@ -684,7 +684,7 @@
             <label style="margin-top:4px;display:block;">Audio Output (phone &rarr; radio TX):
               <select id="rig-remote-audio-output" style="width:100%;margin-top:2px;"><option value="">-- system default --</option></select>
             </label>
-            <span class="help-text" style="margin-top:4px;display:block;">Set per-rig audio devices for ECHO CAT remote operation</span>
+            <span class="help-text" style="margin-top:4px;display:block;">Set per-rig audio devices for ECHOCAT remote operation</span>
           </div>
         </details>
         <div class="rig-editor-buttons">
@@ -1041,10 +1041,10 @@
         </div>
       </div>
     </fieldset>
-    <!-- 10. ECHO CAT -->
+    <!-- 10. ECHOCAT -->
     <fieldset class="source-toggles">
-      <legend>ECHO CAT</legend>
-      <label class="checkbox-label"><input type="checkbox" id="set-enable-remote"> Enable ECHO CAT (phone browser over Tailscale)</label>
+      <legend>ECHOCAT</legend>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-remote"> Enable ECHOCAT (phone browser over Tailscale)</label>
       <div id="remote-config" class="radio-sub hidden" style="margin-top:6px;margin-left:12px;">
         <label>Port:
           <input type="number" id="set-remote-port" placeholder="7300" min="1024" max="65535" value="7300" style="width:80px;">
@@ -1066,7 +1066,7 @@
           </label>
         </div>
         <div id="remote-url-display" style="margin-top:8px;font-family:monospace;font-size:12px;"></div>
-        <span class="help-text">To use ECHO CAT securely outside your home network, install <a href="https://tailscale.com" target="_blank" style="color:#4fc3f7;">Tailscale</a> on both your shack computer and phone. Audio, tuning, and PTT are all encrypted over the Tailscale VPN.</span>
+        <span class="help-text">To use ECHOCAT securely outside your home network, install <a href="https://tailscale.com" target="_blank" style="color:#4fc3f7;">Tailscale</a> on both your shack computer and phone. Audio, tuning, and PTT are all encrypted over the Tailscale VPN.</span>
       </div>
     </fieldset>
     <!-- 11. About (merged Privacy + Diagnostics) -->

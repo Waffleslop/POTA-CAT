@@ -1,4 +1,4 @@
-// ECHO CAT — Phone-side client
+// ECHOCAT — Phone-side client
 // Runs in Safari/Chrome, no Electron dependencies
 (function () {
   'use strict';
@@ -1290,7 +1290,7 @@
   exportAdifBtn.addEventListener('click', exportAdif);
 
   function exportAdif() {
-    const lines = ['POTACAT ECHO CAT ADIF Export\n<ADIF_VER:5>3.1.4\n<PROGRAMID:7>POTACAT\n<EOH>\n'];
+    const lines = ['POTACAT ECHOCAT ADIF Export\n<ADIF_VER:5>3.1.4\n<PROGRAMID:7>POTACAT\n<EOH>\n'];
     for (const c of sessionContacts) {
       if (c._offline) continue;
       let rec = '';
