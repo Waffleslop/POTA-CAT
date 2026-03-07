@@ -18,6 +18,16 @@
   let localAudioStream = null;
   let audioEnabled = false;
   let remoteAudio = null; // <audio> element for playback
+  let speakerMode = false;
+
+  // Scan
+  let scanning = false;
+  let scanIndex = 0;
+  let scanTimer = null;
+  let scanDwell = 7;
+
+  // Refresh rate
+  let refreshInterval = 30;
 
   // --- Elements ---
   const connectScreen = document.getElementById('connect-screen');
@@ -38,7 +48,6 @@
   const statusBar = document.getElementById('status-bar');
   const freqInput = document.getElementById('freq-input');
   const freqGo = document.getElementById('freq-go');
-  const logBtn = document.getElementById('log-btn');
   const logSheet = document.getElementById('log-sheet');
   const logBackdrop = document.getElementById('log-sheet-backdrop');
   const logForm = document.getElementById('log-form');
@@ -52,8 +61,13 @@
   const logSaveBtn = document.getElementById('log-save');
   const logCancelBtn = document.getElementById('log-cancel');
   const logToast = document.getElementById('log-toast');
-  const rigBar = document.getElementById('rig-bar');
+  const rcRigGroup = document.getElementById('rc-rig');
+  const rcRigSep = document.getElementById('rc-rig-sep');
   const rigSelect = document.getElementById('rig-select');
+  const speakerBtn = document.getElementById('speaker-btn');
+  const scanBar = document.getElementById('scan-bar');
+  const scanBtn = document.getElementById('scan-btn');
+  const refreshRateBtn = document.getElementById('refresh-rate-btn');
   let currentFreqKhz = 0;
   let currentMode = '';
   let tunedFreqKhz = '';
@@ -79,7 +93,7 @@
       root.style.setProperty('--rbn', CB_COLORS.rbn);
       root.style.setProperty('--pskr', CB_COLORS.pskr);
       // Update inline style attributes on source chips
-      document.querySelectorAll('.source-chip[data-src], .setup-type-btn[data-type]').forEach(el => {
+      document.querySelectorAll('.source-chip[data-src], .setup-type-btn[data-type], .lt-type-chip[data-type]').forEach(el => {
         const src = el.dataset.src || el.dataset.type;
         if (CB_COLORS[src]) el.style.setProperty('--src-color', CB_COLORS[src]) || el.style.setProperty('--type-color', CB_COLORS[src]);
       });
@@ -107,6 +121,18 @@
   let searchDebounce = null;
   let workedParksSet = new Set();  // park refs from CSV for new-to-me filter
   let showNewOnly = false;
+  let workedQsos = new Map();     // callsign → [{date, ref, band, mode}]
+  let hideWorked = false;
+  let clusterConnected = false;
+  let myCallsign = '';
+  let logSelectedType = '';
+  let respotDefault = true;
+  let respotTemplate = '{rst} in {QTH} 73s {mycallsign} via POTACAT';
+  let dxRespotTemplate = 'Heard in {QTH} 73s {mycallsign} via POTACAT';
+
+  // --- Past Activations state ---
+  let pastActivations = [];
+  let actMap = null; // Leaflet map instance
 
   // --- Activator elements ---
   const activationBanner = document.getElementById('activation-banner');
@@ -115,7 +141,7 @@
   const activationTimerEl = document.getElementById('activation-timer');
   const endActivationBtn = document.getElementById('end-activation-btn');
   const tabBar = document.getElementById('tab-bar');
-  const tabLogBadge = document.getElementById('tab-log-badge');
+  // tabLogBadge removed — badge is now on Activate tab (tabActivateBadge)
   const logView = document.getElementById('log-view');
   const activationSetup = document.getElementById('activation-setup');
   const setupRefInput = document.getElementById('setup-ref-input');
@@ -138,6 +164,55 @@
   const sourceBar = document.getElementById('source-bar');
   const filterBar = document.getElementById('filter-bar');
   const newOnlyChip = document.getElementById('new-only-chip');
+  const hideWorkedChip = document.getElementById('hide-worked-chip');
+  const logRefSection = document.getElementById('log-ref-section');
+  const logRefInput = document.getElementById('log-ref-input');
+  const logRefName = document.getElementById('log-ref-name');
+  const logAddlSection = document.getElementById('log-addl-section');
+  const logAddlCb = document.getElementById('log-addl-cb');
+  const logAddlInputs = document.getElementById('log-addl-inputs');
+  const logAddl1 = document.getElementById('log-addl-1');
+  const logAddl2 = document.getElementById('log-addl-2');
+  const logAddlAdd = document.getElementById('log-addl-add');
+  const logRespotSection = document.getElementById('log-respot-section');
+  const logRespotCb = document.getElementById('log-respot-cb');
+  const logRespotLabel = document.getElementById('log-respot-label');
+  const logRespotCommentWrap = document.getElementById('log-respot-comment-wrap');
+  const logRespotComment = document.getElementById('log-respot-comment');
+
+  // Past activations elements
+  const pastActivationsDiv = document.getElementById('past-activations');
+  const paList = document.getElementById('pa-list');
+  const actMapOverlay = document.getElementById('act-map-overlay');
+  const actMapEl = document.getElementById('act-map');
+  const actMapBack = document.getElementById('act-map-back');
+  const actMapTitle = document.getElementById('act-map-title');
+  const actMapCount = document.getElementById('act-map-count');
+
+  // Log tab elements
+  const logTabView = document.getElementById('log-tab-view');
+  const ltCall = document.getElementById('lt-call');
+  const ltFreq = document.getElementById('lt-freq');
+  const ltMode = document.getElementById('lt-mode');
+  const ltRstSent = document.getElementById('lt-rst-sent');
+  const ltRstRcvd = document.getElementById('lt-rst-rcvd');
+  const ltRefSection = document.getElementById('lt-ref-section');
+  const ltRefInput = document.getElementById('lt-ref-input');
+  const ltRefName = document.getElementById('lt-ref-name');
+  const ltCallHint = document.getElementById('lt-call-hint');
+  const ltAddlSection = document.getElementById('lt-addl-section');
+  const ltAddlCb = document.getElementById('lt-addl-cb');
+  const ltAddlInputs = document.getElementById('lt-addl-inputs');
+  const ltAddl1 = document.getElementById('lt-addl-1');
+  const ltAddl2 = document.getElementById('lt-addl-2');
+  const ltAddlAdd = document.getElementById('lt-addl-add');
+  const ltRespotSection = document.getElementById('lt-respot-section');
+  const ltRespotLabel = document.getElementById('lt-respot-label');
+  const ltRespotCommentWrap = document.getElementById('lt-respot-comment-wrap');
+  const ltRespotComment = document.getElementById('lt-respot-comment');
+  const ltSave = document.getElementById('lt-save');
+  const tabActivateBadge = document.getElementById('tab-activate-badge');
+  let ltSelectedType = 'dx';
 
   // Rig controls elements
   const rigCtrlToggle = document.getElementById('rig-ctrl-toggle');
@@ -152,6 +227,14 @@
   const rcAtuGroup = document.getElementById('rc-atu');
   const rcAtuSep = document.getElementById('rc-atu-sep');
   const rcAtuBtn = document.getElementById('rc-atu-btn');
+  const rcRfGainGroup = document.getElementById('rc-rfgain');
+  const rcRfGainSep = document.getElementById('rc-rfgain-sep');
+  const rcRfGainSlider = document.getElementById('rc-rfgain-slider');
+  const rcRfGainVal = document.getElementById('rc-rfgain-val');
+  const rcTxPowerGroup = document.getElementById('rc-txpower');
+  const rcTxPowerSep = document.getElementById('rc-txpower-sep');
+  const rcTxPowerSlider = document.getElementById('rc-txpower-slider');
+  const rcTxPowerVal = document.getElementById('rc-txpower-val');
   const rcVfoA = document.getElementById('rc-vfo-a');
   const rcVfoB = document.getElementById('rc-vfo-b');
   const rcVfoSwap = document.getElementById('rc-vfo-swap');
@@ -216,7 +299,19 @@
         startPing();
         showWelcome();
         drainOfflineQueue();
+        if (activeTab === 'spots') scanBar.classList.remove('hidden');
         if (msg.colorblindMode) applyRemoteColorblind(true);
+        if (msg.settings) {
+          myCallsign = msg.settings.myCallsign || '';
+          phoneGrid = msg.settings.grid || phoneGrid;
+          clusterConnected = !!msg.settings.clusterConnected;
+          respotDefault = msg.settings.respotDefault !== false;
+          if (msg.settings.respotTemplate) respotTemplate = msg.settings.respotTemplate;
+          if (msg.settings.dxRespotTemplate) dxRespotTemplate = msg.settings.dxRespotTemplate;
+          scanDwell = msg.settings.scanDwell || 7;
+          refreshInterval = msg.settings.refreshInterval || 30;
+          refreshRateBtn.textContent = refreshInterval + 's';
+        }
         break;
 
       case 'colorblind-mode':
@@ -275,9 +370,14 @@
 
       case 'log-ok':
         logSaveBtn.disabled = false;
+        ltSave.disabled = false;
         if (msg.success) {
           closeLogSheet();
-          showLogToast('Logged ' + (msg.callsign || ''));
+          resetLogTabForm();
+          let toastMsg = 'Logged ' + (msg.callsign || '');
+          if (msg.resposted) toastMsg += ' \u2014 re-spotted';
+          if (msg.respotError) toastMsg += ' (respot failed)';
+          showLogToast(toastMsg);
           if (msg.nr !== undefined) {
             handleLogOkContact(msg);
           }
@@ -302,8 +402,27 @@
         renderSpots();
         break;
 
+      case 'worked-qsos':
+        workedQsos = new Map(msg.entries || []);
+        hideWorkedChip.classList.toggle('hidden', workedQsos.size === 0);
+        renderSpots();
+        break;
+
+      case 'cluster-state':
+        clusterConnected = !!msg.connected;
+        break;
+
       case 'park-results':
         showSearchResults(msg.results || []);
+        break;
+
+      case 'past-activations':
+        pastActivations = msg.data || [];
+        renderPastActivations();
+        break;
+
+      case 'activation-map-data':
+        showActivationMap(msg.data);
         break;
 
       case 'signal':
@@ -335,6 +454,7 @@
       txState = s.txState;
       txBanner.classList.toggle('hidden', !s.txState);
       rigControls.classList.toggle('disabled', s.txState);
+      if (s.txState && scanning) stopScan();
       if (!s.txState && pttDown) {
         pttDown = false;
         pttBtn.classList.remove('active');
@@ -359,15 +479,27 @@
       currentFilterWidth = s.filterWidth;
       rcBwLabel.textContent = formatBw(s.filterWidth);
     }
+    if (s.rfgain !== undefined) {
+      rcRfGainSlider.value = s.rfgain;
+      rcRfGainVal.textContent = s.rfgain;
+    }
+    if (s.txpower !== undefined) {
+      rcTxPowerSlider.value = s.txpower;
+      rcTxPowerVal.textContent = s.txpower;
+    }
     if (s.capabilities) {
       rigCapabilities = s.capabilities;
       rcFilterGroup.classList.toggle('hidden', !s.capabilities.filter);
       rcNbGroup.classList.toggle('hidden', !s.capabilities.nb);
       rcAtuGroup.classList.toggle('hidden', !s.capabilities.atu);
       rcAtuSep.classList.toggle('hidden', !s.capabilities.atu);
+      rcRfGainGroup.classList.toggle('hidden', !s.capabilities.rfgain);
+      rcRfGainSep.classList.toggle('hidden', !s.capabilities.rfgain);
+      rcTxPowerGroup.classList.toggle('hidden', !s.capabilities.txpower);
+      rcTxPowerSep.classList.toggle('hidden', !s.capabilities.txpower);
       rcVfoGroup.classList.toggle('hidden', !s.capabilities.vfo);
       // Hide gear icon if no capabilities at all
-      const anyCapability = s.capabilities.filter || s.capabilities.nb || s.capabilities.atu || s.capabilities.vfo;
+      const anyCapability = s.capabilities.filter || s.capabilities.nb || s.capabilities.atu || s.capabilities.vfo || s.capabilities.rfgain || s.capabilities.txpower;
       rigCtrlToggle.classList.toggle('hidden', !anyCapability);
     }
   }
@@ -392,20 +524,38 @@
       s.reference && !workedParksSet.has(s.reference);
   }
 
-  function renderSpots() {
+  function isWorkedSpot(s) {
+    const entries = workedQsos.get((s.callsign || '').toUpperCase());
+    if (!entries || entries.length === 0) return false;
+    const now = new Date();
+    const todayUtc = now.getUTCFullYear().toString() +
+      String(now.getUTCMonth() + 1).padStart(2, '0') +
+      String(now.getUTCDate()).padStart(2, '0');
+    const todayQsos = entries.filter(e => e.date === todayUtc);
+    if (todayQsos.length === 0) return false;
+    const spotBand = (s.band || '').toUpperCase();
+    const spotMode = (s.mode || '').toUpperCase();
+    if (spotBand || spotMode) {
+      return todayQsos.some(e =>
+        (!spotBand || e.band === spotBand) &&
+        (!spotMode || e.mode === spotMode)
+      );
+    }
+    return true;
+  }
+
+  function hasWorkedCallsign(s) {
+    return workedQsos.has((s.callsign || '').toUpperCase());
+  }
+
+  function getFilteredSpots() {
     const filtered = spots.filter(s => {
       if (bandFilter !== 'all' && s.band !== bandFilter) return false;
       if (showNewOnly && !isNewPark(s)) return false;
+      if (hideWorked && isWorkedSpot(s)) return false;
       return true;
     });
-
-    if (filtered.length === 0) {
-      spotList.innerHTML = '<div class="spot-empty">No spots</div>';
-      return;
-    }
-
     filtered.sort((a, b) => {
-      // Pin net spots to top
       const aNet = a.source === 'net' ? 1 : 0;
       const bNet = b.source === 'net' ? 1 : 0;
       if (aNet !== bNet) return bNet - aNet;
@@ -413,12 +563,26 @@
       const tb = parseSpotTime(b.spotTime);
       return tb - ta;
     });
+    return filtered;
+  }
+
+  function renderSpots() {
+    const filtered = getFilteredSpots();
+
+    if (filtered.length === 0) {
+      spotList.innerHTML = '<div class="spot-empty">No spots</div>';
+      return;
+    }
 
     spotList.innerHTML = filtered.map(s => {
       const srcClass = 'source-' + (s.source || 'pota');
       const tunedClass = (tunedFreqKhz && s.frequency === tunedFreqKhz) ? ' tuned' : '';
       const newPark = isNewPark(s);
       const newClass = newPark ? ' new-park' : '';
+      const workedToday = isWorkedSpot(s);
+      const workedEver = !workedToday && hasWorkedCallsign(s);
+      const workedClass = workedToday ? ' worked-today' : workedEver ? ' worked' : '';
+      const workedCheck = (workedToday || workedEver) ? '<span class="worked-check">\u2713</span>' : '';
       const refClass = s.source === 'sota' ? 'sota' : s.source === 'dxc' ? 'dxc' : '';
       const ref = s.reference || s.locationDesc || '';
       const isNet = s.source === 'net';
@@ -427,8 +591,8 @@
       const src = s.source || 'pota';
       const newBadge = newPark ? '<span class="new-badge">NEW</span>' : '';
       const logBtn = isNet ? '' : '<button type="button" class="spot-log-btn">Log</button>';
-      return `<div class="spot-card ${srcClass}${tunedClass}${newClass}" data-freq="${s.frequency}" data-mode="${s.mode || ''}" data-bearing="${s.bearing || ''}" data-call="${esc(s.callsign)}" data-ref="${esc(ref)}" data-src="${src}">
-        <span class="spot-call">${esc(s.callsign)}${newBadge}</span>
+      return `<div class="spot-card ${srcClass}${tunedClass}${newClass}${workedClass}" data-freq="${s.frequency}" data-mode="${s.mode || ''}" data-bearing="${s.bearing || ''}" data-call="${esc(s.callsign)}" data-ref="${esc(ref)}" data-src="${src}">
+        <span class="spot-call">${workedCheck}${esc(s.callsign)}${newBadge}</span>
         <span class="spot-freq">${freqStr}</span>
         <span class="spot-mode">${esc(s.mode || '?')}</span>
         <span class="spot-ref ${refClass}">${esc(ref)}</span>
@@ -531,6 +695,12 @@
   newOnlyChip.addEventListener('click', () => {
     showNewOnly = !showNewOnly;
     newOnlyChip.classList.toggle('active', showNewOnly);
+    renderSpots();
+  });
+
+  hideWorkedChip.addEventListener('click', () => {
+    hideWorked = !hideWorked;
+    hideWorkedChip.classList.toggle('active', hideWorked);
     renderSpots();
   });
 
@@ -672,6 +842,27 @@
     }
   });
 
+  // RF Gain slider
+  rcRfGainSlider.addEventListener('input', () => {
+    rcRfGainVal.textContent = rcRfGainSlider.value;
+  });
+  rcRfGainSlider.addEventListener('change', () => {
+    if (txState) return;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'set-rfgain', value: parseInt(rcRfGainSlider.value) }));
+    }
+  });
+
+  // TX Power slider
+  rcTxPowerSlider.addEventListener('input', () => {
+    rcTxPowerVal.textContent = rcTxPowerSlider.value;
+  });
+  rcTxPowerSlider.addEventListener('change', () => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'set-txpower', value: parseInt(rcTxPowerSlider.value) }));
+    }
+  });
+
   // --- Audio (WebRTC) ---
   audioBtn.addEventListener('click', async () => {
     if (audioEnabled) {
@@ -738,6 +929,7 @@
       audioEnabled = true;
       audioBtn.classList.add('active');
       audioDot.classList.remove('hidden');
+      speakerBtn.classList.remove('hidden');
     } catch (err) {
       console.error('Audio error:', err);
       setAudioStatus('Error');
@@ -750,7 +942,10 @@
     if (remoteAudio) { remoteAudio.srcObject = null; }
     audioEnabled = false;
     micReady = false;
+    speakerMode = false;
     audioBtn.classList.remove('active');
+    speakerBtn.classList.add('hidden');
+    speakerBtn.classList.remove('active');
     audioDot.classList.add('hidden');
     audioDot.classList.remove('connected');
     setAudioStatus('Audio');
@@ -775,6 +970,72 @@
       if (pc) pc.addIceCandidate(data.candidate).catch(() => {});
     }
   }
+
+  // --- Speaker Toggle ---
+  speakerBtn.addEventListener('click', () => {
+    if (!remoteAudio) return;
+    if (typeof remoteAudio.setSinkId !== 'function') {
+      alert('Speaker toggle is not supported on this browser.\nUse your phone\'s speaker button instead.');
+      return;
+    }
+    speakerMode = !speakerMode;
+    remoteAudio.setSinkId(speakerMode ? 'default' : 'communications')
+      .then(() => { speakerBtn.classList.toggle('active', speakerMode); })
+      .catch(() => { alert('Could not switch audio output.'); speakerMode = !speakerMode; });
+  });
+
+  // --- Scan ---
+  function startScan() {
+    const list = getFilteredSpots();
+    if (!list.length) return;
+    scanning = true;
+    scanIndex = 0;
+    if (currentFreqKhz) {
+      const match = list.findIndex(s => Math.abs(parseFloat(s.frequency) - currentFreqKhz) < 1);
+      if (match !== -1) scanIndex = match;
+    }
+    scanBtn.textContent = 'Stop';
+    scanBtn.classList.add('scan-active');
+    scanStep();
+  }
+
+  function scanStep() {
+    if (!scanning) return;
+    const list = getFilteredSpots();
+    if (!list.length) { stopScan(); return; }
+    if (scanIndex >= list.length) scanIndex = 0;
+    const spot = list[scanIndex];
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'tune', freqKhz: spot.frequency, mode: spot.mode, bearing: spot.bearing ? parseFloat(spot.bearing) : undefined }));
+    }
+    tunedFreqKhz = spot.frequency;
+    currentFreqKhz = parseFloat(spot.frequency);
+    if (spot.mode) currentMode = spot.mode;
+    renderSpots();
+    scanTimer = setTimeout(() => { scanIndex++; scanStep(); }, scanDwell * 1000);
+  }
+
+  function stopScan() {
+    scanning = false;
+    if (scanTimer) { clearTimeout(scanTimer); scanTimer = null; }
+    scanBtn.textContent = 'Scan';
+    scanBtn.classList.remove('scan-active');
+  }
+
+  scanBtn.addEventListener('click', () => {
+    if (scanning) stopScan(); else startScan();
+  });
+
+  // --- Refresh Rate ---
+  const REFRESH_PRESETS = [15, 30, 60, 120];
+  refreshRateBtn.addEventListener('click', () => {
+    const idx = REFRESH_PRESETS.indexOf(refreshInterval);
+    refreshInterval = REFRESH_PRESETS[(idx + 1) % REFRESH_PRESETS.length];
+    refreshRateBtn.textContent = refreshInterval + 's';
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'set-refresh-interval', value: refreshInterval }));
+    }
+  });
 
   // --- Ping / Latency ---
   function startPing() {
@@ -810,6 +1071,267 @@
     return '59';
   }
 
+  function selectLogType(type) {
+    logSelectedType = type;
+    document.querySelectorAll('.log-type-chip').forEach(c => {
+      c.classList.toggle('active', c.dataset.type === type);
+    });
+    const hasRef = type && type !== 'dx';
+    logRefSection.classList.toggle('hidden', !hasRef);
+    // Show additional parks for POTA/WWFF/LLOTA only
+    const hasAddl = type === 'pota' || type === 'wwff' || type === 'llota';
+    logAddlSection.classList.toggle('hidden', !hasAddl);
+    // Set placeholder per type
+    const placeholders = { pota: 'e.g. US-1234', sota: 'e.g. W4C/CM-001', wwff: 'e.g. KFF-1234', llota: 'e.g. US-0001' };
+    logRefInput.placeholder = placeholders[type] || 'Reference';
+    updateLogRespot();
+  }
+
+  function updateLogRespot() {
+    const type = logSelectedType;
+    const ref = (logRefInput.value || '').trim().toUpperCase();
+    const targets = [];
+    if (type === 'pota' && ref && myCallsign) targets.push('pota');
+    if (type === 'wwff' && ref && myCallsign) targets.push('wwff');
+    if (type === 'llota' && ref) targets.push('llota');
+    if ((type === 'dx' || !type) && clusterConnected && myCallsign) targets.push('dxc');
+
+    if (targets.length === 0) {
+      logRespotSection.classList.add('hidden');
+      return;
+    }
+    logRespotSection.classList.remove('hidden');
+    // Label text
+    const labels = { pota: 'Re-spot on POTA', wwff: 'Re-spot on WWFF', llota: 'Re-spot on LLOTA', dxc: 'Spot on DX Cluster' };
+    const parts = targets.map(t => labels[t] || t);
+    logRespotLabel.innerHTML = '<input type="checkbox" id="log-respot-cb"> ' + parts.join(' + ');
+    // Re-acquire checkbox ref since we replaced innerHTML
+    const cb = document.getElementById('log-respot-cb');
+    cb.checked = respotDefault;
+    logRespotCommentWrap.classList.toggle('hidden', !cb.checked);
+    cb.addEventListener('change', () => {
+      logRespotCommentWrap.classList.toggle('hidden', !cb.checked);
+    });
+    // Pre-fill comment template
+    const tmpl = targets.includes('dxc') ? dxRespotTemplate : respotTemplate;
+    const rstVal = logRstSent.value || '59';
+    logRespotComment.value = tmpl
+      .replace(/\{rst\}/gi, rstVal)
+      .replace(/\{QTH\}/gi, phoneGrid || '')
+      .replace(/\{mycallsign\}/gi, myCallsign || '');
+    // Store targets for submit
+    logRespotSection.dataset.targets = targets.join(',');
+  }
+
+  // =============================================
+  // LOG TAB (standalone full-tab logging form)
+  // =============================================
+
+  function refreshLogTabFields() {
+    // Pre-fill freq/mode from radio state
+    if (currentFreqKhz && !ltFreq.value) {
+      ltFreq.value = String(Math.round(currentFreqKhz * 10) / 10);
+    }
+    if (currentMode && ltMode.value === 'SSB') {
+      ltMode.value = currentMode;
+    }
+    if (!ltRstSent.value) ltRstSent.value = defaultRst(ltMode.value);
+    if (!ltRstRcvd.value) ltRstRcvd.value = defaultRst(ltMode.value);
+    ltCall.focus();
+  }
+
+  function selectLtType(type) {
+    ltSelectedType = type;
+    document.querySelectorAll('.lt-type-chip').forEach(c => {
+      c.classList.toggle('active', c.dataset.type === type);
+    });
+    const hasRef = type && type !== 'dx';
+    ltRefSection.classList.toggle('hidden', !hasRef);
+    ltCallHint.classList.toggle('hidden', !hasRef);
+    const hasAddl = type === 'pota' || type === 'wwff' || type === 'llota';
+    ltAddlSection.classList.toggle('hidden', !hasAddl);
+    const placeholders = { pota: 'e.g. US-1234', sota: 'e.g. W4C/CM-001', wwff: 'e.g. KFF-1234', llota: 'e.g. US-0001' };
+    ltRefInput.placeholder = placeholders[type] || 'Reference';
+    updateLtRespot();
+  }
+
+  function updateLtRespot() {
+    const type = ltSelectedType;
+    const ref = (ltRefInput.value || '').trim().toUpperCase();
+    const targets = [];
+    if (type === 'pota' && ref && myCallsign) targets.push('pota');
+    if (type === 'wwff' && ref && myCallsign) targets.push('wwff');
+    if (type === 'llota' && ref) targets.push('llota');
+    if ((type === 'dx' || !type) && clusterConnected && myCallsign) targets.push('dxc');
+
+    if (targets.length === 0) {
+      ltRespotSection.classList.add('hidden');
+      return;
+    }
+    ltRespotSection.classList.remove('hidden');
+    const labels = { pota: 'Re-spot on POTA', wwff: 'Re-spot on WWFF', llota: 'Re-spot on LLOTA', dxc: 'Spot on DX Cluster' };
+    const parts = targets.map(t => labels[t] || t);
+    ltRespotLabel.innerHTML = '<input type="checkbox" id="lt-respot-cb"> ' + parts.join(' + ');
+    const cb = document.getElementById('lt-respot-cb');
+    cb.checked = respotDefault;
+    ltRespotCommentWrap.classList.toggle('hidden', !cb.checked);
+    cb.addEventListener('change', () => {
+      ltRespotCommentWrap.classList.toggle('hidden', !cb.checked);
+    });
+    const tmpl = targets.includes('dxc') ? dxRespotTemplate : respotTemplate;
+    const rstVal = ltRstSent.value || '59';
+    ltRespotComment.value = tmpl
+      .replace(/\{rst\}/gi, rstVal)
+      .replace(/\{QTH\}/gi, phoneGrid || '')
+      .replace(/\{mycallsign\}/gi, myCallsign || '');
+    ltRespotSection.dataset.targets = targets.join(',');
+  }
+
+  // Log tab type picker
+  document.getElementById('lt-type-picker').addEventListener('click', (e) => {
+    const chip = e.target.closest('.lt-type-chip');
+    if (!chip) return;
+    selectLtType(chip.dataset.type);
+  });
+
+  // Log tab additional parks
+  ltAddlCb.addEventListener('change', () => {
+    ltAddlInputs.classList.toggle('hidden', !ltAddlCb.checked);
+    if (!ltAddlCb.checked) {
+      ltAddl1.value = '';
+      ltAddl2.value = '';
+      ltAddl2.classList.add('hidden');
+    }
+  });
+  ltAddlAdd.addEventListener('click', () => {
+    ltAddl2.classList.remove('hidden');
+    ltAddlAdd.classList.add('hidden');
+  });
+
+  // Log tab ref input → update respot
+  ltRefInput.addEventListener('input', updateLtRespot);
+
+  // Log tab mode change → update RST defaults + respot
+  ltMode.addEventListener('change', () => {
+    const rst = defaultRst(ltMode.value);
+    ltRstSent.value = rst;
+    ltRstRcvd.value = rst;
+    updateLtRespot();
+  });
+
+  // Log tab Save button
+  ltSave.addEventListener('click', submitLogTab);
+  ltCall.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); submitLogTab(); }
+  });
+
+  function submitLogTab() {
+    const raw = ltCall.value.trim().toUpperCase();
+    const freq = ltFreq.value.trim();
+    if (!raw) { ltCall.focus(); return; }
+    if (!freq || isNaN(parseFloat(freq))) { ltFreq.focus(); return; }
+
+    // Split comma-separated callsigns (multi-op at same park)
+    const calls = raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+    if (!calls.length) { ltCall.focus(); return; }
+
+    ltSave.disabled = true;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      const typeToSig = { pota: 'POTA', sota: 'SOTA', wwff: 'WWFF', llota: 'LLOTA' };
+      const sig = typeToSig[ltSelectedType] || '';
+      const typedRef = ltRefInput.value.trim().toUpperCase();
+      const sigInfo = (ltSelectedType && ltSelectedType !== 'dx' && typedRef) ? typedRef : '';
+
+      const baseData = {
+        freqKhz: freq,
+        mode: ltMode.value,
+        rstSent: ltRstSent.value || '59',
+        rstRcvd: ltRstRcvd.value || '59',
+        sig,
+        sigInfo,
+      };
+
+      // Respot flags
+      const respotCb = document.getElementById('lt-respot-cb');
+      if (respotCb && respotCb.checked) {
+        const targets = (ltRespotSection.dataset.targets || '').split(',').filter(Boolean);
+        const comment = ltRespotComment.value.trim();
+        if (targets.includes('pota')) { baseData.respot = true; }
+        if (targets.includes('wwff')) { baseData.wwffRespot = true; baseData.wwffReference = sigInfo; }
+        if (targets.includes('llota')) { baseData.llotaRespot = true; baseData.llotaReference = sigInfo; }
+        if (targets.includes('dxc')) { baseData.dxcRespot = true; }
+        if (comment) baseData.respotComment = comment;
+      }
+
+      // Additional parks
+      if (ltAddlCb.checked) {
+        const addl = [];
+        const v1 = ltAddl1.value.trim().toUpperCase();
+        const v2 = ltAddl2.value.trim().toUpperCase();
+        if (v1) addl.push(v1);
+        if (v2) addl.push(v2);
+        if (addl.length > 0) baseData.additionalParks = addl;
+      }
+
+      // Include activator fields when activation is running
+      if (activationSig && activationRef) {
+        baseData.mySig = activationSig;
+        baseData.mySigInfo = activationRef;
+      }
+      if (phoneGrid) baseData.myGridsquare = phoneGrid;
+
+      // Send one log-qso per callsign
+      for (var ci = 0; ci < calls.length; ci++) {
+        var logData = Object.assign({}, baseData, { callsign: calls[ci] });
+        ws.send(JSON.stringify({ type: 'log-qso', data: logData }));
+      }
+    }
+  }
+
+  function resetLogTabForm() {
+    ltCall.value = '';
+    // Keep freq/mode/RST for rapid logging
+    // Reset ref, addl parks, respot
+    ltRefInput.value = '';
+    ltRefName.textContent = '';
+    ltAddlCb.checked = false;
+    ltAddlInputs.classList.add('hidden');
+    ltAddl1.value = '';
+    ltAddl2.value = '';
+    ltAddl2.classList.add('hidden');
+    ltAddlAdd.classList.remove('hidden');
+    ltRespotComment.value = '';
+    updateLtRespot();
+    ltCall.focus();
+  }
+
+  // Initialize log tab type
+  selectLtType('dx');
+
+  // Type chip clicks
+  document.getElementById('log-type-picker').addEventListener('click', (e) => {
+    const chip = e.target.closest('.log-type-chip');
+    if (!chip) return;
+    selectLogType(chip.dataset.type);
+  });
+
+  // Additional parks toggle
+  logAddlCb.addEventListener('change', () => {
+    logAddlInputs.classList.toggle('hidden', !logAddlCb.checked);
+    if (!logAddlCb.checked) {
+      logAddl1.value = '';
+      logAddl2.value = '';
+      logAddl2.classList.add('hidden');
+    }
+  });
+  logAddlAdd.addEventListener('click', () => {
+    logAddl2.classList.remove('hidden');
+    logAddlAdd.classList.add('hidden');
+  });
+
+  // Update respot comment when ref changes
+  logRefInput.addEventListener('input', updateLogRespot);
+
   function openLogSheet(prefill) {
     const p = prefill || {};
     logCall.value = p.callsign || '';
@@ -821,6 +1343,28 @@
     logSig.value = p.sig || '';
     logSigInfo.value = p.sigInfo || '';
     logSaveBtn.disabled = false;
+
+    // Pre-select type from spot source
+    const sigToType = { POTA: 'pota', SOTA: 'sota', WWFF: 'wwff', LLOTA: 'llota' };
+    const type = sigToType[(p.sig || '').toUpperCase()] || (p.sig ? '' : 'dx');
+    selectLogType(type);
+
+    // Pre-fill reference from spot
+    logRefInput.value = p.sigInfo || '';
+    logRefName.textContent = '';
+
+    // Reset additional parks
+    logAddlCb.checked = false;
+    logAddlInputs.classList.add('hidden');
+    logAddl1.value = '';
+    logAddl2.value = '';
+    logAddl2.classList.add('hidden');
+    logAddlAdd.classList.remove('hidden');
+
+    // Reset respot
+    logRespotComment.value = '';
+    updateLogRespot();
+
     logSheet.classList.remove('hidden', 'slide-down');
     logBackdrop.classList.remove('hidden');
     if (!p.callsign) logCall.focus();
@@ -839,13 +1383,7 @@
     const rst = defaultRst(logMode.value);
     logRstSent.value = rst;
     logRstRcvd.value = rst;
-  });
-
-  logBtn.addEventListener('click', () => {
-    openLogSheet({
-      freqKhz: currentFreqKhz ? String(Math.round(currentFreqKhz * 10) / 10) : '',
-      mode: currentMode || 'SSB',
-    });
+    updateLogRespot();
   });
 
   logCancelBtn.addEventListener('click', closeLogSheet);
@@ -859,15 +1397,44 @@
     if (!freq || isNaN(parseFloat(freq))) { logFreq.focus(); return; }
     logSaveBtn.disabled = true;
     if (ws && ws.readyState === WebSocket.OPEN) {
+      // Determine sig/sigInfo from type picker + ref input
+      const typeToSig = { pota: 'POTA', sota: 'SOTA', wwff: 'WWFF', llota: 'LLOTA' };
+      const sig = typeToSig[logSelectedType] || logSig.value || '';
+      const typedRef = logRefInput.value.trim().toUpperCase();
+      const sigInfo = (logSelectedType && logSelectedType !== 'dx' && typedRef) ? typedRef : logSigInfo.value || '';
+
       const logData = {
         callsign: call,
         freqKhz: freq,
         mode: logMode.value,
         rstSent: logRstSent.value || '59',
         rstRcvd: logRstRcvd.value || '59',
-        sig: logSig.value,
-        sigInfo: logSigInfo.value,
+        sig,
+        sigInfo,
       };
+
+      // Respot flags
+      const respotCb = document.getElementById('log-respot-cb');
+      if (respotCb && respotCb.checked) {
+        const targets = (logRespotSection.dataset.targets || '').split(',').filter(Boolean);
+        const comment = logRespotComment.value.trim();
+        if (targets.includes('pota')) { logData.respot = true; }
+        if (targets.includes('wwff')) { logData.wwffRespot = true; logData.wwffReference = sigInfo; }
+        if (targets.includes('llota')) { logData.llotaRespot = true; logData.llotaReference = sigInfo; }
+        if (targets.includes('dxc')) { logData.dxcRespot = true; }
+        if (comment) logData.respotComment = comment;
+      }
+
+      // Additional parks
+      if (logAddlCb.checked) {
+        const addl = [];
+        const v1 = logAddl1.value.trim().toUpperCase();
+        const v2 = logAddl2.value.trim().toUpperCase();
+        if (v1) addl.push(v1);
+        if (v2) addl.push(v2);
+        if (addl.length > 0) logData.additionalParks = addl;
+      }
+
       // Include activator fields when activation is running
       if (activationSig && activationRef) {
         logData.mySig = activationSig;
@@ -923,23 +1490,36 @@
   function switchTab(tab) {
     activeTab = tab;
     tabBar.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    // Hide all content areas
+    spotList.classList.add('hidden');
+    sourceBar.classList.add('hidden');
+    filterBar.classList.add('hidden');
+    scanBar.classList.add('hidden');
+    logTabView.classList.add('hidden');
+    logView.classList.add('hidden');
+    if (scanning) stopScan();
     if (tab === 'spots') {
       spotList.classList.remove('hidden');
       sourceBar.classList.remove('hidden');
       filterBar.classList.remove('hidden');
-      logView.classList.add('hidden');
-    } else {
-      spotList.classList.add('hidden');
-      sourceBar.classList.add('hidden');
-      filterBar.classList.add('hidden');
+      scanBar.classList.remove('hidden');
+    } else if (tab === 'log') {
+      logTabView.classList.remove('hidden');
+      refreshLogTabFields();
+    } else if (tab === 'activate') {
       logView.classList.remove('hidden');
       updateLogViewState();
+      if (!activationRunning) {
+        pastActivationsDiv.classList.remove('hidden');
+        requestPastActivations();
+      }
     }
   }
 
   function updateLogViewState() {
     if (activationRunning) {
       activationSetup.classList.add('hidden');
+      pastActivationsDiv.classList.add('hidden');
       quickLogForm.classList.remove('hidden');
       logFooter.classList.remove('hidden');
       if (currentFreqKhz) qlFreq.value = String(Math.round(currentFreqKhz * 10) / 10);
@@ -947,6 +1527,7 @@
       qlCall.focus();
     } else {
       activationSetup.classList.remove('hidden');
+      pastActivationsDiv.classList.remove('hidden');
       quickLogForm.classList.add('hidden');
       logFooter.classList.add('hidden');
       setupRefInput.focus();
@@ -1101,8 +1682,8 @@
     updateLogBadge();
     updateLogFooter();
 
-    // Auto-switch to log tab
-    switchTab('log');
+    // Auto-switch to activate tab
+    switchTab('activate');
   }
 
   function updateActivationTimer() {
@@ -1249,8 +1830,8 @@
 
   function updateLogBadge() {
     const count = sessionContacts.length;
-    tabLogBadge.textContent = count;
-    tabLogBadge.classList.toggle('hidden', count === 0);
+    tabActivateBadge.textContent = count;
+    tabActivateBadge.classList.toggle('hidden', count === 0);
   }
 
   function updateLogFooter() {
@@ -1287,6 +1868,231 @@
   }
 
   // --- ADIF Export ---
+  // --- Past Activations ---
+  function requestPastActivations() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'get-past-activations' }));
+    }
+  }
+
+  function formatPaDate(dateStr) {
+    if (!dateStr || dateStr.length !== 8) return dateStr || '';
+    return dateStr.slice(0, 4) + '-' + dateStr.slice(4, 6) + '-' + dateStr.slice(6, 8);
+  }
+
+  function formatPaTime(timeStr) {
+    if (!timeStr || timeStr.length < 4) return timeStr || '';
+    return timeStr.slice(0, 2) + ':' + timeStr.slice(2, 4);
+  }
+
+  function renderPastActivations() {
+    if (!pastActivations.length) {
+      paList.innerHTML = '<div class="spot-empty">No past activations</div>';
+      return;
+    }
+    paList.innerHTML = pastActivations.map(function (act, i) {
+      var dateStr = formatPaDate(act.date);
+      var count = act.contacts.length;
+      var badge = count >= 10 ? ' pa-badge-success' : '';
+      var rows = act.contacts.map(function (c, j) {
+        return '<div class="pa-contact-row">' +
+          '<span class="pa-nr">' + (j + 1) + '</span>' +
+          '<span class="pa-time">' + formatPaTime(c.timeOn) + '</span>' +
+          '<span class="pa-call">' + esc(c.callsign) + '</span>' +
+          '<span class="pa-freq">' + (c.freq ? parseFloat(c.freq).toFixed(3) : '') + '</span>' +
+          '<span class="pa-mode">' + esc(c.mode) + '</span>' +
+          '<span class="pa-rst">' + esc(c.rstSent) + '/' + esc(c.rstRcvd) + '</span>' +
+          '</div>';
+      }).join('');
+      return '<div class="pa-card" data-idx="' + i + '">' +
+        '<div class="pa-card-header" data-idx="' + i + '">' +
+          '<span class="pa-ref">' + esc(act.parkRef) + '</span>' +
+          '<span class="pa-date">' + dateStr + '</span>' +
+          '<span class="pa-count' + badge + '">' + count + ' QSO' + (count !== 1 ? 's' : '') + '</span>' +
+        '</div>' +
+        '<div class="pa-detail hidden" data-detail="' + i + '">' +
+          '<div class="pa-contacts">' + rows + '</div>' +
+          '<div class="pa-actions">' +
+            '<button type="button" class="pa-map-btn" data-idx="' + i + '">Map</button>' +
+            '<button type="button" class="pa-export-btn" data-idx="' + i + '">Export ADIF</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  paList.addEventListener('click', function (e) {
+    // Toggle expand/collapse on card header
+    var header = e.target.closest('.pa-card-header');
+    if (header && !e.target.closest('.pa-map-btn') && !e.target.closest('.pa-export-btn')) {
+      var idx = header.dataset.idx;
+      var detail = paList.querySelector('[data-detail="' + idx + '"]');
+      if (detail) detail.classList.toggle('hidden');
+      return;
+    }
+    // Map button
+    var mapBtn = e.target.closest('.pa-map-btn');
+    if (mapBtn) {
+      var i = parseInt(mapBtn.dataset.idx, 10);
+      var act = pastActivations[i];
+      if (!act) return;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'get-activation-map-data',
+          parkRef: act.parkRef,
+          date: act.date,
+          contacts: act.contacts,
+        }));
+      }
+      return;
+    }
+    // Export ADIF button
+    var exportBtn = e.target.closest('.pa-export-btn');
+    if (exportBtn) {
+      var idx2 = parseInt(exportBtn.dataset.idx, 10);
+      var act2 = pastActivations[idx2];
+      if (!act2) return;
+      exportPastActivationAdif(act2);
+      return;
+    }
+  });
+
+  function exportPastActivationAdif(act) {
+    var lines = ['POTACAT ECHOCAT Export\n<ADIF_VER:5>3.1.4\n<PROGRAMID:7>POTACAT\n<EOH>\n'];
+    for (var i = 0; i < act.contacts.length; i++) {
+      var c = act.contacts[i];
+      var rec = '';
+      rec += af('CALL', c.callsign);
+      if (c.freq) rec += af('FREQ', c.freq);
+      rec += af('MODE', c.mode);
+      rec += af('BAND', c.band);
+      rec += af('QSO_DATE', act.date);
+      rec += af('TIME_ON', c.timeOn);
+      if (c.rstSent) rec += af('RST_SENT', c.rstSent);
+      if (c.rstRcvd) rec += af('RST_RCVD', c.rstRcvd);
+      rec += af('MY_SIG', 'POTA');
+      rec += af('MY_SIG_INFO', act.parkRef);
+      if (c.sig) rec += af('SIG', c.sig);
+      if (c.sigInfo) rec += af('SIG_INFO', c.sigInfo);
+      if (c.myGridsquare) rec += af('MY_GRIDSQUARE', c.myGridsquare);
+      if (myCallsign) rec += af('STATION_CALLSIGN', myCallsign);
+      rec += '<EOR>\n';
+      lines.push(rec);
+    }
+    var blob = new Blob([lines.join('')], { type: 'text/plain' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = (myCallsign || 'POTACAT') + '@' + act.parkRef + '-' + formatPaDate(act.date) + '.adi';
+    a.click();
+    URL.revokeObjectURL(url);
+    showLogToast('ADIF exported');
+  }
+
+  // --- Activation Map ---
+  function gridToLatLonLocal(grid) {
+    if (!grid || grid.length < 4) return null;
+    var g = grid.toUpperCase();
+    var lonField = g.charCodeAt(0) - 65;
+    var latField = g.charCodeAt(1) - 65;
+    var lonSquare = parseInt(g[2], 10);
+    var latSquare = parseInt(g[3], 10);
+    var lon = lonField * 20 + lonSquare * 2 - 180;
+    var lat = latField * 10 + latSquare * 1 - 90;
+    if (grid.length >= 6) {
+      var lonSub = g.charCodeAt(4) - 65;
+      var latSub = g.charCodeAt(5) - 65;
+      lon += lonSub * (2 / 24) + (1 / 24);
+      lat += latSub * (1 / 24) + (1 / 48);
+    } else {
+      lon += 1;
+      lat += 0.5;
+    }
+    return { lat: lat, lon: lon };
+  }
+
+  function greatCircleArc(from, to, points) {
+    var toRad = Math.PI / 180;
+    var toDeg = 180 / Math.PI;
+    var lat1 = from[0] * toRad, lon1 = from[1] * toRad;
+    var lat2 = to[0] * toRad, lon2 = to[1] * toRad;
+    var d = 2 * Math.asin(Math.sqrt(
+      Math.pow(Math.sin((lat2 - lat1) / 2), 2) +
+      Math.cos(lat1) * Math.cos(lat2) * Math.pow(Math.sin((lon2 - lon1) / 2), 2)
+    ));
+    if (d < 1e-10) return [from, to];
+    var pts = [];
+    for (var i = 0; i <= points; i++) {
+      var f = i / points;
+      var A = Math.sin((1 - f) * d) / Math.sin(d);
+      var B = Math.sin(f * d) / Math.sin(d);
+      var x = A * Math.cos(lat1) * Math.cos(lon1) + B * Math.cos(lat2) * Math.cos(lon2);
+      var y = A * Math.cos(lat1) * Math.sin(lon1) + B * Math.cos(lat2) * Math.sin(lon2);
+      var z = A * Math.sin(lat1) + B * Math.sin(lat2);
+      pts.push([Math.atan2(z, Math.sqrt(x * x + y * y)) * toDeg, Math.atan2(y, x) * toDeg]);
+    }
+    return pts;
+  }
+
+  function showActivationMap(data) {
+    actMapOverlay.classList.remove('hidden');
+    actMapTitle.textContent = data.parkRef || '';
+    if (data.park && data.park.name) actMapTitle.textContent = data.park.name;
+    var resolved = data.resolvedContacts || [];
+    var withLoc = resolved.filter(function (c) { return c.lat != null; });
+    actMapCount.textContent = resolved.length + ' QSO' + (resolved.length !== 1 ? 's' : '');
+
+    if (actMap) { actMap.remove(); actMap = null; }
+    if (typeof L === 'undefined') {
+      actMapEl.innerHTML = '<div style="padding:20px;color:var(--text-dim)">Map not available</div>';
+      return;
+    }
+    actMap = L.map(actMapEl, { zoomControl: false, attributionControl: false });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18, className: 'dark-tiles'
+    }).addTo(actMap);
+
+    var bounds = [];
+
+    // Park marker (green circle)
+    if (data.park && data.park.lat != null) {
+      var parkLL = [data.park.lat, data.park.lon];
+      L.circleMarker(parkLL, { radius: 10, color: '#4ecca3', fillColor: '#4ecca3', fillOpacity: 0.8, weight: 2 })
+        .bindPopup('<b>' + esc(data.parkRef || '') + '</b><br>' + esc(data.park.name || ''))
+        .addTo(actMap);
+      bounds.push(parkLL);
+    }
+
+    // Contact markers (blue circles) + arcs
+    for (var i = 0; i < resolved.length; i++) {
+      var c = resolved[i];
+      if (c.lat == null) continue;
+      var ll = [c.lat, c.lon];
+      L.circleMarker(ll, { radius: 6, color: '#4fc3f7', fillColor: '#4fc3f7', fillOpacity: 0.7, weight: 1 })
+        .bindPopup('<b>' + esc(c.callsign) + '</b><br>' + esc(c.entityName || '') + '<br>' + (c.freq || '') + ' ' + (c.mode || ''))
+        .addTo(actMap);
+      bounds.push(ll);
+      // Great circle arc from park to contact
+      if (data.park && data.park.lat != null) {
+        var arc = greatCircleArc([data.park.lat, data.park.lon], ll, 50);
+        L.polyline(arc, { color: '#4fc3f7', weight: 1, opacity: 0.4, dashArray: '4,6' }).addTo(actMap);
+      }
+    }
+
+    if (bounds.length > 1) {
+      actMap.fitBounds(bounds, { padding: [30, 30] });
+    } else if (bounds.length === 1) {
+      actMap.setView(bounds[0], 6);
+    } else {
+      actMap.setView([39, -98], 4);
+    }
+  }
+
+  actMapBack.addEventListener('click', function () {
+    actMapOverlay.classList.add('hidden');
+    if (actMap) { actMap.remove(); actMap = null; }
+  });
+
   exportAdifBtn.addEventListener('click', exportAdif);
 
   function exportAdif() {
@@ -1371,13 +2177,15 @@
   // --- Rig Selector ---
   function updateRigSelect(rigs, activeRigId) {
     if (!rigs || rigs.length < 2) {
-      rigBar.classList.add('hidden');
+      rcRigGroup.classList.add('hidden');
+      rcRigSep.classList.add('hidden');
       return;
     }
     rigSelect.innerHTML = rigs.map(r =>
       `<option value="${esc(r.id)}"${r.id === activeRigId ? ' selected' : ''}>${esc(r.name || 'Unnamed Rig')}</option>`
     ).join('');
-    rigBar.classList.remove('hidden');
+    rcRigGroup.classList.remove('hidden');
+    rcRigSep.classList.remove('hidden');
   }
 
   rigSelect.addEventListener('change', () => {

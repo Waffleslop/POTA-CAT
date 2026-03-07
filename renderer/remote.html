@@ -8,6 +8,7 @@
   <meta name="theme-color" content="#1a1a2e">
   <meta name="format-detection" content="telephone=no">
   <title>ECHOCAT</title>
+  <!-- leaflet-css -->
   <link rel="stylesheet" href="remote.css">
 </head>
 <body>
@@ -21,16 +22,15 @@
              autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false">
       <button id="connect-btn" type="button">Connect</button>
       <div id="connect-error" class="hidden"></div>
+      <p class="connect-help">
+        Use <b>https://</b> to connect.<br>
+        First visit: tap <b>Advanced</b> → <b>Proceed</b> to accept the certificate.
+      </p>
     </div>
   </div>
 
   <!-- Main UI (hidden until authenticated) -->
   <div id="main-ui" class="hidden">
-
-    <!-- Rig selector -->
-    <div id="rig-bar" class="hidden">
-      <select id="rig-select"></select>
-    </div>
 
     <!-- Status bar -->
     <div id="status-bar">
@@ -52,6 +52,10 @@
 
     <!-- Rig controls strip (collapsible) -->
     <div id="rig-controls" class="hidden">
+      <div id="rc-rig" class="rc-group hidden">
+        <select id="rig-select" class="rc-rig-select"></select>
+      </div>
+      <div class="rc-sep" id="rc-rig-sep"></div>
       <div id="rc-filter" class="rc-group">
         <button type="button" class="rc-btn" id="rc-bw-dn" title="Narrower">&#x25C0;</button>
         <span id="rc-bw-label" class="rc-bw-label">--</span>
@@ -64,6 +68,18 @@
       <div class="rc-sep" id="rc-atu-sep"></div>
       <div id="rc-atu" class="rc-group hidden">
         <button type="button" class="rc-btn rc-toggle" id="rc-atu-btn">ATU</button>
+      </div>
+      <div class="rc-sep" id="rc-rfgain-sep"></div>
+      <div id="rc-rfgain" class="rc-group rc-slider-group hidden">
+        <label class="rc-slider-label">RF</label>
+        <input type="range" id="rc-rfgain-slider" class="rc-slider" min="0" max="100" value="50">
+        <span id="rc-rfgain-val" class="rc-slider-val">50</span>
+      </div>
+      <div class="rc-sep" id="rc-txpower-sep"></div>
+      <div id="rc-txpower" class="rc-group rc-slider-group hidden">
+        <label class="rc-slider-label">PWR</label>
+        <input type="range" id="rc-txpower-slider" class="rc-slider" min="0" max="100" value="100">
+        <span id="rc-txpower-val" class="rc-slider-val">100</span>
       </div>
       <div class="rc-sep"></div>
       <div id="rc-vfo" class="rc-group">
@@ -91,7 +107,8 @@
     <!-- Tab bar -->
     <div id="tab-bar" class="hidden">
       <button class="tab active" data-tab="spots">Spots</button>
-      <button class="tab" data-tab="log">Log <span id="tab-log-badge" class="tab-badge hidden">0</span></button>
+      <button class="tab" data-tab="log">Log</button>
+      <button class="tab" data-tab="activate">Activate <span id="tab-activate-badge" class="tab-badge hidden">0</span></button>
     </div>
 
     <!-- Source toggles -->
@@ -101,6 +118,7 @@
       <button class="source-chip" data-src="wwff" style="--src-color:#26a69a">WWFF</button>
       <button class="source-chip" data-src="llota" style="--src-color:#42a5f5">LLOTA</button>
       <button class="source-chip" data-src="dxc" style="--src-color:#e040fb">DX</button>
+      <button id="refresh-rate-btn" type="button" class="refresh-chip" title="Spot refresh rate">30s</button>
     </div>
 
     <!-- Filter chips -->
@@ -120,10 +138,87 @@
         <button class="filter-chip" data-band="6m">6</button>
       </div>
       <button id="new-only-chip" class="filter-chip new-chip hidden" data-band="">NEW</button>
+      <button id="hide-worked-chip" class="filter-chip worked-chip hidden">Hide &#x2713;</button>
+    </div>
+
+    <!-- Scan bar -->
+    <div id="scan-bar" class="hidden">
+      <button id="scan-btn" type="button" class="scan-button">Scan</button>
     </div>
 
     <!-- Spot list -->
     <div id="spot-list"></div>
+
+    <!-- Log tab view (standalone logging form) -->
+    <div id="log-tab-view" class="hidden">
+      <div class="log-tab-content">
+        <div id="lt-type-picker" class="log-type-row">
+          <button type="button" class="lt-type-chip active" data-type="dx" style="--type-color:var(--dxc)">DX</button>
+          <button type="button" class="lt-type-chip" data-type="pota" style="--type-color:var(--pota)">POTA</button>
+          <button type="button" class="lt-type-chip" data-type="sota" style="--type-color:var(--sota)">SOTA</button>
+          <button type="button" class="lt-type-chip" data-type="wwff" style="--type-color:#26a69a">WWFF</button>
+          <button type="button" class="lt-type-chip" data-type="llota" style="--type-color:#42a5f5">LLOTA</button>
+        </div>
+        <div class="log-field">
+          <label for="lt-call">Callsign</label>
+          <input type="text" id="lt-call" autocapitalize="characters" autocorrect="off" spellcheck="false">
+          <div id="lt-call-hint" class="ops-hint hidden">Comma-separated for multi-op (e.g. K0OTC, KO6M)</div>
+        </div>
+        <div id="lt-ref-section" class="log-field hidden">
+          <label for="lt-ref-input">Reference</label>
+          <input type="text" id="lt-ref-input" placeholder="e.g. US-1234"
+                 autocapitalize="characters" autocorrect="off" spellcheck="false">
+          <div id="lt-ref-name" class="log-ref-name"></div>
+        </div>
+        <div class="log-row">
+          <div class="log-field log-field-half">
+            <label for="lt-freq">Freq kHz</label>
+            <input type="text" id="lt-freq" inputmode="decimal">
+          </div>
+          <div class="log-field log-field-half">
+            <label for="lt-mode">Mode</label>
+            <select id="lt-mode">
+              <option value="SSB">SSB</option>
+              <option value="CW">CW</option>
+              <option value="FT8">FT8</option>
+              <option value="FT4">FT4</option>
+              <option value="FM">FM</option>
+              <option value="RTTY">RTTY</option>
+              <option value="AM">AM</option>
+            </select>
+          </div>
+        </div>
+        <div class="log-row">
+          <div class="log-field log-field-half">
+            <label for="lt-rst-sent">RST Sent</label>
+            <input type="text" id="lt-rst-sent" inputmode="numeric" maxlength="3">
+          </div>
+          <div class="log-field log-field-half">
+            <label for="lt-rst-rcvd">RST Rcvd</label>
+            <input type="text" id="lt-rst-rcvd" inputmode="numeric" maxlength="3">
+          </div>
+        </div>
+        <div id="lt-addl-section" class="hidden">
+          <label class="log-addl-toggle"><input type="checkbox" id="lt-addl-cb"> Log additional park</label>
+          <div id="lt-addl-inputs" class="hidden">
+            <input type="text" id="lt-addl-1" class="log-addl-input" placeholder="e.g. US-5678"
+                   autocapitalize="characters" autocorrect="off" spellcheck="false">
+            <input type="text" id="lt-addl-2" class="log-addl-input hidden" placeholder="3rd park"
+                   autocapitalize="characters" autocorrect="off" spellcheck="false">
+            <button type="button" id="lt-addl-add" class="log-addl-add-btn">+ Add park</button>
+          </div>
+        </div>
+        <div id="lt-respot-section" class="hidden">
+          <label class="log-respot-toggle" id="lt-respot-label">
+            <input type="checkbox" id="lt-respot-cb"> Re-spot on POTA
+          </label>
+          <div id="lt-respot-comment-wrap" class="hidden">
+            <input type="text" id="lt-respot-comment" placeholder="Comment">
+          </div>
+        </div>
+        <button type="button" id="lt-save" class="lt-save-btn">Save QSO</button>
+      </div>
+    </div>
 
     <!-- Activator log view (hidden by default) -->
     <div id="log-view" class="hidden">
@@ -149,6 +244,12 @@
         </div>
 
         <button type="button" id="start-activation-btn" class="start-activation-btn" disabled>Start Activation</button>
+      </div>
+
+      <!-- Past activations list -->
+      <div id="past-activations" class="hidden">
+        <div class="pa-header">Past Activations</div>
+        <div id="pa-list"></div>
       </div>
 
       <!-- Quick-log form (shown during activation) -->
@@ -190,9 +291,9 @@
         <span class="audio-icon">&#x1F50A;</span>
         <span class="audio-label">Audio</span>
       </button>
-      <button id="log-btn" type="button" class="log-button">
-        <span class="log-icon">&#x270F;</span>
-        <span class="log-label">Log</span>
+      <button id="speaker-btn" type="button" class="speaker-button hidden" title="Speaker">
+        <span class="speaker-icon">&#x1F4E2;</span>
+        <span class="speaker-label">Speaker</span>
       </button>
       <button id="ptt-btn" type="button" class="ptt-button">PTT</button>
       <button id="estop-btn" type="button" class="estop-button">STOP</button>
@@ -204,9 +305,22 @@
       <div class="log-sheet-handle"></div>
       <h2 class="log-sheet-title">Log QSO</h2>
       <form id="log-form" autocomplete="off">
+        <div id="log-type-picker" class="log-type-row">
+          <button type="button" class="log-type-chip" data-type="dx" style="--type-color:var(--dxc)">DX</button>
+          <button type="button" class="log-type-chip" data-type="pota" style="--type-color:var(--pota)">POTA</button>
+          <button type="button" class="log-type-chip" data-type="sota" style="--type-color:var(--sota)">SOTA</button>
+          <button type="button" class="log-type-chip" data-type="wwff" style="--type-color:#26a69a">WWFF</button>
+          <button type="button" class="log-type-chip" data-type="llota" style="--type-color:#42a5f5">LLOTA</button>
+        </div>
         <div class="log-field">
           <label for="log-call">Callsign</label>
           <input type="text" id="log-call" autocapitalize="characters" autocorrect="off" spellcheck="false">
+        </div>
+        <div id="log-ref-section" class="log-field hidden">
+          <label for="log-ref-input">Reference</label>
+          <input type="text" id="log-ref-input" placeholder="e.g. US-1234"
+                 autocapitalize="characters" autocorrect="off" spellcheck="false">
+          <div id="log-ref-name" class="log-ref-name"></div>
         </div>
         <div class="log-row">
           <div class="log-field log-field-half">
@@ -236,6 +350,24 @@
             <input type="text" id="log-rst-rcvd" inputmode="numeric" maxlength="3">
           </div>
         </div>
+        <div id="log-addl-section" class="hidden">
+          <label class="log-addl-toggle"><input type="checkbox" id="log-addl-cb"> Log additional park</label>
+          <div id="log-addl-inputs" class="hidden">
+            <input type="text" id="log-addl-1" class="log-addl-input" placeholder="e.g. US-5678"
+                   autocapitalize="characters" autocorrect="off" spellcheck="false">
+            <input type="text" id="log-addl-2" class="log-addl-input hidden" placeholder="3rd park"
+                   autocapitalize="characters" autocorrect="off" spellcheck="false">
+            <button type="button" id="log-addl-add" class="log-addl-add-btn">+ Add park</button>
+          </div>
+        </div>
+        <div id="log-respot-section" class="hidden">
+          <label class="log-respot-toggle" id="log-respot-label">
+            <input type="checkbox" id="log-respot-cb"> Re-spot on POTA
+          </label>
+          <div id="log-respot-comment-wrap" class="hidden">
+            <input type="text" id="log-respot-comment" placeholder="Comment">
+          </div>
+        </div>
         <input type="hidden" id="log-sig">
         <input type="hidden" id="log-sig-info">
         <div class="log-buttons">
@@ -251,6 +383,16 @@
     <!-- Audio element for receiving radio RX audio (must be in DOM for iOS) -->
     <audio id="remote-audio" playsinline></audio>
 
+    <!-- Activation map overlay -->
+    <div id="act-map-overlay" class="hidden">
+      <div class="act-map-bar">
+        <button type="button" id="act-map-back" class="act-map-back">&larr; Back</button>
+        <span id="act-map-title" class="act-map-title"></span>
+        <span id="act-map-count" class="act-map-count"></span>
+      </div>
+      <div id="act-map" class="act-map-container"></div>
+    </div>
+
     <!-- Welcome tip -->
     <div id="welcome-overlay" class="hidden">
       <div class="welcome-card">
@@ -264,6 +406,7 @@
 
   </div>
 
+  <!-- leaflet-js -->
   <script src="remote.js"></script>
 </body>
 </html>

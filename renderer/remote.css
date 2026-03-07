@@ -103,6 +103,9 @@ html, body {
   font-size: 14px;
 }
 
+.connect-help { font-size: 12px; color: var(--text-dim); margin-top: 16px; line-height: 1.5; }
+.connect-help b { color: var(--text); }
+
 /* --- Main UI Layout --- */
 #main-ui {
   display: flex;
@@ -110,30 +113,13 @@ html, body {
   height: 100%;
 }
 
-/* --- Rig Selector --- */
-#rig-bar {
-  display: flex;
-  align-items: center;
-  padding: 6px 12px;
-  background: var(--bg-header);
-  border-bottom: 1px solid #333;
-  flex-shrink: 0;
-}
+/* --- Rig Selector (inline in rig controls) --- */
 
-#rig-select {
-  width: 100%;
-  padding: 6px 8px;
-  background: var(--bg-card);
-  color: var(--text);
-  border: 1px solid #444;
-  border-radius: 6px;
-  font-size: 14px;
-  -webkit-appearance: none;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' fill='none' stroke-width='1.5'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  padding-right: 28px;
+.rc-rig-select {
+  background: var(--bg-card); color: var(--text); border: 1px solid #444;
+  border-radius: 6px; height: 32px; font-size: 12px; padding: 0 4px;
+  max-width: 100px;
+  -webkit-appearance: none; appearance: none;
 }
 
 /* --- Status Bar --- */
@@ -323,6 +309,16 @@ html, body {
   pointer-events: none;
 }
 
+#rig-controls.disabled .rc-slider {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.rc-slider-group { gap: 6px; }
+.rc-slider-label { font-size: 11px; font-weight: 600; color: var(--text-dim); min-width: 24px; }
+.rc-slider { flex: 1; max-width: 100px; height: 28px; accent-color: var(--pota); }
+.rc-slider-val { font-size: 12px; font-family: monospace; color: var(--text); min-width: 24px; text-align: right; }
+
 /* --- TX Banner --- */
 #tx-banner {
   background: var(--accent);
@@ -410,6 +406,14 @@ html, body {
   color: var(--text);
   border-color: var(--accent);
 }
+
+/* --- Scan Bar --- */
+#scan-bar { display: flex; justify-content: center; padding: 4px 8px; flex-shrink: 0; }
+.scan-button { background: var(--bg-card); color: var(--text); border: 1px solid #444; border-radius: 6px; padding: 6px 20px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.scan-button.scan-active { color: var(--accent); border-color: var(--accent); }
+
+/* --- Refresh Rate Chip --- */
+.refresh-chip { background: none; border: 1px solid #444; color: var(--text-dim); border-radius: 12px; padding: 2px 8px; font-size: 11px; cursor: pointer; margin-left: auto; flex-shrink: 0; }
 
 /* --- Spot List --- */
 #spot-list {
@@ -620,8 +624,7 @@ html, body {
 
 .audio-button { position: relative; }
 
-/* --- Log Button (bottom bar) --- */
-.log-button {
+.speaker-button {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -637,14 +640,14 @@ html, body {
   gap: 2px;
 }
 
-.log-button:active {
+.speaker-button.active {
   background: var(--bg-header);
   border-color: var(--pota);
   color: var(--pota);
 }
 
-.log-icon { font-size: 20px; }
-.log-label { font-size: 9px; font-weight: 600; }
+.speaker-icon { font-size: 20px; }
+.speaker-label { font-size: 9px; font-weight: 600; }
 
 /* --- Spot Card Log Button --- */
 .spot-log-btn {
@@ -1327,6 +1330,65 @@ html, body {
   border-color: var(--pota);
 }
 
+/* --- Worked Spots --- */
+.spot-card.worked .spot-call { color: var(--text-dim); }
+.spot-card.worked-today { opacity: 0.45; }
+.worked-check { color: var(--text-dim); font-size: 12px; margin-right: 2px; }
+.worked-chip { --src-color: var(--text-dim); }
+.worked-chip.active { background: var(--text-dim) !important; color: #000 !important; }
+
+/* --- Log Type Picker --- */
+.log-type-row { display: flex; gap: 6px; margin-bottom: 12px; }
+.log-type-chip { flex: 1; padding: 8px 0; font-size: 12px; font-weight: 600; text-align: center;
+  background: var(--bg); color: var(--text-dim); border: 2px solid #333; border-radius: 8px; cursor: pointer; }
+.log-type-chip.active { color: var(--type-color); border-color: var(--type-color); background: var(--bg-header); }
+
+/* --- Log Reference / Additional Parks / Respot --- */
+.log-ref-name { font-size: 12px; color: var(--pota); margin-top: 4px; }
+.log-addl-toggle, .log-respot-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px;
+  color: var(--text-dim); margin: 8px 0 4px; cursor: pointer; }
+.log-respot-toggle { color: var(--pota); }
+.log-addl-input, #log-respot-comment { width: 100%; padding: 8px 10px; font-size: 14px;
+  text-transform: uppercase; background: var(--bg); border: 1px solid #444; border-radius: 6px;
+  color: var(--text); outline: none; margin-top: 6px;
+  -webkit-user-select: text; user-select: text; }
+#log-respot-comment { text-transform: none; }
+.log-addl-add-btn { margin-top: 4px; padding: 4px 12px; font-size: 12px; background: transparent;
+  color: var(--text-dim); border: 1px solid #444; border-radius: 4px; cursor: pointer; }
+
+/* --- Log Tab View --- */
+#log-tab-view {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 16px;
+  min-height: 0;
+}
+.log-tab-content { max-width: 500px; margin: 0 auto; }
+
+/* Log tab type chips (mirror .log-type-chip but separate class) */
+.lt-type-chip { flex: 1; padding: 8px 0; font-size: 12px; font-weight: 600; text-align: center;
+  background: var(--bg); color: var(--text-dim); border: 2px solid #333; border-radius: 8px; cursor: pointer; }
+.lt-type-chip.active { color: var(--type-color); border-color: var(--type-color); background: var(--bg-header); }
+
+/* Log tab Save button */
+.lt-save-btn {
+  display: block;
+  width: 100%;
+  padding: 14px;
+  margin-top: 16px;
+  font-size: 16px;
+  font-weight: 700;
+  background: var(--pota);
+  color: #000;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+}
+.lt-save-btn:disabled { opacity: 0.4; cursor: default; }
+.lt-save-btn:not(:disabled):active { opacity: 0.8; }
+
 /* --- Reconnecting overlay --- */
 #reconnecting {
   position: fixed;
@@ -1339,3 +1401,44 @@ html, body {
   color: var(--text);
   font-size: 16px;
 }
+
+/* --- Log field hints --- */
+.ops-hint { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+/* --- Past Activations --- */
+.pa-header { font-size: 16px; font-weight: 700; color: var(--text); padding: 12px 16px 8px; }
+.pa-card { margin: 4px 8px; background: var(--bg-card); border-radius: 8px; overflow: hidden; }
+.pa-card-header { display: flex; align-items: center; gap: 8px; padding: 12px; cursor: pointer; }
+.pa-ref { font-weight: 700; color: var(--pota); font-size: 14px; }
+.pa-date { font-size: 12px; color: var(--text-dim); flex: 1; }
+.pa-count { font-size: 12px; font-weight: 600; color: var(--text-dim); padding: 2px 8px; background: #333; border-radius: 10px; }
+.pa-count.pa-badge-success { background: var(--pota); color: #000; }
+.pa-detail { padding: 0 12px 12px; }
+.pa-contacts { max-height: 200px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.pa-contact-row { display: flex; align-items: center; gap: 4px; padding: 4px 0; font-size: 12px; border-bottom: 1px solid #1a1a2e; }
+.pa-nr { width: 22px; text-align: right; color: var(--text-dim); font-size: 11px; }
+.pa-time { width: 40px; font-family: monospace; color: var(--text-dim); font-size: 11px; }
+.pa-call { flex: 1; font-weight: 600; color: #fff; }
+.pa-freq { width: 55px; font-family: monospace; font-size: 11px; color: var(--text); }
+.pa-mode { font-size: 10px; padding: 1px 4px; background: #333; border-radius: 3px; color: var(--text-dim); }
+.pa-rst { font-size: 11px; color: var(--text-dim); }
+.pa-actions { display: flex; gap: 8px; margin-top: 8px; }
+.pa-map-btn, .pa-export-btn { flex: 1; padding: 10px; font-size: 13px; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; }
+.pa-map-btn { background: var(--bg-header); color: var(--pota); border: 1px solid var(--pota); }
+.pa-export-btn { background: var(--bg-header); color: var(--text); border: 1px solid #555; }
+
+/* --- Activation Map Overlay --- */
+#act-map-overlay { position: fixed; inset: 0; z-index: 150; display: flex; flex-direction: column; background: var(--bg); }
+.act-map-bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--bg-header); border-bottom: 1px solid #333; flex-shrink: 0; }
+.act-map-back { background: none; border: none; color: var(--text); font-size: 16px; cursor: pointer; padding: 4px 8px; }
+.act-map-title { font-size: 14px; font-weight: 600; color: var(--pota); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.act-map-count { font-size: 12px; color: var(--text-dim); }
+.act-map-container { flex: 1; min-height: 0; }
+
+/* Dark map tiles */
+.dark-tiles { filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7); }
+
+/* Leaflet popup dark theme */
+.leaflet-popup-content-wrapper { background: var(--bg-card); color: var(--text); border-radius: 8px; }
+.leaflet-popup-tip { background: var(--bg-card); }
+.leaflet-popup-content { font-size: 13px; }

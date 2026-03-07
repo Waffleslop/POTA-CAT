@@ -103,6 +103,8 @@ let _currentNbState = false;
 let _currentAtuState = false;
 let _currentVfo = 'A';
 let _currentFilterWidth = 0;
+let _currentRfGain = 0;
+let _currentTxPower = 100;
 
 // Filter preset tables for rig controls (Hz values)
 const FILTER_PRESETS = {
@@ -141,11 +143,11 @@ function detectRigType() {
 
 function getRigCapabilities(rigType) {
   switch (rigType) {
-    case 'flex':    return { nb: true, atu: true, vfo: false, filter: true, filterType: 'arbitrary' };
-    case 'yaesu':   return { nb: true, atu: false, vfo: true, filter: true, filterType: 'indexed' };
-    case 'kenwood': return { nb: true, atu: false, vfo: true, filter: true, filterType: 'direct' };
-    case 'rigctld': return { nb: true, atu: false, vfo: true, filter: true, filterType: 'passband' };
-    default:        return { nb: false, atu: false, vfo: false, filter: false, filterType: 'none' };
+    case 'flex':    return { nb: true, atu: true, vfo: false, filter: true, filterType: 'arbitrary', rfgain: true, txpower: true };
+    case 'yaesu':   return { nb: true, atu: false, vfo: true, filter: true, filterType: 'indexed', rfgain: false, txpower: false };
+    case 'kenwood': return { nb: true, atu: false, vfo: true, filter: true, filterType: 'direct', rfgain: false, txpower: false };
+    case 'rigctld': return { nb: true, atu: false, vfo: true, filter: true, filterType: 'passband', rfgain: true, txpower: true };
+    default:        return { nb: false, atu: false, vfo: false, filter: false, filterType: 'none', rfgain: false, txpower: false };
   }
 }
 
@@ -545,6 +547,12 @@ function sendClusterStatus() {
   }
   const s = { nodes };
   if (win && !win.isDestroyed()) win.webContents.send('cluster-status', s);
+  // Push cluster state to ECHOCAT phone
+  if (remoteServer && remoteServer.running) {
+    const anyConnected = nodes.some(n => n.connected);
+    remoteServer.broadcastClusterState(anyConnected);
+    updateRemoteSettings();
+  }
 }
 
 function getClusterNodeList() {
@@ -1064,6 +1072,9 @@ async function saveQsoRecord(qsoData) {
     if (win && !win.isDestroyed()) {
       win.webContents.send('worked-qsos', [...workedQsos.entries()]);
     }
+    if (remoteServer && remoteServer.running) {
+      remoteServer.sendWorkedQsos([...workedQsos.entries()]);
+    }
   }
 
   // Forward to external logbook if enabled
@@ -1371,11 +1382,13 @@ function updateWsjtxHighlights() {
 // --- SmartSDR panadapter spots ---
 function needsSmartSdr() {
   // Connect SmartSDR API if panadapter spots are enabled, CW keyer is active,
-  // WSJT-X is active with a Flex, or ECHOCAT remote needs rig controls
+  // WSJT-X is active with a Flex, ECHOCAT remote needs rig controls,
+  // or CW XIT offset is configured (XIT is applied via SmartSDR slice commands)
   if (settings.smartSdrSpots) return true;
   if (settings.enableCwKeyer) return true;
   if (settings.enableWsjtx && settings.catTarget && settings.catTarget.type === 'tcp') return true;
   if (settings.enableRemote && settings.catTarget && settings.catTarget.type === 'tcp') return true;
+  if (settings.cwXit && settings.catTarget && settings.catTarget.type === 'tcp') return true;
   return false;
 }
 
@@ -1484,6 +1497,21 @@ function pushActivatorStateToPhone() {
   remoteServer.sendSessionContacts();
 }
 
+function updateRemoteSettings() {
+  if (!remoteServer) return;
+  const anyCluster = [...clusterClients.values()].some(e => e.client.connected);
+  remoteServer.setRemoteSettings({
+    myCallsign: settings.myCallsign || '',
+    grid: settings.grid || '',
+    clusterConnected: anyCluster,
+    respotDefault: settings.respotDefault !== false,
+    respotTemplate: settings.respotTemplate || '{rst} in {QTH} 73s {mycallsign} via POTACAT',
+    dxRespotTemplate: settings.dxRespotTemplate || 'Heard in {QTH} 73s {mycallsign} via POTACAT',
+    scanDwell: parseInt(settings.scanDwell, 10) || 7,
+    refreshInterval: settings.refreshInterval || 30,
+  });
+}
+
 function connectRemote() {
   disconnectRemote();
   if (!settings.enableRemote) return;
@@ -1519,6 +1547,12 @@ function connectRemote() {
     if (workedParks.size > 0) {
       remoteServer.sendWorkedParks([...workedParks.keys()]);
     }
+    // Send worked QSOs for worked-spot display
+    if (workedQsos.size > 0) {
+      remoteServer.sendWorkedQsos([...workedQsos.entries()]);
+    }
+    // Push settings needed by phone (callsign, grid, respot defaults, cluster state)
+    updateRemoteSettings();
     if (win && !win.isDestroyed()) {
       win.webContents.send('remote-status', { connected: true });
     }
@@ -1662,6 +1696,30 @@ function connectRemote() {
     console.log('[Echo CAT] Swap VFO →', newVfo);
   });
 
+  remoteServer.on('set-rfgain', ({ value }) => {
+    if (flexSdr()) {
+      // Flex RF Gain: slider 0–100 maps to -10 to +20 dB
+      const dB = (value * 0.3) - 10;
+      smartSdr.setRfGain(0, dB);
+    } else if (cat && cat.connected && detectRigType() === 'rigctld') {
+      cat.setRfGain(value / 100);
+    }
+    _currentRfGain = value;
+    broadcastRemoteRadioStatus();
+    console.log('[Echo CAT] RF Gain →', value);
+  });
+
+  remoteServer.on('set-txpower', ({ value }) => {
+    if (flexSdr()) {
+      smartSdr.setTxPower(value);
+    } else if (cat && cat.connected && detectRigType() === 'rigctld') {
+      cat.setTxPower(value / 100);
+    }
+    _currentTxPower = value;
+    broadcastRemoteRadioStatus();
+    console.log('[Echo CAT] TX Power →', value);
+  });
+
   remoteServer.on('set-activator-park', async ({ parkRef, activationType, activationName: actName, sig }) => {
     console.log('[Echo CAT] Set activator park:', parkRef || actName, 'type:', activationType);
     settings.appMode = 'activator';
@@ -1701,6 +1759,69 @@ function connectRemote() {
     }
   });
 
+  remoteServer.on('set-refresh-interval', ({ value }) => {
+    const val = Math.max(15, parseInt(value, 10) || 30);
+    settings.refreshInterval = val;
+    saveSettings(settings);
+    if (spotTimer) clearInterval(spotTimer);
+    spotTimer = setInterval(refreshSpots, val * 1000);
+    console.log('[Echo CAT] Refresh interval →', val, 's');
+  });
+
+  remoteServer.on('get-past-activations', () => {
+    try {
+      const activations = getPastActivations();
+      remoteServer.sendPastActivations(activations);
+    } catch (err) {
+      console.error('[Echo CAT] Past activations error:', err.message);
+      remoteServer.sendPastActivations([]);
+    }
+  });
+
+  remoteServer.on('get-activation-map-data', ({ parkRef, date, contacts }) => {
+    try {
+      // Look up park coordinates
+      let park = null;
+      if (parkRef) {
+        const p = getParkDb(parksMap, parkRef);
+        if (p) park = { ref: parkRef, name: p.name || '', lat: parseFloat(p.latitude) || null, lon: parseFloat(p.longitude) || null };
+      }
+      // Resolve contact locations via cty.dat
+      const resolvedContacts = [];
+      for (const c of (contacts || [])) {
+        let loc = null;
+        // Try grid square first (more precise)
+        if (c.myGridsquare || c.gridsquare) {
+          // Grid squares would need client-side conversion; use cty.dat here
+        }
+        // Resolve via cty.dat
+        if (ctyDb && c.callsign) {
+          const entity = resolveCallsign(c.callsign, ctyDb);
+          if (entity && entity.lat != null && entity.lon != null) {
+            const area = getCallAreaCoords(c.callsign, entity.name);
+            if (area) {
+              loc = { lat: area.lat, lon: area.lon, name: entity.name };
+            } else {
+              loc = { lat: entity.lat, lon: entity.lon, name: entity.name };
+            }
+          }
+        }
+        resolvedContacts.push({
+          callsign: c.callsign || '',
+          freq: c.freq || '',
+          mode: c.mode || '',
+          lat: loc ? loc.lat : null,
+          lon: loc ? loc.lon : null,
+          entityName: loc ? loc.name : '',
+        });
+      }
+      remoteServer.sendActivationMapData({ parkRef, park, resolvedContacts });
+    } catch (err) {
+      console.error('[Echo CAT] Activation map data error:', err.message);
+      remoteServer.sendActivationMapData({ parkRef, park: null, resolvedContacts: [] });
+    }
+  });
+
   remoteServer.on('log-qso', async (data) => {
     if (!data || !data.callsign) {
       remoteServer.sendLogResult({ success: false, error: 'Missing callsign' });
@@ -1732,6 +1853,13 @@ function connectRemote() {
         comment,
       };
 
+      // Pass through respot flags from phone
+      if (data.respot) qsoData.respot = true;
+      if (data.wwffRespot) { qsoData.wwffRespot = true; qsoData.wwffReference = data.wwffReference || ''; }
+      if (data.llotaRespot) { qsoData.llotaRespot = true; qsoData.llotaReference = data.llotaReference || ''; }
+      if (data.dxcRespot) qsoData.dxcRespot = true;
+      if (data.respotComment) qsoData.respotComment = data.respotComment;
+
       // Add station fields from settings
       if (settings.myCallsign) {
         qsoData.stationCallsign = settings.myCallsign.toUpperCase();
@@ -1745,6 +1873,7 @@ function connectRemote() {
       const mySigInfo = data.mySigInfo || '';
       const myGrid = data.myGridsquare || settings.grid || '';
 
+      let result = { success: true };
       if (mySig && mySigInfo) {
         // Phone sent explicit park ref — use multi-park cross-product from desktop
         const parkRefs = (settings.activatorParkRefs || []).filter(p => p && p.ref);
@@ -1753,13 +1882,15 @@ function connectRemote() {
           for (let i = 0; i < parkRefs.length; i++) {
             const parkQso = { ...qsoData, mySig: 'POTA', mySigInfo: parkRefs[i].ref, myGridsquare: myGrid };
             if (i > 0) parkQso.skipLogbookForward = true;
-            await saveQsoRecord(parkQso);
+            const r = await saveQsoRecord(parkQso);
+            if (r) Object.assign(result, r);
           }
         } else {
           qsoData.mySig = mySig;
           qsoData.mySigInfo = mySigInfo;
           qsoData.myGridsquare = myGrid;
-          await saveQsoRecord(qsoData);
+          const r = await saveQsoRecord(qsoData);
+          if (r) Object.assign(result, r);
         }
       } else if (settings.appMode === 'activator') {
         // Desktop is in activator mode but phone didn't send mySig — use desktop park refs
@@ -1768,13 +1899,25 @@ function connectRemote() {
           for (let i = 0; i < parkRefs.length; i++) {
             const parkQso = { ...qsoData, mySig: 'POTA', mySigInfo: parkRefs[i].ref, myGridsquare: myGrid };
             if (i > 0) parkQso.skipLogbookForward = true;
-            await saveQsoRecord(parkQso);
+            const r = await saveQsoRecord(parkQso);
+            if (r) Object.assign(result, r);
           }
         } else {
-          await saveQsoRecord(qsoData);
+          const r = await saveQsoRecord(qsoData);
+          if (r) Object.assign(result, r);
         }
       } else {
-        await saveQsoRecord(qsoData);
+        const r = await saveQsoRecord(qsoData);
+        if (r) Object.assign(result, r);
+      }
+
+      // Handle additional parks from phone
+      const additionalParks = data.additionalParks || [];
+      for (const addlRef of additionalParks) {
+        if (!addlRef) continue;
+        const addlQso = { ...qsoData, sigInfo: addlRef, respot: false, wwffRespot: false,
+          llotaRespot: false, dxcRespot: false, respotComment: '', skipLogbookForward: true };
+        await saveQsoRecord(addlQso);
       }
 
       // Track session contact and send enhanced log-ok
@@ -1798,6 +1941,8 @@ function connectRemote() {
         band: contact.band,
         rstSent: contact.rstSent,
         rstRcvd: contact.rstRcvd,
+        resposted: result.resposted || false,
+        respotError: result.respotError || result.wwffRespotError || result.llotaRespotError || result.dxcRespotError || '',
       });
     } catch (err) {
       console.error('[Echo CAT] Log QSO error:', err.message);
@@ -1883,6 +2028,8 @@ function broadcastRemoteRadioStatus() {
     atu: _currentAtuState,
     vfo: _currentVfo,
     filterWidth: _currentFilterWidth,
+    rfgain: _currentRfGain,
+    txpower: _currentTxPower,
     capabilities: getRigCapabilities(rigType),
   };
   remoteServer.broadcastRadioStatus(status);
@@ -3630,6 +3777,8 @@ function tuneRadio(freqKhz, mode, brng, { clearXit } = {}) {
 
   // CW XIT: use radio's XIT (TX offset only) instead of shifting tune frequency
   const wantXit = !clearXit && (mode === 'CW') && settings.cwXit;
+  // Clear XIT when tuning to a non-CW spot (don't leave stale XIT from a previous CW tune)
+  const shouldClearXit = clearXit || (!wantXit && mode && mode !== 'CW');
 
   const m = (mode || '').toUpperCase();
   let filterWidth = 0;
@@ -3656,7 +3805,7 @@ function tuneRadio(freqKhz, mode, brng, { clearXit } = {}) {
       // Set or clear XIT on the slice
       if (wantXit) {
         smartSdr.setSliceXit(sliceIndex, true, settings.cwXit);
-      } else if (clearXit) {
+      } else if (shouldClearXit) {
         smartSdr.setSliceXit(sliceIndex, false);
       }
     }
@@ -3672,7 +3821,7 @@ function tuneRadio(freqKhz, mode, brng, { clearXit } = {}) {
     const sliceIndex = (settings.catTarget.port || 5002) - 5002;
     if (wantXit) {
       smartSdr.setSliceXit(sliceIndex, true, settings.cwXit);
-    } else if (clearXit) {
+    } else if (shouldClearXit) {
       smartSdr.setSliceXit(sliceIndex, false);
     }
   }
@@ -5122,21 +5271,22 @@ app.whenReady().then(() => {
     }
   });
 
-  // --- Past Activations (scan log for MY_SIG=POTA groups) ---
-  ipcMain.handle('get-past-activations', () => {
+  // --- Past Activations (scan log for MY_SIG groups — POTA, SOTA, etc.) ---
+  function getPastActivations() {
     const logPath = settings.adifLogPath || path.join(app.getPath('userData'), 'potacat_qso_log.adi');
     try {
       if (!fs.existsSync(logPath)) return [];
       const qsos = parseAllRawQsos(logPath);
-      // Group by MY_SIG_INFO (park ref) + QSO_DATE
+      // Group by MY_SIG_INFO (park/summit ref) + QSO_DATE
       const groups = new Map();
       for (const q of qsos) {
-        if ((q.MY_SIG || '').toUpperCase() !== 'POTA' || !q.MY_SIG_INFO) continue;
+        const mySig = (q.MY_SIG || '').toUpperCase();
+        if (!mySig || !q.MY_SIG_INFO) continue;
         const ref = q.MY_SIG_INFO.toUpperCase();
         const date = q.QSO_DATE || '';
         const key = `${ref}|${date}`;
         if (!groups.has(key)) {
-          groups.set(key, { parkRef: ref, date, contacts: [] });
+          groups.set(key, { parkRef: ref, date, sig: mySig, contacts: [] });
         }
         groups.get(key).contacts.push({
           callsign: q.CALL || '',
@@ -5159,7 +5309,9 @@ app.whenReady().then(() => {
     } catch {
       return [];
     }
-  });
+  }
+
+  ipcMain.handle('get-past-activations', () => getPastActivations());
 
   // --- Delete activation (removes matching QSOs from ADIF log) ---
   ipcMain.handle('delete-activation', async (_e, parkRef, date) => {
