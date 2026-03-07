@@ -17,19 +17,25 @@ window.api.onStartAudio(async (config) => {
     audioEl.srcObject = null;
 
     // Capture radio's USB audio output (RX audio to send to phone)
-    const constraints = {
-      audio: {
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
-      },
+    const baseAudio = {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
     };
-    // Use specific device if configured
-    if (config.inputDeviceId) {
-      constraints.audio.deviceId = { exact: config.inputDeviceId };
-    }
 
-    localStream = await navigator.mediaDevices.getUserMedia(constraints);
+    // Try specific device first, fall back to default if it fails
+    if (config.inputDeviceId) {
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({
+          audio: { ...baseAudio, deviceId: { exact: config.inputDeviceId } },
+        });
+      } catch (e) {
+        window.api.sendAudioStatus({ error: 'Configured audio input not found, using default: ' + e.message });
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: baseAudio });
+      }
+    } else {
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: baseAudio });
+    }
 
     // Create peer connection (no STUN/TURN — Tailscale provides direct connectivity)
     pc = new RTCPeerConnection({ iceServers: [] });

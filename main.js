@@ -28,6 +28,7 @@ const { fetchSpots: fetchLlotaSpots } = require('./lib/llota');
 const { postWwffRespot } = require('./lib/wwff-respot');
 const { QrzClient } = require('./lib/qrz');
 const { callsignToProgram, fetchParksForProgram, loadParksCache, saveParksCache, isCacheStale, searchParks: searchParksDb, getPark: getParkDb, buildParksMap } = require('./lib/pota-parks-db');
+const { fetchDxCalExpeditions } = require('./lib/dxcal');
 const { autoUpdater } = require('electron-updater');
 
 // --- QRZ.com callsign lookup ---
@@ -85,7 +86,8 @@ let wsjtx = null;
 let wsjtxStatus = null; // last Status message from WSJT-X
 let wsjtxHighlightTimer = null; // throttle timer for highlight updates
 let donorCallsigns = new Set(); // supporter callsigns from potacat.com
-let expeditionCallsigns = new Set(); // active DX expeditions from Club Log
+let expeditionCallsigns = new Set(); // active DX expeditions from Club Log + danplanet iCal
+let expeditionMeta = new Map(); // callsign → { entity, startDate, endDate, description }
 let activeEvents = [];                // events fetched from remote endpoint
 const EVENTS_CACHE_PATH = path.join(app.getPath('userData'), 'events-cache.json');
 let pskr = null;
@@ -333,6 +335,16 @@ function spawnRigctld(target, portOverride) {
 
 function sendCatStatus(s) {
   if (win && !win.isDestroyed()) win.webContents.send('cat-status', s);
+  // If CAT disconnected while ECHOCAT PTT was active, force-release PTT
+  // and notify the phone so it can update its UI state
+  if (!s.connected && _remoteTxState && remoteServer && remoteServer.running) {
+    console.log('[Echo CAT] CAT disconnected during TX — forcing PTT release');
+    _remoteTxState = false;
+    remoteServer.forcePttRelease();
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('remote-tx-state', false);
+    }
+  }
 }
 
 function sendCatFrequency(hz) {
@@ -1359,7 +1371,7 @@ function updateWsjtxHighlights() {
 // --- SmartSDR panadapter spots ---
 function needsSmartSdr() {
   // Connect SmartSDR API if panadapter spots are enabled, CW keyer is active,
-  // WSJT-X is active with a Flex, or ECHO CAT remote needs rig controls
+  // WSJT-X is active with a Flex, or ECHOCAT remote needs rig controls
   if (settings.smartSdrSpots) return true;
   if (settings.enableCwKeyer) return true;
   if (settings.enableWsjtx && settings.catTarget && settings.catTarget.type === 'tcp') return true;
@@ -1383,7 +1395,7 @@ function connectSmartSdr() {
   smartSdr.setPersistentId(settings.smartSdrClientId);
   // Tell SmartSDR whether CW keyer needs GUI auth
   smartSdr.setNeedsCw(!!settings.enableCwKeyer);
-  // Bind to GUI client for ECHO CAT rig controls (ATU, etc.)
+  // Bind to GUI client for ECHOCAT rig controls (ATU, etc.)
   smartSdr.setNeedsBind(!!settings.enableRemote);
   // Log CW auth results
   smartSdr.on('cw-auth', ({ method, ok }) => {
@@ -1460,7 +1472,7 @@ function disconnectTci() {
   }
 }
 
-// --- ECHO CAT ---
+// --- ECHOCAT ---
 function pushActivatorStateToPhone() {
   if (!remoteServer || !remoteServer.hasClient()) return;
   const parkRefs = (settings.activatorParkRefs || []).filter(p => p && p.ref).map(p => ({ ref: p.ref, name: p.name || '' }));
@@ -2379,12 +2391,12 @@ function sendMergedSpots() {
   const realSpots = merged.filter(s => s.source !== 'net');
   pushSpotsToSmartSdr(realSpots);
   pushSpotsToTci(realSpots);
-  // Forward to ECHO CAT — SSB only (net spots always pass), respect max spot age
+  // Forward to ECHOCAT — SSB only (net spots always pass), respect max spot age
   if (remoteServer && remoteServer.running) {
     const maxAgeMs = ((settings.maxAgeMin != null ? settings.maxAgeMin : 5) * 60000) || 300000;
     const now = Date.now();
     const echoSpots = merged.filter(s => {
-      // Net spots always pass through to ECHO CAT
+      // Net spots always pass through to ECHOCAT
       if (s.source === 'net') return true;
       // SSB only
       const m = (s.mode || '').toUpperCase();
@@ -2607,7 +2619,7 @@ function loadWorkedParks() {
       // Serialize Map as array of [key, value] pairs
       win.webContents.send('worked-parks', [...workedParks.entries()]);
     }
-    // Push to ECHO CAT phone
+    // Push to ECHOCAT phone
     if (remoteServer && remoteServer.running) {
       remoteServer.sendWorkedParks([...workedParks.keys()]);
     }
@@ -2903,32 +2915,71 @@ function fetchDonorList() {
   req.on('error', () => { /* silently ignore — no internet is fine */ });
 }
 
-// --- DX Expeditions (Club Log) ---
-function fetchExpeditions() {
-  const https = require('https');
-  const req = https.get('https://clublog.org/expeditions.php?api=1', (res) => {
-    let body = '';
-    res.on('data', (chunk) => { body += chunk; });
-    res.on('end', () => {
-      try {
-        const arr = JSON.parse(body);
-        // Each entry is [callsign, lastQsoDateTime, qsoCount]
-        // Only include expeditions active in the last 7 days
-        const cutoff = Date.now() - 7 * 24 * 3600000;
-        expeditionCallsigns = new Set();
-        for (const entry of arr) {
-          const lastQso = new Date(entry[1] + 'Z').getTime();
-          if (lastQso >= cutoff) {
-            expeditionCallsigns.add(entry[0].toUpperCase());
+// --- DX Expeditions (Club Log + danplanet iCal) ---
+function fetchClubLogExpeditions() {
+  return new Promise((resolve) => {
+    const https = require('https');
+    const req = https.get('https://clublog.org/expeditions.php?api=1', (res) => {
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        try {
+          const arr = JSON.parse(body);
+          const cutoff = Date.now() - 7 * 24 * 3600000;
+          const calls = [];
+          for (const entry of arr) {
+            const lastQso = new Date(entry[1] + 'Z').getTime();
+            if (lastQso >= cutoff) calls.push(entry[0].toUpperCase());
           }
-        }
-        if (win && !win.isDestroyed()) {
-          win.webContents.send('expedition-callsigns', [...expeditionCallsigns]);
-        }
-      } catch { /* silently ignore parse errors */ }
+          resolve(calls);
+        } catch { resolve([]); }
+      });
     });
+    req.on('error', () => resolve([]));
   });
-  req.on('error', () => { /* silently ignore */ });
+}
+
+async function fetchExpeditions() {
+  const [clubLogResult, dxCalResult] = await Promise.allSettled([
+    fetchClubLogExpeditions(),
+    fetchDxCalExpeditions(),
+  ]);
+
+  const merged = new Set();
+  const meta = new Map();
+
+  // Club Log callsigns
+  if (clubLogResult.status === 'fulfilled') {
+    for (const cs of clubLogResult.value) merged.add(cs);
+  }
+
+  // danplanet iCal expeditions — richer metadata
+  if (dxCalResult.status === 'fulfilled') {
+    for (const exp of dxCalResult.value) {
+      for (const cs of exp.callsigns) {
+        const upper = cs.toUpperCase();
+        merged.add(upper);
+        meta.set(upper, {
+          entity: exp.entity,
+          startDate: exp.startDate,
+          endDate: exp.endDate,
+          description: exp.description,
+        });
+      }
+    }
+  }
+
+  expeditionCallsigns = merged;
+  expeditionMeta = meta;
+
+  if (win && !win.isDestroyed()) {
+    const metadata = {};
+    for (const [cs, m] of meta) metadata[cs] = m;
+    win.webContents.send('expedition-callsigns', {
+      callsigns: [...merged],
+      metadata,
+    });
+  }
 }
 
 // --- Active Events (remote endpoint) ---
@@ -4291,7 +4342,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('get-settings', () => ({ ...settings, appVersion: require('./package.json').version }));
 
-  // --- ECHO CAT IPC ---
+  // --- ECHOCAT IPC ---
   ipcMain.handle('get-local-ips', () => RemoteServer.getLocalIPs());
 
   ipcMain.on('remote-audio-send-signal', (_e, data) => {
@@ -4494,7 +4545,7 @@ app.whenReady().then(() => {
       connectTci();
     }
 
-    // Reconnect ECHO CAT if settings changed
+    // Reconnect ECHOCAT if settings changed
     if (remoteChanged) {
       if (settings.enableRemote) {
         connectRemote();

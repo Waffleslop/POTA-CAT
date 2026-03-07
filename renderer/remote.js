@@ -247,6 +247,7 @@
         break;
 
       case 'ptt-timeout':
+      case 'ptt-force-rx':
         pttDown = false;
         pttBtn.classList.remove('active');
         txBanner.classList.add('hidden');
@@ -769,7 +770,7 @@
             });
           }
         })
-        .catch(err => { console.error('SDP error:', err); setAudioStatus('Error'); });
+        .catch(err => { console.error('SDP error (may recover):', err); });
     } else if (data.type === 'ice') {
       if (pc) pc.addIceCandidate(data.candidate).catch(() => {});
     }

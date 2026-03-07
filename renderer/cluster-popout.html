@@ -58,6 +58,31 @@
       border-radius: 4px; color: var(--text-primary); cursor: pointer; font-size: 12px;
     }
     .cmd-bar button:hover { background: var(--bg-hover); }
+
+    .help-panel {
+      position: absolute; bottom: 38px; left: 0; right: 0;
+      max-height: 60%; overflow-y: auto;
+      background: var(--bg-secondary); border-top: 1px solid var(--border-primary);
+      padding: 10px 14px; z-index: 10;
+      font-size: 12px;
+    }
+    .help-section { margin-bottom: 10px; }
+    .help-section-title { font-weight: 700; color: var(--text-secondary); margin-bottom: 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .help-row {
+      display: flex; align-items: baseline; gap: 10px; padding: 2px 0;
+    }
+    .help-cmd {
+      font-family: 'Consolas', 'Courier New', monospace; color: #e040fb;
+      cursor: pointer; white-space: nowrap; border-radius: 2px; padding: 1px 4px;
+      transition: background 0.15s;
+    }
+    .help-cmd:hover { background: rgba(224, 64, 251, 0.15); }
+    .help-desc { color: var(--text-tertiary); }
+    .help-btn {
+      width: 26px; height: 26px; font-size: 14px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .help-btn.active { color: #e040fb; border-color: #e040fb; }
   </style>
 </head>
 <body>
@@ -75,7 +100,9 @@
   <div class="terminal-wrap" id="terminal-wrap">
     <div id="terminal"></div>
   </div>
+  <div id="help-panel" class="help-panel hidden"></div>
   <div class="cmd-bar">
+    <button id="cmd-help" class="help-btn" title="Command reference">?</button>
     <input type="text" id="cmd-input" placeholder="Type a command..." autocomplete="off" spellcheck="false">
     <button id="cmd-send">Send</button>
   </div>

@@ -39,7 +39,8 @@ let enableSplit = false;
 let activeRigName = ''; // name of the currently active rig profile
 let workedQsos = new Map(); // callsign → [{date, ref}] from QSO log
 let donorCallsigns = new Set(); // supporter callsigns from potacat.com
-let expeditionCallsigns = new Set(); // active DX expeditions from Club Log
+let expeditionCallsigns = new Set(); // active DX expeditions from Club Log + danplanet
+let expeditionMeta = new Map(); // callsign → { entity, startDate, endDate, description }
 let activeEvents = [];                // events from remote endpoint
 let eventCallsignMap = new Map();     // callsign pattern → event id (for badge matching)
 let eventOverlayOpen = false;
@@ -394,7 +395,7 @@ const setCwSidetonePitch = document.getElementById('set-cw-sidetone-pitch');
 const setCwSidetoneVolume = document.getElementById('set-cw-sidetone-volume');
 const cwSidetoneVolumeLabel = document.getElementById('cw-sidetone-volume-label');
 const cwKeyerStatusEl = document.getElementById('cw-keyer-status');
-// ECHO CAT
+// ECHOCAT
 const setEnableRemote = document.getElementById('set-enable-remote');
 const remoteConfig = document.getElementById('remote-config');
 const setRemotePort = document.getElementById('set-remote-port');
@@ -1813,7 +1814,7 @@ setTciSpots.addEventListener('change', () => {
   tciConfig.classList.toggle('hidden', !setTciSpots.checked);
 });
 
-// ECHO CAT checkbox toggles config visibility
+// ECHOCAT checkbox toggles config visibility
 setEnableRemote.addEventListener('change', async () => {
   remoteConfig.classList.toggle('hidden', !setEnableRemote.checked);
   if (setEnableRemote.checked) {
@@ -3027,7 +3028,9 @@ function updateMapMarkers(filtered) {
       : '';
     const mapNewPark = workedParksSet.size > 0 && (s.source === 'pota' || s.source === 'wwff') && s.reference && !workedParksSet.has(s.reference);
     const newBadge = mapNewPark ? ` <span style="background:${SOURCE_COLORS_ACTIVE.pota};color:#000;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;">NEW</span>` : '';
-    const expeditionBadge = enableDxe && expeditionCallsigns.has(s.callsign.toUpperCase()) ? ' <span style="background:#ff1744;color:#fff;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;">DXP</span>' : '';
+    const expMeta = expeditionMeta.get(s.callsign.toUpperCase());
+    const expTitle = expMeta ? `DX Expedition: ${expMeta.entity}` : 'DX Expedition';
+    const expeditionBadge = enableDxe && expeditionCallsigns.has(s.callsign.toUpperCase()) ? ` <span style="background:#ff1744;color:#fff;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;" title="${expTitle}">DXP</span>` : '';
     const mapEvent = getEventForCallsign(s.callsign);
     const eventBadgeHtml = mapEvent ? ` <span style="background:${mapEvent.badgeColor || '#ff6b00'};color:#fff;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;">${mapEvent.badge || 'EVT'}</span>` : '';
     const wwffBadge = s.wwffReference ? ` <span style="background:${SOURCE_COLORS_ACTIVE.wwff};color:#000;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;">WWFF</span>` : '';
@@ -3948,6 +3951,7 @@ function enrichSpotsForPopout(filtered) {
     isWorked: workedQsos.has(s.callsign.toUpperCase()),
     isWorkedToday: workedQsos.has(s.callsign.toUpperCase()) && isWorkedSpot(s),
     isExpedition: enableDxe && expeditionCallsigns.has(s.callsign.toUpperCase()),
+    expeditionEntity: (expeditionMeta.get(s.callsign.toUpperCase()) || {}).entity || '',
     isNewPark: workedParksSet.size > 0 && (s.source === 'pota' || s.source === 'wwff') && s.reference && !workedParksSet.has(s.reference),
     isOop: isOutOfPrivilege(parseFloat(s.frequency), s.mode, licenseClass),
     isWatched: watchlist.has(s.callsign.toUpperCase()),
@@ -4262,7 +4266,10 @@ function render() {
       if (enableDxe && expeditionCallsigns.has(s.callsign.toUpperCase())) {
         const dxp = document.createElement('span');
         dxp.className = 'expedition-badge';
-        dxp.title = 'DX Expedition (Club Log)';
+        const meta = expeditionMeta.get(s.callsign.toUpperCase());
+        dxp.title = meta
+          ? `DX Expedition: ${meta.entity}${meta.startDate ? ` (${meta.startDate} – ${meta.endDate})` : ''}`
+          : 'DX Expedition (Club Log)';
         dxp.textContent = 'DXP';
         callTd.appendChild(dxp);
       }
@@ -5089,7 +5096,7 @@ openSettingsBtn.addEventListener('click', () => {
   openSettingsDialog();
 });
 
-// ECHO CAT quick toggle
+// ECHOCAT quick toggle
 const quickEchoCat = document.getElementById('quick-echo-cat');
 const echoCatInfo = document.getElementById('echo-cat-info');
 const echoCatUrl = document.getElementById('echo-cat-url');
@@ -5305,7 +5312,7 @@ async function openSettingsDialog() {
       connectMidiDevice(setCwMidiDevice.value);
     });
   }
-  // ECHO CAT
+  // ECHOCAT
   enableRemote = s.enableRemote === true;
   setEnableRemote.checked = enableRemote;
   remoteConfig.classList.toggle('hidden', !enableRemote);
@@ -5421,7 +5428,7 @@ settingsSave.addEventListener('click', async () => {
   const tciHostVal = setTciHost.value.trim() || '127.0.0.1';
   const tciPortVal = parseInt(setTciPort.value, 10) || 50001;
   const tciMaxAgeVal = parseInt(setTciMaxAge.value, 10) || 0;
-  // ECHO CAT
+  // ECHOCAT
   const remoteEnabled = setEnableRemote.checked;
   const remotePortVal = parseInt(setRemotePort.value, 10) || 7300;
   const remoteRequireTokenVal = setRemoteRequireToken.checked;
@@ -5796,8 +5803,20 @@ window.api.onDonorCallsigns((list) => {
 });
 
 // --- DX Expedition callsigns listener ---
-window.api.onExpeditionCallsigns((list) => {
-  expeditionCallsigns = new Set(list.map(cs => cs.toUpperCase()));
+window.api.onExpeditionCallsigns((data) => {
+  if (Array.isArray(data)) {
+    // backward compat: plain array of callsigns
+    expeditionCallsigns = new Set(data.map(cs => cs.toUpperCase()));
+    expeditionMeta = new Map();
+  } else {
+    expeditionCallsigns = new Set((data.callsigns || []).map(cs => cs.toUpperCase()));
+    expeditionMeta = new Map();
+    if (data.metadata) {
+      for (const [cs, m] of Object.entries(data.metadata)) {
+        expeditionMeta.set(cs.toUpperCase(), m);
+      }
+    }
+  }
   render();
 });
 
@@ -6962,7 +6981,7 @@ window.api.onPskrStatus(({ connected, error, spotCount, nextPollAt, pollUpdate }
   }
 });
 
-// ECHO CAT status
+// ECHOCAT status
 window.api.onRemoteStatus((s) => {
   remoteConnected = s.connected;
   updateSettingsConnBar();
@@ -6972,7 +6991,7 @@ window.api.onRemoteTxState((state) => {
   if (remoteTxIndicator) remoteTxIndicator.classList.toggle('hidden', !state);
 });
 
-// Reload prefs when ECHO CAT changes settings remotely
+// Reload prefs when ECHOCAT changes settings remotely
 window.api.onReloadPrefs(() => {
   loadPrefs();
 });

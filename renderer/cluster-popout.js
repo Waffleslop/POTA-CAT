@@ -179,6 +179,70 @@
     renderTabs();
   });
 
+  // --- Command Help Panel ---
+  const HELP_COMMANDS = [
+    { section: 'Spots', cmds: [
+      { cmd: 'SH/DX', desc: 'Show last 10 spots' },
+      { cmd: 'SH/DX 25', desc: 'Show last 25 spots' },
+      { cmd: 'SH/DX on 20m', desc: 'Spots on 20 meters' },
+      { cmd: 'SH/DX/BAND 40m', desc: 'Spots on 40 meters' },
+    ]},
+    { section: 'Info', cmds: [
+      { cmd: 'SH/WWV', desc: 'Solar and propagation data' },
+      { cmd: 'SH/WCY', desc: 'Geomagnetic data' },
+      { cmd: 'SHOW/TIME', desc: 'Server time' },
+      { cmd: 'SH/MUF', desc: 'MUF predictions' },
+    ]},
+    { section: 'Filters', cmds: [
+      { cmd: 'SET/FILTER', desc: 'Show current filters' },
+      { cmd: 'REJECT/SPOTS ON 160M', desc: 'Hide 160m spots' },
+      { cmd: 'ACCEPT/SPOTS ON 20M', desc: 'Only show 20m spots' },
+      { cmd: 'CLEAR/SPOTS ALL', desc: 'Clear all filters' },
+    ]},
+  ];
+
+  const helpPanel = document.getElementById('help-panel');
+  const cmdHelp = document.getElementById('cmd-help');
+
+  function buildHelpPanel() {
+    helpPanel.innerHTML = '';
+    for (const section of HELP_COMMANDS) {
+      const sec = document.createElement('div');
+      sec.className = 'help-section';
+      const title = document.createElement('div');
+      title.className = 'help-section-title';
+      title.textContent = section.section;
+      sec.appendChild(title);
+      for (const { cmd, desc } of section.cmds) {
+        const row = document.createElement('div');
+        row.className = 'help-row';
+        const cmdEl = document.createElement('span');
+        cmdEl.className = 'help-cmd';
+        cmdEl.textContent = cmd;
+        cmdEl.title = 'Click to send';
+        cmdEl.addEventListener('click', () => {
+          cmdInput.value = cmd;
+          cmdInput.focus();
+        });
+        const descEl = document.createElement('span');
+        descEl.className = 'help-desc';
+        descEl.textContent = desc;
+        row.appendChild(cmdEl);
+        row.appendChild(descEl);
+        sec.appendChild(row);
+      }
+      helpPanel.appendChild(sec);
+    }
+  }
+
+  buildHelpPanel();
+
+  cmdHelp.addEventListener('click', () => {
+    const showing = !helpPanel.classList.contains('hidden');
+    helpPanel.classList.toggle('hidden');
+    cmdHelp.classList.toggle('active', !showing);
+  });
+
   // --- Send command ---
   function sendCommand() {
     const text = cmdInput.value.trim();
