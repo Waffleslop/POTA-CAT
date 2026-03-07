@@ -1,6 +1,8 @@
 /* POTACAT — QSO Log Pop-out Window */
 'use strict';
 
+let accentGreen = '#4ecca3'; // updated by colorblind mode
+
 // --- Band lookup (duplicated from app.js — no Node in renderer) ---
 const BAND_RANGES = [
   [1800, 2000, '160m'], [3500, 4000, '80m'], [5330, 5410, '60m'],
@@ -470,7 +472,7 @@ function updateMap() {
     // World wrapping offsets
     for (const offset of [-360, 0, 360]) {
       const marker = L.circleMarker([lat, lon + offset], {
-        radius: 5, fillColor: '#4ecca3', color: '#4ecca3', fillOpacity: 0.8, weight: 1,
+        radius: 5, fillColor: accentGreen, color: accentGreen, fillOpacity: 0.8, weight: 1,
       }).bindPopup(popup);
       marker.on('mouseover', () => showArcsForCall(call, lat, lon));
       marker.on('mouseout', () => clearHoverArcs());
@@ -653,6 +655,10 @@ window.api.onTheme((theme) => {
   document.documentElement.setAttribute('data-theme', theme);
 });
 
+window.api.onColorblindMode((enabled) => {
+  accentGreen = enabled ? '#4fc3f7' : '#4ecca3';
+});
+
 // --- Log path ---
 async function showLogPath() {
   const settings = await window.api.getSettings();
@@ -693,6 +699,7 @@ async function resolveAllParkLocations() {
   if (settings.lightMode) {
     document.documentElement.setAttribute('data-theme', 'light');
   }
+  if (settings.colorblindMode) accentGreen = '#4fc3f7';
   homeGrid = settings.grid || '';
 
   allQsos = await window.api.getAllQsos();

@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('api', {
   onQsoDeleted: (cb) => ipcRenderer.on('qso-popout-deleted', (_e, idx) => cb(idx)),
   onRefresh: (cb) => ipcRenderer.on('qso-popout-refresh', () => cb()),
   onTheme: (cb) => ipcRenderer.on('qso-popout-theme', (_e, theme) => cb(theme)),
+  onColorblindMode: (cb) => ipcRenderer.on('colorblind-mode', (_e, enabled) => cb(enabled)),
   resolveCallsignLocations: (callsigns) => ipcRenderer.invoke('resolve-callsign-locations', callsigns),
   getPark: (ref) => ipcRenderer.invoke('get-park', ref),
   openExternal: (url) => ipcRenderer.send('open-external', url),

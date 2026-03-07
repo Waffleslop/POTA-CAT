@@ -1459,7 +1459,7 @@ function connectRemote() {
 
   remoteServer.on('tune', ({ freqKhz, mode, bearing }) => {
     console.log('[Echo CAT] Tune request:', freqKhz, 'kHz, mode:', mode || '(keep)');
-    tuneRadio(freqKhz, mode, bearing);
+    tuneRadio(freqKhz, mode, bearing, { clearXit: true });
   });
 
   remoteServer.on('ptt', ({ state }) => {
@@ -3542,15 +3542,15 @@ function migrateRigSettings(s) {
 let _lastTuneFreq = 0;
 let _lastTuneTime = 0;
 
-function tuneRadio(freqKhz, mode, brng) {
+function tuneRadio(freqKhz, mode, brng, { clearXit } = {}) {
   let freqHz = Math.round(parseFloat(freqKhz) * 1000); // kHz → Hz
   const now = Date.now();
   if (freqHz === _lastTuneFreq && now - _lastTuneTime < 300) return;
   _lastTuneFreq = freqHz;
   _lastTuneTime = now;
-  if ((mode === 'CW') && settings.cwXit) {
-    freqHz += settings.cwXit;
-  }
+
+  // CW XIT: use radio's XIT (TX offset only) instead of shifting tune frequency
+  const wantXit = !clearXit && (mode === 'CW') && settings.cwXit;
 
   const m = (mode || '').toUpperCase();
   let filterWidth = 0;
@@ -3574,6 +3574,12 @@ function tuneRadio(freqKhz, mode, brng) {
         ? 'DIGU' : (mode === 'CW' ? 'CW' : (mode === 'SSB' || mode === 'USB' ? 'USB' : (mode === 'LSB' ? 'LSB' : null)));
       sendCatLog(`tune via SmartSDR API: slice=${sliceIndex} freq=${freqMhz.toFixed(6)}MHz mode=${mode}→${flexMode} filter=${filterWidth}`);
       smartSdr.tuneSlice(sliceIndex, freqMhz, flexMode, filterWidth);
+      // Set or clear XIT on the slice
+      if (wantXit) {
+        smartSdr.setSliceXit(sliceIndex, true, settings.cwXit);
+      } else if (clearXit) {
+        smartSdr.setSliceXit(sliceIndex, false);
+      }
     }
     return;
   }
@@ -3581,6 +3587,16 @@ function tuneRadio(freqKhz, mode, brng) {
   if (!cat || !cat.connected) return;
   sendCatLog(`tune: freq=${freqKhz}kHz → ${freqHz}Hz mode=${mode} split=${!!settings.enableSplit} filter=${filterWidth}`);
   cat.tune(freqHz, mode, { split: settings.enableSplit, filterWidth });
+
+  // Set or clear XIT via SmartSDR API (works even when tuning via CAT)
+  if (smartSdr && smartSdr.connected && settings.catTarget && settings.catTarget.type === 'tcp') {
+    const sliceIndex = (settings.catTarget.port || 5002) - 5002;
+    if (wantXit) {
+      smartSdr.setSliceXit(sliceIndex, true, settings.cwXit);
+    } else if (clearXit) {
+      smartSdr.setSliceXit(sliceIndex, false);
+    }
+  }
 }
 
 // --- potacat:// protocol handler ---

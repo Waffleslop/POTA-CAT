@@ -1,5 +1,7 @@
 /* actmap-popout.js — Pop-out activation map showing park + logged contacts */
 
+let accentGreen = '#4ecca3'; // updated by colorblind mode
+
 // --- Titlebar ---
 if (window.api.platform === 'darwin') {
   document.body.classList.add('platform-darwin');
@@ -113,7 +115,7 @@ function setParkMarker(lat, lon, ref, count) {
   parkLon = lon;
   const parkIcon = L.divIcon({
     className: '',
-    html: '<div style="background:#4ecca3;width:16px;height:16px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 6px rgba(78,204,163,0.6);"></div>',
+    html: `<div style="background:${accentGreen};width:16px;height:16px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 6px rgba(78,204,163,0.6);"></div>`,
     iconSize: [16, 16],
     iconAnchor: [8, 8],
   });
@@ -282,6 +284,10 @@ window.api.onTheme((theme) => {
   }
 });
 
+window.api.onColorblindMode((enabled) => {
+  accentGreen = enabled ? '#4fc3f7' : '#4ecca3';
+});
+
 // --- Init ---
 
 async function init() {
@@ -290,6 +296,7 @@ async function init() {
     if (settings.lightMode) {
       document.documentElement.setAttribute('data-theme', 'light');
     }
+    if (settings.colorblindMode) accentGreen = '#4fc3f7';
     initMap();
   } catch {
     initMap();

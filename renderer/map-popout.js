@@ -59,14 +59,34 @@ function greatCircleArc(lat1, lon1, lat2, lon2, numPoints) {
   return points;
 }
 
+// --- Colorblind-safe dual palettes ---
+const SOURCE_COLORS_NORMAL = {
+  pota: '#4ecca3', sota: '#f0a500', wwff: '#26a69a',
+  llota: '#42a5f5', dxc: '#e040fb', rbn: '#00bcd4', pskr: '#ff6b6b'
+};
+const SOURCE_COLORS_CB = {
+  pota: '#4fc3f7', sota: '#ffb300', wwff: '#29b6f6',
+  llota: '#42a5f5', dxc: '#e040fb', rbn: '#81d4fa', pskr: '#ffa726'
+};
+const SOURCE_STROKES_NORMAL = {
+  pota: '#3ba882', sota: '#c47f00', wwff: '#1b7a71',
+  llota: '#1e88e5', dxc: '#ab00d9', rbn: '#0097a7', pskr: '#d84343'
+};
+const SOURCE_STROKES_CB = {
+  pota: '#2196f3', sota: '#e6a200', wwff: '#0288d1',
+  llota: '#1e88e5', dxc: '#ab00d9', rbn: '#4fc3f7', pskr: '#e68a00'
+};
+let SOURCE_COLORS_ACTIVE = { ...SOURCE_COLORS_NORMAL };
+let SOURCE_STROKES_ACTIVE = { ...SOURCE_STROKES_NORMAL };
+
+function rebuildIcons() {
+  for (const src of Object.keys(SOURCE_COLORS_ACTIVE)) {
+    sourceIcons[src] = makeTeardropIcon(SOURCE_COLORS_ACTIVE[src], SOURCE_STROKES_ACTIVE[src]);
+  }
+}
+
 function tuneArcColor(source) {
-  if (source === 'sota') return '#f0a500';
-  if (source === 'dxc') return '#e040fb';
-  if (source === 'rbn') return '#00bcd4';
-  if (source === 'wwff') return '#26a69a';
-  if (source === 'llota') return '#42a5f5';
-  if (source === 'pskr') return '#ff6b6b';
-  return '#4ecca3';
+  return SOURCE_COLORS_ACTIVE[source] || SOURCE_COLORS_ACTIVE.pota;
 }
 
 function formatAge(isoStr) {
@@ -97,13 +117,8 @@ function makeTeardropIcon(fill, stroke) {
   });
 }
 
-const potaIcon = makeTeardropIcon('#4ecca3', '#3ba882');
-const sotaIcon = makeTeardropIcon('#f0a500', '#c47f00');
-const rbnIcon = makeTeardropIcon('#00bcd4', '#0097a7');
-const wwffIcon = makeTeardropIcon('#26a69a', '#1b7a71');
-const llotaIcon = makeTeardropIcon('#42a5f5', '#1e88e5');
-const dxcIcon = makeTeardropIcon('#e040fb', '#ab00d9');
-const pskrIcon = makeTeardropIcon('#ff6b6b', '#d84343');
+let sourceIcons = {};
+rebuildIcons();
 const oopIcon = L.divIcon({
   className: '',
   html: '<svg width="25" height="41" viewBox="0 0 25 41" xmlns="http://www.w3.org/2000/svg"><path d="M12.5 0C5.6 0 0 5.6 0 12.5C0 21.9 12.5 41 12.5 41S25 21.9 25 12.5C25 5.6 19.4 0 12.5 0Z" fill="#8a8a8a" stroke="#666" stroke-width="1"/><circle cx="12.5" cy="12.5" r="5.5" fill="#ff6b6b" opacity="0.7"/></svg>',
@@ -341,16 +356,16 @@ function updateMapMarkers(spots) {
     const distStr = s.distance != null ? formatDistance(s.distance) + ' ' + unit : '';
     const watched = !!s.isWatched;
     const sourceLabel = (s.source || 'pota').toUpperCase();
-    const sourceColor = s.source === 'sota' ? '#f0a500' : s.source === 'dxc' ? '#e040fb' : s.source === 'rbn' ? '#00bcd4' : s.source === 'wwff' ? '#26a69a' : s.source === 'llota' ? '#42a5f5' : s.source === 'pskr' ? '#ff6b6b' : '#4ecca3';
+    const sourceColor = SOURCE_COLORS_ACTIVE[s.source] || SOURCE_COLORS_ACTIVE.pota;
 
     const logBtnHtml = enableLogging
       ? ` <button class="log-popup-btn" data-call="${s.callsign}" data-freq="${s.frequency}" data-mode="${s.mode}" data-ref="${s.reference || ''}" data-name="${(s.parkName || '').replace(/"/g, '&quot;')}" data-source="${s.source || ''}" data-wwff-ref="${s.wwffReference || ''}" data-wwff-name="${(s.wwffParkName || '').replace(/"/g, '&quot;')}">Log</button>`
       : '';
 
-    const newBadge = s.isNewPark ? ' <span style="background:#4ecca3;color:#000;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;">NEW</span>' : '';
+    const newBadge = s.isNewPark ? ` <span style="background:${SOURCE_COLORS_ACTIVE.pota};color:#000;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;">NEW</span>` : '';
     const expeditionBadge = s.isExpedition ? ' <span style="background:#ff1744;color:#fff;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;">DXP</span>' : '';
-    const wwffBadge = s.wwffReference ? ' <span style="background:#26a69a;color:#000;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;">WWFF</span>' : '';
-    const wwffRefLine = s.wwffReference ? `<br><b>${s.wwffReference}</b> ${s.wwffParkName || ''} <span style="color:#26a69a;font-size:11px;">[WWFF]</span>` : '';
+    const wwffBadge = s.wwffReference ? ` <span style="background:${SOURCE_COLORS_ACTIVE.wwff};color:#000;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;">WWFF</span>` : '';
+    const wwffRefLine = s.wwffReference ? `<br><b>${s.wwffReference}</b> ${s.wwffParkName || ''} <span style="color:${SOURCE_COLORS_ACTIVE.wwff};font-size:11px;">[WWFF]</span>` : '';
     const opLine = s.opName ? `<span style="color:#b0bec5;font-size:11px;">${s.opName}</span><br>` : '';
 
     const popupContent = `
@@ -361,13 +376,7 @@ function updateMapMarkers(spots) {
       <button class="tune-btn" data-freq="${s.frequency}" data-mode="${s.mode}" data-bearing="${s.bearing != null ? s.bearing : ''}" data-lat="${s.lat != null ? s.lat : ''}" data-lon="${s.lon != null ? s.lon : ''}" data-source="${s.source || ''}">Tune</button>${logBtnHtml}
     `;
 
-    const sourceIcon = s.source === 'sota' ? sotaIcon
-      : s.source === 'rbn' ? rbnIcon
-      : s.source === 'wwff' ? wwffIcon
-      : s.source === 'llota' ? llotaIcon
-      : s.source === 'dxc' ? dxcIcon
-      : s.source === 'pskr' ? pskrIcon
-      : potaIcon;
+    const sourceIcon = sourceIcons[s.source] || sourceIcons.pota;
 
     const markerOptions = s.isExpedition
       ? { icon: expeditionIcon, zIndexOffset: 500 }
@@ -461,6 +470,13 @@ window.api.onPopoutTheme((theme) => {
   }
 });
 
+window.api.onColorblindMode((enabled) => {
+  Object.assign(SOURCE_COLORS_ACTIVE, enabled ? SOURCE_COLORS_CB : SOURCE_COLORS_NORMAL);
+  Object.assign(SOURCE_STROKES_ACTIVE, enabled ? SOURCE_STROKES_CB : SOURCE_STROKES_NORMAL);
+  rebuildIcons();
+  if (typeof renderMarkers === 'function') try { renderMarkers(); } catch {}
+});
+
 async function init() {
   try {
     // Load settings for distUnit, enableLogging, and theme
@@ -471,6 +487,13 @@ async function init() {
     // Apply theme
     if (settings.lightMode) {
       document.documentElement.setAttribute('data-theme', 'light');
+    }
+
+    // Apply colorblind mode
+    if (settings.colorblindMode) {
+      Object.assign(SOURCE_COLORS_ACTIVE, SOURCE_COLORS_CB);
+      Object.assign(SOURCE_STROKES_ACTIVE, SOURCE_STROKES_CB);
+      rebuildIcons();
     }
 
     initMap();

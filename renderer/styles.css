@@ -17,6 +17,14 @@
   --accent-blue: #4fc3f7;
   --accent-green: #4ecca3;
   --accent-green-btn: #4ecca3;
+  --source-pota: #4ecca3;
+  --source-sota: #f0a500;
+  --source-wwff: #26a69a;
+  --source-llota: #42a5f5;
+  --source-dxc: #e040fb;
+  --source-rbn: #00bcd4;
+  --source-pskr: #ff6b6b;
+  --source-net: #ffd740;
   --shadow: rgba(0,0,0,0.3);
   --shadow-heavy: rgba(0,0,0,0.5);
   --backdrop: rgba(0,0,0,0.6);
@@ -318,7 +326,7 @@ header {
   font-family: monospace;
   font-size: 10px;
 }
-.echo-cat-url .echo-cat-ip { color: #4ecca3; font-weight: bold; }
+.echo-cat-url .echo-cat-ip { color: var(--accent-green); font-weight: bold; }
 .echo-cat-token-row {
   display: flex;
   align-items: center;
@@ -343,7 +351,7 @@ header {
   cursor: pointer;
 }
 .echo-cat-copy-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
-.echo-cat-copy-btn.copied { color: #4ecca3; }
+.echo-cat-copy-btn.copied { color: var(--accent-green); }
 
 .spots-panel-section-label {
   padding: 4px 10px 2px;
@@ -458,12 +466,12 @@ button:hover {
 /* Banners are flex-shrink:0 siblings; main uses flex:1 */
 
 #update-message {
-  color: #4ecca3;
+  color: var(--accent-green);
   font-weight: bold;
 }
 
 .update-action-btn {
-  background: #4ecca3;
+  background: var(--accent-green);
   color: #1a1a2e;
   border: none;
   border-radius: 3px;
@@ -1242,38 +1250,38 @@ dialog input, dialog select {
 
 /* Spot source color-coding — left border + subtle row tint */
 .spot-pota {
-  border-left: 3px solid #4ecca3;
-  background: rgba(78, 204, 163, 0.06);
+  border-left: 3px solid var(--source-pota);
+  background: color-mix(in srgb, var(--source-pota) 6%, transparent);
 }
 
 .spot-sota {
-  border-left: 3px solid #f0a500;
-  background: rgba(240, 165, 0, 0.06);
+  border-left: 3px solid var(--source-sota);
+  background: color-mix(in srgb, var(--source-sota) 6%, transparent);
 }
 
 .spot-dxc {
-  border-left: 3px solid #e040fb;
-  background: rgba(224, 64, 251, 0.06);
+  border-left: 3px solid var(--source-dxc);
+  background: color-mix(in srgb, var(--source-dxc) 6%, transparent);
 }
 
 .spot-rbn {
-  border-left: 3px solid #00bcd4;
-  background: rgba(0, 188, 212, 0.06);
+  border-left: 3px solid var(--source-rbn);
+  background: color-mix(in srgb, var(--source-rbn) 6%, transparent);
 }
 
 .spot-wwff {
-  border-left: 3px solid #26a69a;
-  background: rgba(38, 166, 154, 0.06);
+  border-left: 3px solid var(--source-wwff);
+  background: color-mix(in srgb, var(--source-wwff) 6%, transparent);
 }
 
 .spot-llota {
-  border-left: 3px solid #42a5f5;
-  background: rgba(66, 165, 245, 0.06);
+  border-left: 3px solid var(--source-llota);
+  background: color-mix(in srgb, var(--source-llota) 6%, transparent);
 }
 
 .spot-pskr {
-  border-left: 3px solid #ff6b6b;
-  background: rgba(255, 107, 107, 0.06);
+  border-left: 3px solid var(--source-pskr);
+  background: color-mix(in srgb, var(--source-pskr) 6%, transparent);
 }
 
 .spot-net {
@@ -1291,14 +1299,14 @@ dialog input, dialog select {
   letter-spacing: 0.3px;
   white-space: nowrap;
 }
-.source-badge-pota { background: #4ecca3; color: #000; }
-.source-badge-sota { background: #f0a500; color: #000; }
-.source-badge-dxc  { background: #e040fb; color: #000; }
-.source-badge-rbn  { background: #00bcd4; color: #000; }
-.source-badge-wwff { background: #26a69a; color: #000; }
-.source-badge-llota { background: #42a5f5; color: #000; }
-.source-badge-pskr { background: #ff6b6b; color: #000; }
-.source-badge-net  { background: #ffd740; color: #000; }
+.source-badge-pota { background: var(--source-pota); color: #000; }
+.source-badge-sota { background: var(--source-sota); color: #000; }
+.source-badge-dxc  { background: var(--source-dxc); color: #000; }
+.source-badge-rbn  { background: var(--source-rbn); color: #000; }
+.source-badge-wwff { background: var(--source-wwff); color: #000; }
+.source-badge-llota { background: var(--source-llota); color: #000; }
+.source-badge-pskr { background: var(--source-pskr); color: #000; }
+.source-badge-net  { background: var(--source-net); color: #000; }
 
 /* When row tinting is disabled, remove backgrounds but keep left borders */
 .no-source-tint .spot-pota,
@@ -1386,7 +1394,7 @@ dialog input, dialog select {
 }
 
 .conn-pill.connected .conn-dot {
-  background: #4ecca3;
+  background: var(--accent-green);
 }
 
 /* Collapsible fieldset sections */
@@ -1652,7 +1660,7 @@ dialog input, dialog select {
 }
 
 .node-status-dot.connected {
-  background: #4ecca3;
+  background: var(--accent-green);
 }
 
 .node-item-btn,
@@ -1892,7 +1900,7 @@ dialog input, dialog select {
 }
 
 .welcome-import-result.success {
-  color: #4ecca3;
+  color: var(--accent-green);
 }
 
 .welcome-import-result.error {
@@ -1948,7 +1956,7 @@ dialog input, dialog select {
 }
 
 #dxcc-award-label {
-  color: #4ecca3;
+  color: var(--accent-green);
   font-weight: bold;
 }
 
@@ -2075,7 +2083,7 @@ dialog input, dialog select {
 /* Checkmark for any previously worked callsign (any day) */
 .already-worked .callsign-cell::before {
   content: "\2713 ";
-  color: #4ecca3;
+  color: var(--accent-green);
   font-size: 11px;
 }
 
@@ -2393,12 +2401,21 @@ dialog input, dialog select {
 .log-save-btn:hover {
   background: #3db892 !important;
 }
+.log-type-chips { display: flex; gap: 6px; margin: 6px 0 4px; }
+.log-type-chip {
+  padding: 3px 10px; border-radius: 12px; border: 1.5px solid #555;
+  background: transparent; color: #888; font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: border-color 0.15s, color 0.15s;
+}
+.log-type-chip:hover { border-color: #999; color: #bbb; }
+.log-type-chip.active { background: transparent; }
+
 .addl-park-wrapper { margin-bottom: 6px; }
 .addl-park-row { display: flex; gap: 4px; align-items: center; }
 .addl-park-row input { flex: 1; text-transform: uppercase; }
 .addl-park-remove { background: transparent; border: none; color: var(--text-tertiary); cursor: pointer; font-size: 16px; padding: 0 4px; }
 .addl-park-remove:hover { color: var(--accent-red); }
-.addl-park-name { font-size: 12px; color: #4ecca3; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.addl-park-name { font-size: 12px; color: var(--accent-green); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .respot-network-bar {
   padding: 6px 10px;
@@ -3106,11 +3123,11 @@ dialog input, dialog select {
 }
 .cat-speech {
   background: #1a1a2e;
-  border: 2px solid #4ecca3;
+  border: 2px solid var(--accent-green);
   border-radius: 12px;
   padding: 8px 14px;
   margin-bottom: 6px;
-  color: #4ecca3;
+  color: var(--accent-green);
   font-weight: 700;
   font-size: 14px;
   white-space: nowrap;
@@ -3125,7 +3142,7 @@ dialog input, dialog select {
   transform: translateX(-50%);
   border-left: 8px solid transparent;
   border-right: 8px solid transparent;
-  border-top: 8px solid #4ecca3;
+  border-top: 8px solid var(--accent-green);
 }
 .cat-emoji {
   font-size: 48px;
@@ -3159,7 +3176,7 @@ dialog input, dialog select {
 .mega-banner {
   font-size: 36px;
   font-weight: 900;
-  color: #4ecca3;
+  color: var(--accent-green);
   text-shadow: 0 0 30px rgba(78, 204, 163, 0.8), 0 0 60px rgba(78, 204, 163, 0.4);
   text-align: center;
   animation: mega-pulse 1s ease-in-out infinite alternate;

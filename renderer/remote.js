@@ -65,6 +65,33 @@
   let rigControlsOpen = false;
   let txState = false;
 
+  // --- Colorblind mode ---
+  const CB_COLORS = {
+    pota: '#4fc3f7', sota: '#ffb300', wwff: '#29b6f6',
+    dxc: '#e040fb', rbn: '#81d4fa', pskr: '#ffa726'
+  };
+  function applyRemoteColorblind(enabled) {
+    const root = document.documentElement;
+    if (enabled) {
+      root.style.setProperty('--pota', CB_COLORS.pota);
+      root.style.setProperty('--sota', CB_COLORS.sota);
+      root.style.setProperty('--dxc', CB_COLORS.dxc);
+      root.style.setProperty('--rbn', CB_COLORS.rbn);
+      root.style.setProperty('--pskr', CB_COLORS.pskr);
+      // Update inline style attributes on source chips
+      document.querySelectorAll('.source-chip[data-src], .setup-type-btn[data-type]').forEach(el => {
+        const src = el.dataset.src || el.dataset.type;
+        if (CB_COLORS[src]) el.style.setProperty('--src-color', CB_COLORS[src]) || el.style.setProperty('--type-color', CB_COLORS[src]);
+      });
+    } else {
+      root.style.removeProperty('--pota');
+      root.style.removeProperty('--sota');
+      root.style.removeProperty('--dxc');
+      root.style.removeProperty('--rbn');
+      root.style.removeProperty('--pskr');
+    }
+  }
+
   // --- Activator state ---
   let activeTab = 'spots';
   let activationRunning = false;
@@ -189,6 +216,11 @@
         startPing();
         showWelcome();
         drainOfflineQueue();
+        if (msg.colorblindMode) applyRemoteColorblind(true);
+        break;
+
+      case 'colorblind-mode':
+        applyRemoteColorblind(!!msg.enabled);
         break;
 
       case 'auth-fail':
@@ -281,7 +313,7 @@
 
   // --- Status ---
   function updateStatus(s) {
-    if (s.freq) {
+    if (s.freq > 100000) { // ignore bogus values below 100 kHz
       freqDisplay.textContent = formatFreq(s.freq);
       currentFreqKhz = s.freq / 1000;
     }
@@ -460,7 +492,7 @@
       bearing: card.dataset.bearing ? parseFloat(card.dataset.bearing) : undefined,
     }));
     const hz = parseFloat(freqKhz) * 1000;
-    if (hz > 0) {
+    if (hz > 100000) { // ignore bogus values below 100 kHz
       freqDisplay.textContent = formatFreq(hz);
       currentFreqKhz = parseFloat(freqKhz);
     }
@@ -826,18 +858,22 @@
     if (!freq || isNaN(parseFloat(freq))) { logFreq.focus(); return; }
     logSaveBtn.disabled = true;
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({
-        type: 'log-qso',
-        data: {
-          callsign: call,
-          freqKhz: freq,
-          mode: logMode.value,
-          rstSent: logRstSent.value || '59',
-          rstRcvd: logRstRcvd.value || '59',
-          sig: logSig.value,
-          sigInfo: logSigInfo.value,
-        },
-      }));
+      const logData = {
+        callsign: call,
+        freqKhz: freq,
+        mode: logMode.value,
+        rstSent: logRstSent.value || '59',
+        rstRcvd: logRstRcvd.value || '59',
+        sig: logSig.value,
+        sigInfo: logSigInfo.value,
+      };
+      // Include activator fields when activation is running
+      if (activationSig && activationRef) {
+        logData.mySig = activationSig;
+        logData.mySigInfo = activationRef;
+      }
+      if (phoneGrid) logData.myGridsquare = phoneGrid;
+      ws.send(JSON.stringify({ type: 'log-qso', data: logData }));
     }
   });
 

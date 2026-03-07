@@ -496,7 +496,7 @@ html, body {
 }
 .new-badge {
   display: inline-block;
-  background: #4ecca3;
+  background: var(--pota);
   color: #000;
   font-size: 9px;
   font-weight: 700;

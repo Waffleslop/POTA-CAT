@@ -32,6 +32,22 @@ window.api.onTheme(theme => {
   else document.documentElement.removeAttribute('data-theme');
 });
 
+const CB_SOURCE_COLORS = {
+  pota: '#4fc3f7', sota: '#ffb300', wwff: '#29b6f6',
+  llota: '#42a5f5', dxc: '#e040fb', rbn: '#81d4fa', pskr: '#ffa726'
+};
+function applyColorblindVars(enabled) {
+  const root = document.documentElement;
+  if (enabled) {
+    for (const [src, color] of Object.entries(CB_SOURCE_COLORS)) root.style.setProperty('--source-' + src, color);
+  } else {
+    for (const src of Object.keys(CB_SOURCE_COLORS)) root.style.removeProperty('--source-' + src);
+  }
+}
+window.api.onColorblindMode(applyColorblindVars);
+// Apply on init
+window.api.getSettings().then(s => { if (s.colorblindMode) applyColorblindVars(true); });
+
 // --- Frequency to band mapping ---
 const BAND_EDGES = [
   [1800, 2000, '160m'], [3500, 4000, '80m'], [5330, 5410, '60m'],
