@@ -6,7 +6,7 @@
   // --- State ---
   let ws = null;
   let spots = [];
-  let bandFilter = 'all';
+  // bandFilter removed — now multi-select dropdown
   let pttDown = false;
   let storedToken = '';
   let reconnectTimer = null;
@@ -64,10 +64,9 @@
   const logToast = document.getElementById('log-toast');
   const rigSelect = document.getElementById('rig-select');
   const speakerBtn = document.getElementById('speaker-btn');
-  const scanBar = document.getElementById('scan-bar');
   const scanBtn = document.getElementById('scan-btn');
   const refreshRateBtn = document.getElementById('refresh-rate-btn');
-  const sortBar = document.getElementById('sort-bar');
+  const filterToolbar = document.getElementById('filter-toolbar');
   const sortSelect = document.getElementById('sort-select');
   const spotMapEl = document.getElementById('spot-map');
   let spotSort = 'age';
@@ -99,10 +98,10 @@
       root.style.setProperty('--dxc', CB_COLORS.dxc);
       root.style.setProperty('--rbn', CB_COLORS.rbn);
       root.style.setProperty('--pskr', CB_COLORS.pskr);
-      // Update inline style attributes on source chips
-      document.querySelectorAll('.source-chip[data-src], .setup-type-btn[data-type], .lt-type-chip[data-type]').forEach(el => {
-        const src = el.dataset.src || el.dataset.type;
-        if (CB_COLORS[src]) el.style.setProperty('--src-color', CB_COLORS[src]) || el.style.setProperty('--type-color', CB_COLORS[src]);
+      // Update inline style attributes on type chips
+      document.querySelectorAll('.setup-type-btn[data-type], .lt-type-chip[data-type]').forEach(el => {
+        const src = el.dataset.type;
+        if (CB_COLORS[src]) el.style.setProperty('--type-color', CB_COLORS[src]);
       });
     } else {
       root.style.removeProperty('--pota');
@@ -173,10 +172,11 @@
   const logFooterCount = document.getElementById('log-footer-count');
   const logFooterQueued = document.getElementById('log-footer-queued');
   const exportAdifBtn = document.getElementById('export-adif-btn');
-  const sourceBar = document.getElementById('source-bar');
-  const filterBar = document.getElementById('filter-bar');
-  const newOnlyChip = document.getElementById('new-only-chip');
-  const hideWorkedChip = document.getElementById('hide-worked-chip');
+  const bandFilterEl = document.getElementById('rc-band-filter');
+  const regionFilterEl = document.getElementById('rc-region-filter');
+  const spotsDropdown = document.getElementById('rc-spots-dropdown');
+  const rcNewOnly = document.getElementById('rc-new-only');
+  const rcHideWorked = document.getElementById('rc-hide-worked');
   const logRefSection = document.getElementById('log-ref-section');
   const logRefInput = document.getElementById('log-ref-input');
   const logRefName = document.getElementById('log-ref-name');
@@ -360,7 +360,9 @@
         startPing();
         showWelcome();
         drainOfflineQueue();
-        if (activeTab === 'spots') scanBar.classList.remove('hidden');
+        if (activeTab === 'spots' || activeTab === 'map') {
+          filterToolbar.classList.remove('hidden');
+        }
         if (msg.colorblindMode) applyRemoteColorblind(true);
         if (msg.settings) {
           myCallsign = msg.settings.myCallsign || '';
@@ -435,8 +437,8 @@
         if (msg.data) {
           const map = { pota: 'pota', sota: 'sota', wwff: 'wwff', llota: 'llota', cluster: 'dxc' };
           for (const [settingKey, srcAttr] of Object.entries(map)) {
-            const chip = document.querySelector(`#source-bar .source-chip[data-src="${srcAttr}"]`);
-            if (chip) chip.classList.toggle('active', !!msg.data[settingKey]);
+            const cb = spotsDropdown.querySelector(`input[data-src="${srcAttr}"]`);
+            if (cb) cb.checked = !!msg.data[settingKey];
           }
         }
         break;
@@ -475,14 +477,14 @@
 
       case 'worked-parks':
         workedParksSet = new Set(msg.refs || []);
-        newOnlyChip.classList.toggle('hidden', workedParksSet.size === 0);
+        spotsDropdown.querySelector('.rc-new-only-row').style.display = workedParksSet.size > 0 ? '' : 'none';
         renderSpots();
         if (activeTab === 'map') renderMapSpots();
         break;
 
       case 'worked-qsos':
         workedQsos = new Map(msg.entries || []);
-        hideWorkedChip.classList.toggle('hidden', workedQsos.size === 0);
+        spotsDropdown.querySelector('.rc-hide-worked-row').style.display = workedQsos.size > 0 ? '' : 'none';
         renderSpots();
         if (activeTab === 'map') renderMapSpots();
         break;
@@ -655,8 +657,11 @@
   }
 
   function getFilteredSpots() {
+    const bands = getDropdownValues(bandFilterEl);
+    const regions = getDropdownValues(regionFilterEl);
     const filtered = spots.filter(s => {
-      if (bandFilter !== 'all' && s.band !== bandFilter) return false;
+      if (bands && !bands.has(s.band)) return false;
+      if (regions && s.continent && !regions.has(s.continent)) return false;
       if (showNewOnly && !isNewPark(s)) return false;
       if (hideWorked && isWorkedSpot(s)) return false;
       return true;
@@ -860,44 +865,82 @@
     card.classList.add('tuned');
   });
 
-  // --- Source toggles ---
-  document.getElementById('source-bar').addEventListener('click', (e) => {
-    const chip = e.target.closest('.source-chip');
-    if (!chip) return;
-    chip.classList.toggle('active');
-    const sources = {};
-    document.querySelectorAll('#source-bar .source-chip').forEach(c => {
-      sources[c.dataset.src] = c.classList.contains('active');
+  // --- Multi-select dropdown helpers ---
+  function initMultiDropdown(container, onChange) {
+    const btn = container.querySelector('.rc-dropdown-btn');
+    const menu = container.querySelector('.rc-dropdown-menu');
+    const textEl = container.querySelector('.rc-dd-text');
+    const allCb = menu.querySelector('input[value="all"]');
+    const itemCbs = [...menu.querySelectorAll('input:not([value="all"])')];
+    function updateText() {
+      const checked = itemCbs.filter(cb => cb.checked);
+      if (allCb.checked || checked.length === 0) { textEl.textContent = 'All'; }
+      else if (checked.length <= 2) { textEl.textContent = checked.map(cb => cb.value).join(', '); }
+      else { textEl.textContent = checked.length + ' sel'; }
+    }
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.rc-dropdown.open').forEach(d => { if (d !== container) d.classList.remove('open'); });
+      container.classList.toggle('open');
     });
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'set-sources', sources }));
+    menu.addEventListener('click', (e) => e.stopPropagation());
+    menu.addEventListener('change', (e) => {
+      const cb = e.target;
+      if (cb.value === 'all') {
+        itemCbs.forEach(c => { c.checked = cb.checked; });
+      } else {
+        allCb.checked = false;
+        if (itemCbs.every(c => !c.checked)) allCb.checked = true;
+        if (itemCbs.every(c => c.checked)) { allCb.checked = true; itemCbs.forEach(c => { c.checked = false; }); }
+      }
+      updateText();
+      if (onChange) onChange();
+    });
+    updateText();
+  }
+
+  function getDropdownValues(container) {
+    const allCb = container.querySelector('input[value="all"]');
+    if (allCb && allCb.checked) return null;
+    const checked = [...container.querySelectorAll('input:not([value="all"]):checked')];
+    if (checked.length === 0) return null;
+    return new Set(checked.map(cb => cb.value));
+  }
+
+  // Initialize band and region dropdowns
+  initMultiDropdown(bandFilterEl, () => { renderSpots(); if (activeTab === 'map') renderMapSpots(); });
+  initMultiDropdown(regionFilterEl, () => { renderSpots(); if (activeTab === 'map') renderMapSpots(); });
+
+  // --- Spots dropdown ---
+  spotsDropdown.querySelector('.rc-dropdown-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.querySelectorAll('.rc-dropdown.open').forEach(d => { if (d !== spotsDropdown) d.classList.remove('open'); });
+    spotsDropdown.classList.toggle('open');
+  });
+
+  spotsDropdown.querySelector('.rc-spots-panel').addEventListener('click', (e) => e.stopPropagation());
+  spotsDropdown.querySelector('.rc-spots-panel').addEventListener('change', (e) => {
+    const cb = e.target;
+    if (cb.dataset.src) {
+      const sources = {};
+      spotsDropdown.querySelectorAll('[data-src]').forEach(c => { sources[c.dataset.src] = c.checked; });
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'set-sources', sources }));
+      }
+    } else if (cb.id === 'rc-new-only') {
+      showNewOnly = cb.checked;
+      renderSpots();
+      if (activeTab === 'map') renderMapSpots();
+    } else if (cb.id === 'rc-hide-worked') {
+      hideWorked = cb.checked;
+      renderSpots();
+      if (activeTab === 'map') renderMapSpots();
     }
   });
 
-  // --- Filters ---
-  document.getElementById('band-filters').addEventListener('click', (e) => {
-    const chip = e.target.closest('.filter-chip');
-    if (!chip) return;
-    bandFilter = chip.dataset.band;
-    document.querySelectorAll('#band-filters .filter-chip').forEach(c =>
-      c.classList.toggle('active', c.dataset.band === bandFilter));
-    renderSpots();
-    if (activeTab === 'map') renderMapSpots();
-  });
-
-  // --- New-only filter ---
-  newOnlyChip.addEventListener('click', () => {
-    showNewOnly = !showNewOnly;
-    newOnlyChip.classList.toggle('active', showNewOnly);
-    renderSpots();
-    if (activeTab === 'map') renderMapSpots();
-  });
-
-  hideWorkedChip.addEventListener('click', () => {
-    hideWorked = !hideWorked;
-    hideWorkedChip.classList.toggle('active', hideWorked);
-    renderSpots();
-    if (activeTab === 'map') renderMapSpots();
+  // Close dropdowns on outside tap
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.rc-dropdown.open').forEach(d => d.classList.remove('open'));
   });
 
   // --- Sort ---
@@ -1838,25 +1881,17 @@
     // Hide all content areas
     spotList.classList.add('hidden');
     spotMapEl.classList.add('hidden');
-    sourceBar.classList.add('hidden');
-    filterBar.classList.add('hidden');
-    scanBar.classList.add('hidden');
-    sortBar.classList.add('hidden');
+    filterToolbar.classList.add('hidden');
     logTabView.classList.add('hidden');
     logView.classList.add('hidden');
     logbookView.classList.add('hidden');
     if (scanning) stopScan();
     if (tab === 'spots') {
       spotList.classList.remove('hidden');
-      sourceBar.classList.remove('hidden');
-      filterBar.classList.remove('hidden');
-      sortBar.classList.remove('hidden');
-      scanBar.classList.remove('hidden');
+      filterToolbar.classList.remove('hidden');
     } else if (tab === 'map') {
       spotMapEl.classList.remove('hidden');
-      sourceBar.classList.remove('hidden');
-      filterBar.classList.remove('hidden');
-      sortBar.classList.remove('hidden');
+      filterToolbar.classList.remove('hidden');
       if (!spotMap) {
         spotMap = L.map('spot-map', {
           zoomControl: true,

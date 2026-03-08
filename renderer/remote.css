@@ -12,6 +12,8 @@
   --sota: #f0a500;
   --dxc: #e040fb;
   --rbn: #4fc3f7;
+  --wwff: #26a69a;
+  --llota: #42a5f5;
   --pskr: #ff6b6b;
   --net: #ffd740;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -410,80 +412,81 @@ html, body {
   50% { opacity: 0.6; }
 }
 
-/* --- Source Toggles --- */
-#source-bar {
+/* --- Filter Toolbar --- */
+#filter-toolbar {
   display: flex;
+  align-items: center;
   gap: 6px;
-  padding: 8px 8px 4px;
+  padding: 6px 8px;
   flex-shrink: 0;
   background: var(--bg);
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+  position: relative;
+  z-index: 50;
 }
 
-#source-bar::-webkit-scrollbar { display: none; }
+/* --- Dropdown Container --- */
+.rc-dropdown { position: relative; flex-shrink: 0; }
 
-.source-chip {
-  flex-shrink: 0;
-  padding: 5px 12px;
+.rc-dropdown-btn {
+  padding: 5px 10px;
   font-size: 12px;
   font-weight: 600;
   background: var(--bg-card);
   color: var(--text-dim);
-  border: 1px solid #333;
-  border-radius: 16px;
+  border: 1px solid #444;
+  border-radius: 6px;
   cursor: pointer;
-  opacity: 0.5;
+  white-space: nowrap;
 }
 
-.source-chip.active {
-  opacity: 1;
-  color: var(--src-color);
-  border-color: var(--src-color);
-  background: var(--bg-header);
-}
+.rc-dd-text { color: var(--text); }
 
-/* --- Filter Bar --- */
-#filter-bar {
-  padding: 8px 8px 4px;
-  flex-shrink: 0;
-  background: var(--bg);
-}
-
-.filter-row {
-  display: flex;
-  gap: 4px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: 4px;
-  scrollbar-width: none;
-}
-
-.filter-row::-webkit-scrollbar { display: none; }
-
-.filter-chip {
-  flex-shrink: 0;
-  padding: 4px 10px;
-  font-size: 12px;
-  font-weight: 500;
+.rc-dropdown-menu, .rc-spots-panel {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
   background: var(--bg-card);
-  color: var(--text-dim);
-  border: 1px solid #333;
-  border-radius: 16px;
-  cursor: pointer;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 6px 0;
+  z-index: 100;
+  min-width: 140px;
+  max-height: 300px;
+  overflow-y: auto;
 }
 
-.filter-chip.active {
-  background: var(--bg-header);
+.rc-dropdown.open .rc-dropdown-menu,
+.rc-dropdown.open .rc-spots-panel { display: block; }
+
+.rc-dropdown-item, .rc-spots-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
   color: var(--text);
-  border-color: var(--accent);
+  cursor: pointer;
+  white-space: nowrap;
 }
 
-/* --- Sort Bar --- */
-#sort-bar { display: flex; align-items: center; gap: 8px; padding: 2px 8px 4px; flex-shrink: 0; }
-.sort-label { font-size: 11px; color: var(--text-dim); }
-.sort-select { background: var(--bg-card); color: var(--text); border: 1px solid #444; border-radius: 6px; font-size: 12px; padding: 4px 8px; }
+.rc-spots-divider {
+  height: 1px;
+  background: #333;
+  margin: 4px 0;
+}
+
+/* Sort select */
+.rc-sort-select {
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid #444;
+  border-radius: 6px;
+  font-size: 12px;
+  padding: 5px 8px;
+  flex-shrink: 0;
+}
 
 /* --- Spot Distance --- */
 .spot-dist { font-size: 11px; font-family: monospace; color: var(--text-dim); min-width: 50px; text-align: right; flex-shrink: 0; }
@@ -491,10 +494,9 @@ html, body {
 /* --- Spot Map --- */
 #spot-map { flex: 1; min-height: 0; }
 
-/* --- Scan Bar --- */
-#scan-bar { display: flex; justify-content: center; padding: 4px 8px; flex-shrink: 0; }
-.scan-button { background: var(--bg-card); color: var(--text); border: 1px solid #444; border-radius: 6px; padding: 6px 20px; font-size: 13px; font-weight: 600; cursor: pointer; }
-.scan-button.scan-active { color: var(--accent); border-color: var(--accent); }
+/* --- Scan Status Button --- */
+.scan-status-btn { padding: 2px 8px; font-size: 12px; font-weight: 600; background: var(--bg-card); color: var(--text-dim); border: 1px solid #444; border-radius: 4px; cursor: pointer; }
+.scan-status-btn.scan-active { color: var(--accent); border-color: var(--accent); }
 
 /* --- Refresh Rate Chip --- */
 .refresh-chip { background: none; border: 1px solid #444; color: var(--text-dim); border-radius: 12px; padding: 2px 8px; font-size: 11px; cursor: pointer; margin-left: auto; flex-shrink: 0; }
@@ -592,15 +594,6 @@ html, body {
   border-radius: 3px;
   margin-left: 5px;
   vertical-align: middle;
-}
-.new-chip {
-  --src-color: #66ff99;
-  border-color: #66ff99 !important;
-  color: #66ff99 !important;
-}
-.new-chip.active {
-  background: #66ff99 !important;
-  color: #000 !important;
 }
 
 .spot-empty {
@@ -1747,12 +1740,10 @@ html, body {
 [data-theme="light"] .audio-button { background: #ddd; border-color: #bbb; }
 [data-theme="light"] .speaker-button { background: #ddd; border-color: #bbb; }
 
-/* Source / filter chips */
-[data-theme="light"] .source-chip { border-color: #ccc; }
-[data-theme="light"] .filter-chip { border-color: #ccc; }
-
-/* Sort bar */
-[data-theme="light"] .sort-select { border-color: #ccc; }
+/* Filter toolbar */
+[data-theme="light"] .rc-dropdown-btn { border-color: #ccc; }
+[data-theme="light"] .rc-dropdown-menu, [data-theme="light"] .rc-spots-panel { border-color: #ccc; }
+[data-theme="light"] .rc-sort-select { border-color: #ccc; }
 
 /* Spot cards */
 [data-theme="light"] .spot-card { border-left-color: #bbb; }

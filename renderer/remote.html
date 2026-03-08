@@ -44,6 +44,7 @@
         </div>
       </div>
       <div class="status-right">
+        <button type="button" id="scan-btn" class="scan-status-btn" title="Scan spots">Scan</button>
         <span id="cat-dot" class="cat-dot disconnected" title="Radio disconnected"></span>
         <span id="audio-dot" class="audio-dot hidden" title="Audio"></span>
         <span id="latency">--ms</span>
@@ -141,7 +142,6 @@
             <button type="button" class="so-step-btn" id="so-maxage-up">+</button>
           </div>
         </div>
-
         <div class="so-section-label">Display</div>
         <div class="so-row">
           <label class="so-label">Distance</label>
@@ -193,51 +193,67 @@
       <button class="tab" data-tab="activate">Activate <span id="tab-activate-badge" class="tab-badge hidden">0</span></button>
     </div>
 
-    <!-- Source toggles -->
-    <div id="source-bar">
-      <button class="source-chip active" data-src="pota" style="--src-color:#4ecca3">POTA</button>
-      <button class="source-chip" data-src="sota" style="--src-color:#f0a500">SOTA</button>
-      <button class="source-chip" data-src="wwff" style="--src-color:#26a69a">WWFF</button>
-      <button class="source-chip" data-src="llota" style="--src-color:#42a5f5">LLOTA</button>
-      <button class="source-chip" data-src="dxc" style="--src-color:#e040fb">DX</button>
-      <button id="refresh-rate-btn" type="button" class="refresh-chip" title="Spot refresh rate">30s</button>
-    </div>
-
-    <!-- Filter chips -->
-    <div id="filter-bar">
-      <div id="band-filters" class="filter-row">
-        <button class="filter-chip active" data-band="all">All</button>
-        <button class="filter-chip" data-band="160m">160</button>
-        <button class="filter-chip" data-band="80m">80</button>
-        <button class="filter-chip" data-band="60m">60</button>
-        <button class="filter-chip" data-band="40m">40</button>
-        <button class="filter-chip" data-band="30m">30</button>
-        <button class="filter-chip" data-band="20m">20</button>
-        <button class="filter-chip" data-band="17m">17</button>
-        <button class="filter-chip" data-band="15m">15</button>
-        <button class="filter-chip" data-band="12m">12</button>
-        <button class="filter-chip" data-band="10m">10</button>
-        <button class="filter-chip" data-band="6m">6</button>
-        <button class="filter-chip" data-band="2m">2</button>
-        <button class="filter-chip" data-band="70cm">70cm</button>
+    <!-- Filter toolbar -->
+    <div id="filter-toolbar" class="hidden">
+      <!-- Band multi-select dropdown -->
+      <div class="rc-dropdown" id="rc-band-filter">
+        <button class="rc-dropdown-btn" type="button">Band: <span class="rc-dd-text">All</span></button>
+        <div class="rc-dropdown-menu">
+          <label class="rc-dropdown-item"><input type="checkbox" value="all" checked> All</label>
+          <label class="rc-dropdown-item"><input type="checkbox" value="160m"> 160m</label>
+          <label class="rc-dropdown-item"><input type="checkbox" value="80m"> 80m</label>
+          <label class="rc-dropdown-item"><input type="checkbox" value="60m"> 60m</label>
+          <label class="rc-dropdown-item"><input type="checkbox" value="40m"> 40m</label>
+          <label class="rc-dropdown-item"><input type="checkbox" value="30m"> 30m</label>
+          <label class="rc-dropdown-item"><input type="checkbox" value="20m"> 20m</label>
+          <label class="rc-dropdown-item"><input type="checkbox" value="17m"> 17m</label>
+          <label class="rc-dropdown-item"><input type="checkbox" value="15m"> 15m</label>
+          <label class="rc-dropdown-item"><input type="checkbox" value="12m"> 12m</label>
+          <label class="rc-dropdown-item"><input type="checkbox" value="10m"> 10m</label>
+          <label class="rc-dropdown-item"><input type="checkbox" value="6m"> 6m</label>
+          <label class="rc-dropdown-item"><input type="checkbox" value="2m"> 2m</label>
+          <label class="rc-dropdown-item"><input type="checkbox" value="70cm"> 70cm</label>
+        </div>
       </div>
-      <button id="new-only-chip" class="filter-chip new-chip hidden" data-band="">NEW</button>
-      <button id="hide-worked-chip" class="filter-chip worked-chip hidden">Hide &#x2713;</button>
-    </div>
 
-    <!-- Sort bar -->
-    <div id="sort-bar" class="hidden">
-      <label class="sort-label">Sort</label>
-      <select id="sort-select" class="sort-select">
+      <!-- Region multi-select dropdown -->
+      <div class="rc-dropdown" id="rc-region-filter">
+        <button class="rc-dropdown-btn" type="button">Region: <span class="rc-dd-text">All</span></button>
+        <div class="rc-dropdown-menu">
+          <label class="rc-dropdown-item"><input type="checkbox" value="all" checked> All</label>
+          <label class="rc-dropdown-item"><input type="checkbox" value="AF"> Africa</label>
+          <label class="rc-dropdown-item"><input type="checkbox" value="AS"> Asia</label>
+          <label class="rc-dropdown-item"><input type="checkbox" value="EU"> Europe</label>
+          <label class="rc-dropdown-item"><input type="checkbox" value="NA"> N. America</label>
+          <label class="rc-dropdown-item"><input type="checkbox" value="OC"> Oceania</label>
+          <label class="rc-dropdown-item"><input type="checkbox" value="SA"> S. America</label>
+        </div>
+      </div>
+
+      <!-- Spots dropdown panel -->
+      <div class="rc-dropdown" id="rc-spots-dropdown">
+        <button class="rc-dropdown-btn" type="button">Spots</button>
+        <div class="rc-spots-panel">
+          <label class="rc-spots-toggle"><input type="checkbox" data-src="pota" checked> <span style="color:var(--pota)">POTA</span></label>
+          <label class="rc-spots-toggle"><input type="checkbox" data-src="sota"> <span style="color:var(--sota)">SOTA</span></label>
+          <label class="rc-spots-toggle"><input type="checkbox" data-src="wwff"> <span style="color:var(--wwff)">WWFF</span></label>
+          <label class="rc-spots-toggle"><input type="checkbox" data-src="llota"> <span style="color:var(--llota)">LLOTA</span></label>
+          <label class="rc-spots-toggle"><input type="checkbox" data-src="dxc"> <span style="color:var(--dxc)">DX Cluster</span></label>
+          <div class="rc-spots-divider"></div>
+          <label class="rc-spots-toggle rc-new-only-row" style="display:none"><input type="checkbox" id="rc-new-only"> <span style="color:#66ff99">NEW parks only</span></label>
+          <label class="rc-spots-toggle rc-hide-worked-row" style="display:none"><input type="checkbox" id="rc-hide-worked"> Hide worked</label>
+        </div>
+      </div>
+
+      <!-- Sort dropdown -->
+      <select id="sort-select" class="rc-sort-select">
         <option value="age">Newest</option>
         <option value="freq">Frequency</option>
         <option value="dist">Nearest</option>
       </select>
-    </div>
 
-    <!-- Scan bar -->
-    <div id="scan-bar" class="hidden">
-      <button id="scan-btn" type="button" class="scan-button">Scan</button>
+      <!-- Refresh rate chip -->
+      <button id="refresh-rate-btn" type="button" class="refresh-chip" title="Spot refresh rate">30s</button>
     </div>
 
     <!-- Spot list -->
