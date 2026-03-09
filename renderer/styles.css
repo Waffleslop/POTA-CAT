@@ -2410,12 +2410,7 @@ dialog input, dialog select {
 .log-type-chip:hover { border-color: #999; color: #bbb; }
 .log-type-chip.active { background: transparent; }
 
-.addl-park-wrapper { margin-bottom: 6px; }
-.addl-park-row { display: flex; gap: 4px; align-items: center; }
-.addl-park-row input { flex: 1; text-transform: uppercase; }
-.addl-park-remove { background: transparent; border: none; color: var(--text-tertiary); cursor: pointer; font-size: 16px; padding: 0 4px; }
-.addl-park-remove:hover { color: var(--accent-red); }
-.addl-park-name { font-size: 12px; color: var(--accent-green); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 
 .respot-network-bar {
   padding: 6px 10px;

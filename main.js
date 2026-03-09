@@ -1117,38 +1117,46 @@ async function saveQsoRecord(qsoData) {
     }
   }
 
-  // Re-spot on WWFF if requested
+  // Re-spot on WWFF if requested — validate ref starts with KFF/xFF (WWFF format)
   if (qsoData.wwffRespot && qsoData.wwffReference && settings.myCallsign) {
-    try {
-      await postWwffRespot({
-        activator: qsoData.callsign,
-        spotter: settings.myCallsign.toUpperCase(),
-        frequency: qsoData.frequency,
-        reference: qsoData.wwffReference,
-        mode: qsoData.mode,
-        comments: qsoData.respotComment || '',
-      });
-      trackRespot('wwff');
-    } catch (respotErr) {
-      console.error('WWFF re-spot failed:', respotErr.message);
-      return { success: true, wwffRespotError: respotErr.message };
+    if (!/^[A-Z0-9]{1,4}FF-\d{4}$/i.test(qsoData.wwffReference)) {
+      console.warn('WWFF re-spot skipped: reference does not match WWFF format:', qsoData.wwffReference);
+    } else {
+      try {
+        await postWwffRespot({
+          activator: qsoData.callsign,
+          spotter: settings.myCallsign.toUpperCase(),
+          frequency: qsoData.frequency,
+          reference: qsoData.wwffReference,
+          mode: qsoData.mode,
+          comments: qsoData.respotComment || '',
+        });
+        trackRespot('wwff');
+      } catch (respotErr) {
+        console.error('WWFF re-spot failed:', respotErr.message);
+        return { success: true, wwffRespotError: respotErr.message };
+      }
     }
   }
 
-  // Re-spot on LLOTA if requested
+  // Re-spot on LLOTA if requested — validate ref matches LLOTA format (XX-NNNN where sig=LLOTA)
   if (qsoData.llotaRespot && qsoData.llotaReference) {
-    try {
-      await postLlotaRespot({
-        activator: qsoData.callsign,
-        frequency: qsoData.frequency,
-        reference: qsoData.llotaReference,
-        mode: qsoData.mode,
-        comments: qsoData.respotComment || '',
-      });
-      trackRespot('llota');
-    } catch (respotErr) {
-      console.error('LLOTA re-spot failed:', respotErr.message);
-      return { success: true, llotaRespotError: respotErr.message };
+    if (qsoData.sig !== 'LLOTA') {
+      console.warn('LLOTA re-spot skipped: QSO sig is', qsoData.sig, 'not LLOTA, ref:', qsoData.llotaReference);
+    } else {
+      try {
+        await postLlotaRespot({
+          activator: qsoData.callsign,
+          frequency: qsoData.frequency,
+          reference: qsoData.llotaReference,
+          mode: qsoData.mode,
+          comments: qsoData.respotComment || '',
+        });
+        trackRespot('llota');
+      } catch (respotErr) {
+        console.error('LLOTA re-spot failed:', respotErr.message);
+        return { success: true, llotaRespotError: respotErr.message };
+      }
     }
   }
 
@@ -1449,10 +1457,12 @@ function pushSpotsToSmartSdr(spots) {
   if (now - lastSmartSdrPush < 5000) return;
   lastSmartSdrPush = now;
 
-  const maxAgeMs = (settings.smartSdrMaxAge != null ? settings.smartSdrMaxAge : 15) * 60000;
+  const tableMaxAgeMs = ((settings.maxAgeMin != null ? settings.maxAgeMin : 5) * 60000) || 300000;
+  const sdrMaxAgeMs = (settings.smartSdrMaxAge != null ? settings.smartSdrMaxAge : 15) * 60000;
+  const maxAgeMs = sdrMaxAgeMs > 0 ? Math.min(sdrMaxAgeMs, tableMaxAgeMs) : tableMaxAgeMs;
 
   for (const spot of spots) {
-    // Age filter — skip spots older than the configured max age (0 = no limit)
+    // Age filter — skip spots older than the effective max age (table age or panadapter age, whichever is smaller)
     if (maxAgeMs > 0 && spot.spotTime) {
       const t = spot.spotTime.endsWith('Z') ? spot.spotTime : spot.spotTime + 'Z';
       const age = now - new Date(t).getTime();
@@ -2220,10 +2230,12 @@ function pushSpotsToTci(spots) {
   if (now - lastTciPush < 5000) return;
   lastTciPush = now;
 
-  const maxAgeMs = (settings.tciMaxAge != null ? settings.tciMaxAge : 15) * 60000;
+  const tableMaxAgeMs = ((settings.maxAgeMin != null ? settings.maxAgeMin : 5) * 60000) || 300000;
+  const tciMaxAgeMs = (settings.tciMaxAge != null ? settings.tciMaxAge : 15) * 60000;
+  const maxAgeMs = tciMaxAgeMs > 0 ? Math.min(tciMaxAgeMs, tableMaxAgeMs) : tableMaxAgeMs;
 
   for (const spot of spots) {
-    // Age filter — skip spots older than the configured max age (0 = no limit)
+    // Age filter — skip spots older than the effective max age (table age or panadapter age, whichever is smaller)
     if (maxAgeMs > 0 && spot.spotTime) {
       const t = spot.spotTime.endsWith('Z') ? spot.spotTime : spot.spotTime + 'Z';
       const age = now - new Date(t).getTime();
@@ -5215,17 +5227,21 @@ app.whenReady().then(() => {
         } catch (err) { errors.push('POTA: ' + err.message); }
       }
       if (data.wwffRespot && data.wwffReference && settings.myCallsign) {
-        try {
-          await postWwffRespot({
-            activator: data.callsign,
-            spotter: settings.myCallsign.toUpperCase(),
-            frequency: data.frequency,
-            reference: data.wwffReference,
-            mode: data.mode,
-            comments: data.comment || '',
-          });
-          trackRespot('wwff');
-        } catch (err) { errors.push('WWFF: ' + err.message); }
+        if (!/^[A-Z0-9]{1,4}FF-\d{4}$/i.test(data.wwffReference)) {
+          errors.push('WWFF: reference does not match WWFF format: ' + data.wwffReference);
+        } else {
+          try {
+            await postWwffRespot({
+              activator: data.callsign,
+              spotter: settings.myCallsign.toUpperCase(),
+              frequency: data.frequency,
+              reference: data.wwffReference,
+              mode: data.mode,
+              comments: data.comment || '',
+            });
+            trackRespot('wwff');
+          } catch (err) { errors.push('WWFF: ' + err.message); }
+        }
       }
       if (data.llotaRespot && data.llotaReference) {
         try {

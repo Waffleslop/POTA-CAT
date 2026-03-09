@@ -478,10 +478,6 @@ const logComment = document.getElementById('log-comment');
 const logSaveBtn = document.getElementById('log-save');
 const logCancelBtn = document.getElementById('log-cancel');
 const logDialogClose = document.getElementById('log-dialog-close');
-const logAddlParksCb = document.getElementById('log-addl-parks-cb');
-const logAddlParksList = document.getElementById('log-addl-parks-list');
-const logAddlParksAdd = document.getElementById('log-addl-parks-add');
-const logAddlParksSection = document.getElementById('log-addl-parks-section');
 
 // --- UTC Clock ---
 function updateUtcClock() {
@@ -1902,7 +1898,7 @@ const LOGBOOK_DEFAULTS = {
   },
   dxkeeper: { port: 52001, help: 'In DXKeeper: Configuration > Defaults tab > Network Service panel. The default base port is 52000 (DXKeeper listens on base + 1 = 52001). DXKeeper must be running to receive QSOs. QSOs will be logged with missing fields auto-deduced from callbook/entity databases.' },
   hamrs: { port: 2333, help: 'In HamRS: enable WSJT-X integration in Settings. HamRS listens on UDP port 2333 for ADIF data. Leave Host at 127.0.0.1 if HamRS is running on the same computer. HamRS must be running to receive QSOs.' },
-  n3fjp: { port: 1100, help: 'In N3FJP: Settings > Application Program Interface > check "TCP API Enabled". Set the port to 1100 (default). N3FJP must be running to receive QSOs.' },
+  n3fjp: { port: 1100, help: 'In N3FJP: Settings > Application Program Interface > check "TCP API Enabled". Set the port to 1100 (default). N3FJP must be running to receive QSOs. When using with WSJT-X, open WSJT-X first, then POTACAT, then N3FJP.' },
   hrd: { port: 2333, help: 'In HRD Logbook: Tools > Configure > QSO Forwarding. Under UDP Receive, check "Receive QSO notifications using UDP9/ADIF from other logging programs (eg. WSJT-X)". Set the receive port to 2333 and select your target database. POTACAT and WSJT-X can both send to this port simultaneously.' },
 };
 
@@ -3553,7 +3549,7 @@ document.getElementById('dx-command-send').addEventListener('click', sendDxComma
 
 // --- Log Type Picker ---
 const LOG_TYPE_SOURCE_MAP = { pota: 'pota', sota: 'sota', wwff: 'wwff', llota: 'llota', dx: 'dxc' };
-const LOG_TYPE_PLACEHOLDERS = { pota: 'e.g. US-1234', sota: 'e.g. W6/CT-001', wwff: 'e.g. KFF-1234', llota: 'e.g. US-0001' };
+const LOG_TYPE_PLACEHOLDERS = { pota: 'e.g. US-1234 or US-1234, US-5678', sota: 'e.g. W6/CT-001', wwff: 'e.g. KFF-1234 or KFF-1234, KFF-5678', llota: 'e.g. US-0001 or US-0001, US-0002' };
 
 function selectLogType(type) {
   logSelectedType = type;
@@ -3580,9 +3576,6 @@ function selectLogType(type) {
     logRefInput.value = '';
     logRefName.textContent = '';
   }
-  // Show/hide additional parks (POTA/WWFF/LLOTA only)
-  const isParkType = ['pota', 'wwff', 'llota'].includes(type);
-  logAddlParksSection.classList.toggle('hidden', !isParkType);
   updateLogRespot();
 }
 
@@ -3639,17 +3632,23 @@ logTypePicker.addEventListener('click', (e) => {
   selectLogType(logSelectedType === type ? '' : type);
 });
 
-// Debounced reference lookup
+// Debounced reference lookup — supports comma-separated refs
 let logRefLookupTimer = null;
 logRefInput.addEventListener('input', () => {
   clearTimeout(logRefLookupTimer);
-  const val = logRefInput.value.trim().toUpperCase();
-  if (val.length < 3) { logRefName.textContent = ''; updateLogRespot(); return; }
+  const raw = logRefInput.value.trim().toUpperCase();
+  if (raw.length < 3) { logRefName.textContent = ''; updateLogRespot(); return; }
   logRefLookupTimer = setTimeout(async () => {
-    try {
-      const park = await window.api.getPark(val);
-      logRefName.textContent = park && park.name ? park.name : '';
-    } catch { logRefName.textContent = ''; }
+    const refs = raw.split(',').map(r => r.trim()).filter(Boolean);
+    const names = [];
+    for (const ref of refs) {
+      if (ref.length < 3) continue;
+      try {
+        const park = await window.api.getPark(ref);
+        if (park && park.name) names.push(`${ref}: ${park.name}`);
+      } catch { /* skip */ }
+    }
+    logRefName.textContent = names.join('\n');
     updateLogRespot();
   }, 400);
 });
@@ -4467,74 +4466,13 @@ function freqKhzToBand(khz) {
 
 let currentLogSpot = null;
 
-// --- Additional Parks helpers ---
-const ADDL_PARKS_MAX = 3;
-
-function addParkInput(ref) {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'addl-park-wrapper';
-  const row = document.createElement('div');
-  row.className = 'addl-park-row';
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.placeholder = 'US-1234';
-  input.value = ref || '';
-  input.spellcheck = false;
-  const nameLabel = document.createElement('div');
-  nameLabel.className = 'addl-park-name';
-  let lookupTimer = null;
-  input.addEventListener('input', () => {
-    clearTimeout(lookupTimer);
-    const val = input.value.trim().toUpperCase();
-    if (val.length < 3) { nameLabel.textContent = ''; return; }
-    lookupTimer = setTimeout(async () => {
-      try {
-        const park = await window.api.getPark(val);
-        nameLabel.textContent = park && park.name ? park.name : '';
-      } catch { nameLabel.textContent = ''; }
-    }, 300);
-  });
-  const removeBtn = document.createElement('button');
-  removeBtn.type = 'button';
-  removeBtn.className = 'addl-park-remove';
-  removeBtn.textContent = '\u00d7';
-  removeBtn.title = 'Remove';
-  removeBtn.addEventListener('click', () => {
-    wrapper.remove();
-    logAddlParksAdd.classList.toggle('hidden', logAddlParksList.children.length >= ADDL_PARKS_MAX);
-    if (!logAddlParksList.children.length) logAddlParksCb.checked = false;
-    logAddlParksList.classList.toggle('hidden', !logAddlParksCb.checked);
-    logAddlParksAdd.classList.toggle('hidden', !logAddlParksCb.checked);
-  });
-  row.appendChild(input);
-  row.appendChild(removeBtn);
-  wrapper.appendChild(row);
-  wrapper.appendChild(nameLabel);
-  logAddlParksList.appendChild(wrapper);
-  logAddlParksAdd.classList.toggle('hidden', logAddlParksList.children.length >= ADDL_PARKS_MAX);
-  input.focus();
+/** Parse comma-separated park refs from the reference input.
+ *  Returns { primary, additional } where additional is the 2nd+ refs. */
+function parseRefParks() {
+  const raw = logRefInput.value.trim().toUpperCase();
+  const refs = raw.split(',').map(r => r.trim()).filter(Boolean);
+  return { primary: refs[0] || '', additional: refs.slice(1) };
 }
-
-function getAdditionalParks() {
-  return Array.from(logAddlParksList.querySelectorAll('.addl-park-wrapper input'))
-    .map(el => el.value.trim().toUpperCase())
-    .filter(Boolean);
-}
-
-logAddlParksCb.addEventListener('change', () => {
-  if (logAddlParksCb.checked) {
-    logAddlParksList.classList.remove('hidden');
-    logAddlParksAdd.classList.remove('hidden');
-    if (!logAddlParksList.children.length) addParkInput('');
-  } else {
-    logAddlParksList.classList.add('hidden');
-    logAddlParksAdd.classList.add('hidden');
-  }
-});
-
-logAddlParksAdd.addEventListener('click', () => {
-  if (logAddlParksList.children.length < ADDL_PARKS_MAX) addParkInput('');
-});
 
 function openLogPopup(spot) {
   currentLogSpot = spot;
@@ -4583,12 +4521,6 @@ function openLogPopup(spot) {
     logRefName.textContent += (logRefName.textContent ? '\n' : '') + 'WWFF: ' + spot.wwffReference + (spot.wwffParkName ? ' — ' + spot.wwffParkName : '');
   }
   selectLogType(mappedType);
-
-  // Additional Parks section reset
-  logAddlParksCb.checked = false;
-  logAddlParksList.innerHTML = '';
-  logAddlParksList.classList.add('hidden');
-  logAddlParksAdd.classList.add('hidden');
 
   logComment.value = '';
 
@@ -4714,12 +4646,13 @@ logSaveBtn.addEventListener('click', async () => {
   const band = freqKhzToBand(frequency);
 
   // Determine SIG/SIG_INFO from type picker + reference input
+  // Supports comma-separated refs for two-fer/three-fer (e.g. US-1234, US-5678)
   let sig = '';
   let sigInfo = '';
   let potaRef = '';
   let sotaRef = '';
   let wwffRef = '';
-  const typedRef = logRefInput.value.trim().toUpperCase();
+  const { primary: typedRef, additional: addlParks } = parseRefParks();
   if (logSelectedType && typedRef) {
     if (logSelectedType === 'pota') { sig = 'POTA'; potaRef = typedRef; }
     else if (logSelectedType === 'sota') { sig = 'SOTA'; sotaRef = typedRef; }
@@ -4823,8 +4756,7 @@ logSaveBtn.addEventListener('click', async () => {
       lastResult = await window.api.saveQso(qsoData);
       if (!lastResult.success) break;
 
-      // Save additional park records (two-fer / three-fer)
-      const addlParks = getAdditionalParks();
+      // Save additional park records (two-fer / three-fer) from comma-separated refs
       for (const addlRef of addlParks) {
         const addlComment = [logComment.value.trim(), `[${sig} ${addlRef}]`].filter(Boolean).join(' ');
         const addlData = {

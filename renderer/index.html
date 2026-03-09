@@ -754,6 +754,7 @@
         <span class="help-text" style="display:block;margin-top:4px;">Must match WSJT-X Settings &rarr; Reporting &rarr; UDP Server port. Enable "Accept UDP requests" in WSJT-X.</span>
         <label class="checkbox-label" style="margin-top:6px;"><input type="checkbox" id="set-wsjtx-highlight" checked> Highlight POTA activators in WSJT-X</label>
         <label class="checkbox-label"><input type="checkbox" id="set-wsjtx-auto-log"> Auto-log WSJT-X QSOs to POTACAT</label>
+        <span class="help-text" style="display:block;margin-top:6px;"><b>Startup order:</b> Open WSJT-X first, then POTACAT, then your logger (ACLog, etc.). Your logger may warn about a shared socket — this is normal and can be dismissed.</span>
       </div>
       <label class="checkbox-label"><input type="checkbox" id="set-enable-pskr"> FreeDV (PSKReporter)</label>
       <div id="pskr-config" class="radio-sub hidden">
@@ -1136,9 +1137,9 @@
     </div>
     <div id="log-ref-input-section" class="hidden" style="margin:2px 0 4px;">
       <label style="display:block;">Reference:
-        <input type="text" id="log-ref-input" placeholder="e.g. US-1234" style="text-transform:uppercase;" spellcheck="false" autocomplete="off">
+        <input type="text" id="log-ref-input" placeholder="e.g. US-1234 or US-1234, US-5678" style="text-transform:uppercase;" spellcheck="false" autocomplete="off">
       </label>
-      <div id="log-ref-name" style="font-size:12px;color:var(--accent-green);margin-top:2px;min-height:16px;"></div>
+      <div id="log-ref-name" style="font-size:12px;color:var(--accent-green);margin-top:2px;min-height:16px;white-space:pre-line;"></div>
     </div>
     <div style="display:flex;gap:8px;">
       <label style="flex:1;">Frequency (kHz):
@@ -1195,13 +1196,6 @@
           <input type="text" class="rst-input" id="rst-rcvd-n1mm" maxlength="3" inputmode="numeric" value="599" spellcheck="false" autocomplete="off">
         </div>
       </label>
-    </div>
-    <div id="log-addl-parks-section" class="hidden" style="margin:6px 0;">
-      <label class="checkbox-label" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-        <input type="checkbox" id="log-addl-parks-cb"> Additional Parks
-      </label>
-      <div id="log-addl-parks-list" class="hidden" style="margin-top:4px;"></div>
-      <button type="button" id="log-addl-parks-add" class="hidden" style="margin-top:4px;font-size:12px;">+ Add Park</button>
     </div>
     <label>Notes:
       <input type="text" id="log-comment" placeholder="Optional notes">

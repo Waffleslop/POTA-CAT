@@ -1432,16 +1432,12 @@ html, body {
 
 /* --- Log Reference / Additional Parks / Respot --- */
 .log-ref-name { font-size: 12px; color: var(--pota); margin-top: 4px; }
-.log-addl-toggle, .log-respot-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px;
-  color: var(--text-dim); margin: 8px 0 4px; cursor: pointer; }
-.log-respot-toggle { color: var(--pota); }
-.log-addl-input, #log-respot-comment { width: 100%; padding: 8px 10px; font-size: 14px;
-  text-transform: uppercase; background: var(--bg); border: 1px solid #444; border-radius: 6px;
+.log-respot-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px;
+  color: var(--pota); margin: 8px 0 4px; cursor: pointer; }
+#log-respot-comment { width: 100%; padding: 8px 10px; font-size: 14px;
+  background: var(--bg); border: 1px solid #444; border-radius: 6px;
   color: var(--text); outline: none; margin-top: 6px;
   -webkit-user-select: text; user-select: text; }
-#log-respot-comment { text-transform: none; }
-.log-addl-add-btn { margin-top: 4px; padding: 4px 12px; font-size: 12px; background: transparent;
-  color: var(--text-dim); border: 1px solid #444; border-radius: 4px; cursor: pointer; }
 
 /* --- Log Tab View --- */
 #log-tab-view {
@@ -1819,9 +1815,7 @@ html, body {
 /* Log type chips */
 [data-theme="light"] .log-type-chip { border-color: #ccc; }
 [data-theme="light"] .lt-type-chip { border-color: #ccc; }
-[data-theme="light"] .log-addl-input,
 [data-theme="light"] #log-respot-comment { border-color: #ccc; }
-[data-theme="light"] .log-addl-add-btn { border-color: #ccc; }
 
 /* Logbook view */
 [data-theme="light"] #lb-search { border-color: #ccc; }

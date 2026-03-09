@@ -180,12 +180,6 @@
   const logRefSection = document.getElementById('log-ref-section');
   const logRefInput = document.getElementById('log-ref-input');
   const logRefName = document.getElementById('log-ref-name');
-  const logAddlSection = document.getElementById('log-addl-section');
-  const logAddlCb = document.getElementById('log-addl-cb');
-  const logAddlInputs = document.getElementById('log-addl-inputs');
-  const logAddl1 = document.getElementById('log-addl-1');
-  const logAddl2 = document.getElementById('log-addl-2');
-  const logAddlAdd = document.getElementById('log-addl-add');
   const logRespotSection = document.getElementById('log-respot-section');
   const logRespotCb = document.getElementById('log-respot-cb');
   const logRespotLabel = document.getElementById('log-respot-label');
@@ -212,12 +206,6 @@
   const ltRefInput = document.getElementById('lt-ref-input');
   const ltRefName = document.getElementById('lt-ref-name');
   const ltCallHint = document.getElementById('lt-call-hint');
-  const ltAddlSection = document.getElementById('lt-addl-section');
-  const ltAddlCb = document.getElementById('lt-addl-cb');
-  const ltAddlInputs = document.getElementById('lt-addl-inputs');
-  const ltAddl1 = document.getElementById('lt-addl-1');
-  const ltAddl2 = document.getElementById('lt-addl-2');
-  const ltAddlAdd = document.getElementById('lt-addl-add');
   const ltRespotSection = document.getElementById('lt-respot-section');
   const ltRespotLabel = document.getElementById('lt-respot-label');
   const ltRespotCommentWrap = document.getElementById('lt-respot-comment-wrap');
@@ -1456,11 +1444,8 @@
     });
     const hasRef = type && type !== 'dx';
     logRefSection.classList.toggle('hidden', !hasRef);
-    // Show additional parks for POTA/WWFF/LLOTA only
-    const hasAddl = type === 'pota' || type === 'wwff' || type === 'llota';
-    logAddlSection.classList.toggle('hidden', !hasAddl);
-    // Set placeholder per type
-    const placeholders = { pota: 'e.g. US-1234', sota: 'e.g. W4C/CM-001', wwff: 'e.g. KFF-1234', llota: 'e.g. US-0001' };
+    // Set placeholder per type — park types hint at comma-separated
+    const placeholders = { pota: 'e.g. US-1234 or US-1234, US-5678', sota: 'e.g. W4C/CM-001', wwff: 'e.g. KFF-1234 or KFF-1234, KFF-5678', llota: 'e.g. US-0001 or US-0001, US-0002' };
     logRefInput.placeholder = placeholders[type] || 'Reference';
     updateLogRespot();
   }
@@ -1526,9 +1511,7 @@
     const hasRef = type && type !== 'dx';
     ltRefSection.classList.toggle('hidden', !hasRef);
     ltCallHint.classList.toggle('hidden', !hasRef);
-    const hasAddl = type === 'pota' || type === 'wwff' || type === 'llota';
-    ltAddlSection.classList.toggle('hidden', !hasAddl);
-    const placeholders = { pota: 'e.g. US-1234', sota: 'e.g. W4C/CM-001', wwff: 'e.g. KFF-1234', llota: 'e.g. US-0001' };
+    const placeholders = { pota: 'e.g. US-1234 or US-1234, US-5678', sota: 'e.g. W4C/CM-001', wwff: 'e.g. KFF-1234 or KFF-1234, KFF-5678', llota: 'e.g. US-0001 or US-0001, US-0002' };
     ltRefInput.placeholder = placeholders[type] || 'Reference';
     updateLtRespot();
   }
@@ -1572,20 +1555,6 @@
     selectLtType(chip.dataset.type);
   });
 
-  // Log tab additional parks
-  ltAddlCb.addEventListener('change', () => {
-    ltAddlInputs.classList.toggle('hidden', !ltAddlCb.checked);
-    if (!ltAddlCb.checked) {
-      ltAddl1.value = '';
-      ltAddl2.value = '';
-      ltAddl2.classList.add('hidden');
-    }
-  });
-  ltAddlAdd.addEventListener('click', () => {
-    ltAddl2.classList.remove('hidden');
-    ltAddlAdd.classList.add('hidden');
-  });
-
   // Log tab ref input → update respot
   ltRefInput.addEventListener('input', updateLtRespot);
 
@@ -1617,7 +1586,10 @@
     if (ws && ws.readyState === WebSocket.OPEN) {
       const typeToSig = { pota: 'POTA', sota: 'SOTA', wwff: 'WWFF', llota: 'LLOTA' };
       const sig = typeToSig[ltSelectedType] || '';
-      const typedRef = ltRefInput.value.trim().toUpperCase();
+      const rawRef = ltRefInput.value.trim().toUpperCase();
+      const refs = rawRef.split(',').map(function (r) { return r.trim(); }).filter(Boolean);
+      const typedRef = refs[0] || '';
+      const addlRefs = refs.slice(1);
       const sigInfo = (ltSelectedType && ltSelectedType !== 'dx' && typedRef) ? typedRef : '';
 
       const userComment = ltNotes.value.trim();
@@ -1643,15 +1615,8 @@
         if (comment) baseData.respotComment = comment;
       }
 
-      // Additional parks
-      if (ltAddlCb.checked) {
-        const addl = [];
-        const v1 = ltAddl1.value.trim().toUpperCase();
-        const v2 = ltAddl2.value.trim().toUpperCase();
-        if (v1) addl.push(v1);
-        if (v2) addl.push(v2);
-        if (addl.length > 0) baseData.additionalParks = addl;
-      }
+      // Additional parks from comma-separated refs (two-fer / three-fer)
+      if (addlRefs.length > 0) baseData.additionalParks = addlRefs;
 
       // Include activator fields when activation is running
       if (activationSig && activationRef) {
@@ -1677,12 +1642,6 @@
     // Reset ref, addl parks, respot
     ltRefInput.value = '';
     ltRefName.textContent = '';
-    ltAddlCb.checked = false;
-    ltAddlInputs.classList.add('hidden');
-    ltAddl1.value = '';
-    ltAddl2.value = '';
-    ltAddl2.classList.add('hidden');
-    ltAddlAdd.classList.remove('hidden');
     ltRespotComment.value = '';
     updateLtRespot();
     ltCall.focus();
@@ -1696,20 +1655,6 @@
     const chip = e.target.closest('.log-type-chip');
     if (!chip) return;
     selectLogType(chip.dataset.type);
-  });
-
-  // Additional parks toggle
-  logAddlCb.addEventListener('change', () => {
-    logAddlInputs.classList.toggle('hidden', !logAddlCb.checked);
-    if (!logAddlCb.checked) {
-      logAddl1.value = '';
-      logAddl2.value = '';
-      logAddl2.classList.add('hidden');
-    }
-  });
-  logAddlAdd.addEventListener('click', () => {
-    logAddl2.classList.remove('hidden');
-    logAddlAdd.classList.add('hidden');
   });
 
   // Update respot comment when ref changes
@@ -1738,14 +1683,6 @@
     // Pre-fill reference from spot
     logRefInput.value = p.sigInfo || '';
     logRefName.textContent = '';
-
-    // Reset additional parks
-    logAddlCb.checked = false;
-    logAddlInputs.classList.add('hidden');
-    logAddl1.value = '';
-    logAddl2.value = '';
-    logAddl2.classList.add('hidden');
-    logAddlAdd.classList.remove('hidden');
 
     // Reset respot
     logRespotComment.value = '';
@@ -1777,21 +1714,28 @@
 
   logForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    const call = logCall.value.trim().toUpperCase();
+    const rawCall = logCall.value.trim().toUpperCase();
     const freq = logFreq.value.trim();
-    if (!call) { logCall.focus(); return; }
+    if (!rawCall) { logCall.focus(); return; }
     if (!freq || isNaN(parseFloat(freq))) { logFreq.focus(); return; }
+
+    // Split comma-separated callsigns (pass-the-mic / multi-op)
+    const calls = rawCall.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+    if (!calls.length) { logCall.focus(); return; }
+
     logSaveBtn.disabled = true;
     if (ws && ws.readyState === WebSocket.OPEN) {
-      // Determine sig/sigInfo from type picker + ref input
+      // Determine sig/sigInfo from type picker + ref input (comma-separated for two-fer)
       const typeToSig = { pota: 'POTA', sota: 'SOTA', wwff: 'WWFF', llota: 'LLOTA' };
       const sig = typeToSig[logSelectedType] || logSig.value || '';
-      const typedRef = logRefInput.value.trim().toUpperCase();
+      const rawRef = logRefInput.value.trim().toUpperCase();
+      const logRefs = rawRef.split(',').map(function (r) { return r.trim(); }).filter(Boolean);
+      const typedRef = logRefs[0] || '';
+      const logAddlRefs = logRefs.slice(1);
       const sigInfo = (logSelectedType && logSelectedType !== 'dx' && typedRef) ? typedRef : logSigInfo.value || '';
 
       const logSheetComment = logNotes.value.trim();
-      const logData = {
-        callsign: call,
+      const baseData = {
         freqKhz: freq,
         mode: logMode.value,
         rstSent: logRstSent.value || '59',
@@ -1799,37 +1743,35 @@
         sig,
         sigInfo,
       };
-      if (logSheetComment) logData.userComment = logSheetComment;
+      if (logSheetComment) baseData.userComment = logSheetComment;
 
       // Respot flags
       const respotCb = document.getElementById('log-respot-cb');
       if (respotCb && respotCb.checked) {
         const targets = (logRespotSection.dataset.targets || '').split(',').filter(Boolean);
         const comment = logRespotComment.value.trim();
-        if (targets.includes('pota')) { logData.respot = true; }
-        if (targets.includes('wwff')) { logData.wwffRespot = true; logData.wwffReference = sigInfo; }
-        if (targets.includes('llota')) { logData.llotaRespot = true; logData.llotaReference = sigInfo; }
-        if (targets.includes('dxc')) { logData.dxcRespot = true; }
-        if (comment) logData.respotComment = comment;
+        if (targets.includes('pota')) { baseData.respot = true; }
+        if (targets.includes('wwff')) { baseData.wwffRespot = true; baseData.wwffReference = sigInfo; }
+        if (targets.includes('llota')) { baseData.llotaRespot = true; baseData.llotaReference = sigInfo; }
+        if (targets.includes('dxc')) { baseData.dxcRespot = true; }
+        if (comment) baseData.respotComment = comment;
       }
 
-      // Additional parks
-      if (logAddlCb.checked) {
-        const addl = [];
-        const v1 = logAddl1.value.trim().toUpperCase();
-        const v2 = logAddl2.value.trim().toUpperCase();
-        if (v1) addl.push(v1);
-        if (v2) addl.push(v2);
-        if (addl.length > 0) logData.additionalParks = addl;
-      }
+      // Additional parks from comma-separated refs (two-fer / three-fer)
+      if (logAddlRefs.length > 0) baseData.additionalParks = logAddlRefs;
 
       // Include activator fields when activation is running
       if (activationSig && activationRef) {
-        logData.mySig = activationSig;
-        logData.mySigInfo = activationRef;
+        baseData.mySig = activationSig;
+        baseData.mySigInfo = activationRef;
       }
-      if (phoneGrid) logData.myGridsquare = phoneGrid;
-      ws.send(JSON.stringify({ type: 'log-qso', data: logData }));
+      if (phoneGrid) baseData.myGridsquare = phoneGrid;
+
+      // Send one log-qso per callsign
+      for (var ci = 0; ci < calls.length; ci++) {
+        var logData = Object.assign({}, baseData, { callsign: calls[ci] });
+        ws.send(JSON.stringify({ type: 'log-qso', data: logData }));
+      }
     }
   });
 
