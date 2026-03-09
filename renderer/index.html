@@ -113,11 +113,26 @@
               <div class="switch"><input type="checkbox" id="quick-echo-cat"><span class="switch-slider"></span></div>
             </label>
             <div id="echo-cat-info" class="echo-cat-info hidden">
-              <div class="echo-cat-url" id="echo-cat-url"></div>
+              <div class="echo-cat-url-row">
+                <div class="echo-cat-url" id="echo-cat-url"></div>
+                <button type="button" id="echo-cat-copy-url" class="echo-cat-copy-icon" title="Copy URL">&#x1F4CB;</button>
+              </div>
+              <div class="echo-cat-https-note">You must use https:// — http:// will not work</div>
               <div class="echo-cat-token-row">
                 <span class="echo-cat-token-label">Token:</span>
                 <span class="echo-cat-token-value" id="echo-cat-token"></span>
-                <button type="button" id="echo-cat-copy" class="echo-cat-copy-btn" title="Copy connection info">Copy</button>
+                <button type="button" id="echo-cat-copy" class="echo-cat-copy-btn" title="Copy connection info">Copy All</button>
+              </div>
+              <div class="echo-cat-audio-section">
+                <div class="echo-cat-audio-label">Audio</div>
+                <div class="echo-cat-audio-row">
+                  <span class="echo-cat-audio-icon" title="Radio RX to phone">&#x1F50A;</span>
+                  <select id="quick-audio-input" class="echo-cat-audio-select"><option value="">System Default</option></select>
+                </div>
+                <div class="echo-cat-audio-row">
+                  <span class="echo-cat-audio-icon" title="Phone to radio TX">&#x1F3A4;</span>
+                  <select id="quick-audio-output" class="echo-cat-audio-select"><option value="">System Default</option></select>
+                </div>
               </div>
             </div>
           </div>

@@ -5133,6 +5133,9 @@ const echoCatUrl = document.getElementById('echo-cat-url');
 const echoCatToken = document.getElementById('echo-cat-token');
 const echoCatCopy = document.getElementById('echo-cat-copy');
 
+const quickAudioInput = document.getElementById('quick-audio-input');
+const quickAudioOutput = document.getElementById('quick-audio-output');
+
 async function refreshEchoCatInfo() {
   const s = await window.api.getSettings();
   const on = s.enableRemote === true;
@@ -5157,8 +5160,51 @@ async function refreshEchoCatInfo() {
       echoCatToken.textContent = '';
       if (tokenRow) tokenRow.classList.add('hidden');
     }
+    // Populate quick audio device dropdowns
+    await populateQuickAudioDevices(s.remoteAudioInput || '', s.remoteAudioOutput || '');
   }
 }
+
+async function populateQuickAudioDevices(restoreIn, restoreOut) {
+  try {
+    await navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop()));
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const inputs = devices.filter(d => d.kind === 'audioinput');
+    const outputs = devices.filter(d => d.kind === 'audiooutput');
+    quickAudioInput.innerHTML = '<option value="">System Default</option>' +
+      inputs.map(d => `<option value="${d.deviceId}">${d.label || d.deviceId.slice(0, 20)}</option>`).join('');
+    quickAudioOutput.innerHTML = '<option value="">System Default</option>' +
+      outputs.map(d => `<option value="${d.deviceId}">${d.label || d.deviceId.slice(0, 20)}</option>`).join('');
+    if (restoreIn) quickAudioInput.value = restoreIn;
+    if (restoreOut) quickAudioOutput.value = restoreOut;
+  } catch (e) {
+    console.warn('Could not enumerate audio devices:', e.message);
+  }
+}
+
+quickAudioInput.addEventListener('change', async () => {
+  const s = await window.api.getSettings();
+  const rigs = s.rigs || [];
+  const activeRig = rigs.find(r => r.id === s.activeRigId);
+  if (activeRig) {
+    activeRig.remoteAudioInput = quickAudioInput.value;
+    await window.api.saveSettings({ rigs, remoteAudioInput: quickAudioInput.value });
+  } else {
+    await window.api.saveSettings({ remoteAudioInput: quickAudioInput.value });
+  }
+});
+
+quickAudioOutput.addEventListener('change', async () => {
+  const s = await window.api.getSettings();
+  const rigs = s.rigs || [];
+  const activeRig = rigs.find(r => r.id === s.activeRigId);
+  if (activeRig) {
+    activeRig.remoteAudioOutput = quickAudioOutput.value;
+    await window.api.saveSettings({ rigs, remoteAudioOutput: quickAudioOutput.value });
+  } else {
+    await window.api.saveSettings({ remoteAudioOutput: quickAudioOutput.value });
+  }
+});
 
 quickEchoCat.addEventListener('change', async () => {
   const on = quickEchoCat.checked;
@@ -5174,6 +5220,22 @@ quickEchoCat.addEventListener('change', async () => {
   updateSettingsConnBar();
 });
 
+// Copy just the URL
+const echoCatCopyUrl = document.getElementById('echo-cat-copy-url');
+echoCatCopyUrl.addEventListener('click', async () => {
+  const s = await window.api.getSettings();
+  const port = s.remotePort || 7300;
+  const ips = await window.api.getLocalIPs();
+  const best = ips.find(ip => ip.tailscale) || ips[0];
+  const url = best ? `https://${best.address}:${port}` : '';
+  try {
+    await navigator.clipboard.writeText(url);
+    echoCatCopyUrl.textContent = '\u2705';
+    setTimeout(() => { echoCatCopyUrl.textContent = '\u{1F4CB}'; }, 1500);
+  } catch {}
+});
+
+// Copy URL + token
 echoCatCopy.addEventListener('click', async () => {
   const s = await window.api.getSettings();
   const port = s.remotePort || 7300;
