@@ -154,7 +154,6 @@ function getRigCapabilities(rigType) {
 
 // --- Watchlist notifications ---
 const recentNotifications = new Map(); // callsign → timestamp for dedup (5-min window)
-let lastNotifiedPotaSota = new Set(); // callsigns seen in previous POTA/SOTA refresh
 
 function parseWatchlist(str) {
   if (!str) return new Set();
@@ -2798,13 +2797,12 @@ async function refreshSpots() {
       scheduleWsjtxHighlights();
     }
 
-    // Watchlist notifications for newly-appeared POTA/SOTA spots
+    // Watchlist notifications for POTA/SOTA spots (5-min dedup in notifyWatchlistSpot)
     const potaSotaWatchSet = parseWatchlist(settings.watchlist);
     if (potaSotaWatchSet.size > 0) {
-      const currentCallsigns = new Set(lastPotaSotaSpots.map(s => s.callsign.toUpperCase()));
       for (const spot of lastPotaSotaSpots) {
         const csUpper = spot.callsign.toUpperCase();
-        if (potaSotaWatchSet.has(csUpper) && !lastNotifiedPotaSota.has(csUpper)) {
+        if (potaSotaWatchSet.has(csUpper)) {
           notifyWatchlistSpot({
             callsign: spot.callsign,
             frequency: spot.frequency,
@@ -2815,7 +2813,6 @@ async function refreshSpots() {
           });
         }
       }
-      lastNotifiedPotaSota = currentCallsigns;
     }
 
     // Report errors from rejected fetches
