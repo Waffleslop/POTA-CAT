@@ -20,7 +20,7 @@ const { SmartSdrClient, setColorblindMode: setSmartSdrColorblind } = require('./
 const { TciClient, setTciColorblindMode } = require('./lib/tci');
 const { IambicKeyer } = require('./lib/keyer');
 const { parsePotaParksCSV } = require('./lib/pota-parks');
-const { WsjtxClient, encodeHeartbeat, encodeLoggedAdif } = require('./lib/wsjtx');
+const { WsjtxClient, encodeHeartbeat, encodeLoggedAdif, encodeQsoLogged } = require('./lib/wsjtx');
 const { PskrClient } = require('./lib/pskreporter');
 const { RemoteServer } = require('./lib/remote-server');
 const { fetchSpots: fetchWwffSpots } = require('./lib/wwff');
@@ -2959,14 +2959,32 @@ const hamrsBridge = {
     this.socket.send(buf, 0, buf.length, this.port, this.host);
   },
 
-  sendQso(adifText) {
+  sendQso(qsoData, adifText) {
     return new Promise((resolve, reject) => {
       if (!this.socket) {
         reject(new Error('HamRS bridge not started'));
         return;
       }
-      const buf = encodeLoggedAdif(this.id, adifText);
-      this.socket.send(buf, 0, buf.length, this.port, this.host, (err) => {
+      // Send QSO_LOGGED (type 5) — the primary message most apps listen for
+      const freqHz = Math.round((parseFloat(qsoData.frequency) || 0) * 1000);
+      const qsoMsg = encodeQsoLogged(this.id, {
+        dxCall: qsoData.callsign || '',
+        dxGrid: qsoData.grid || '',
+        txFrequency: freqHz,
+        mode: qsoData.mode || '',
+        reportSent: qsoData.rstSent || '59',
+        reportReceived: qsoData.rstRcvd || '59',
+        txPower: qsoData.txPower || '',
+        comments: qsoData.comment || '',
+        name: qsoData.name || '',
+        operatorCall: qsoData.operator || '',
+        myCall: qsoData.stationCallsign || '',
+        myGrid: qsoData.myGridsquare || '',
+      });
+      this.socket.send(qsoMsg, 0, qsoMsg.length, this.port, this.host);
+      // Also send LOGGED_ADIF (type 12) as supplementary
+      const adifBuf = encodeLoggedAdif(this.id, adifText);
+      this.socket.send(adifBuf, 0, adifBuf.length, this.port, this.host, (err) => {
         if (err) reject(err);
         else resolve();
       });
@@ -2991,7 +3009,7 @@ function forwardToLogbook(qsoData) {
     if (!hamrsBridge.socket || hamrsBridge.host !== host || hamrsBridge.port !== hp) {
       hamrsBridge.start(host, hp);
     }
-    return hamrsBridge.sendQso(adifText);
+    return hamrsBridge.sendQso(qsoData, adifText);
   }
   if (type === 'hrd') {
     return sendUdpAdif(qsoData, host, port || 2333);
