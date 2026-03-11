@@ -678,7 +678,7 @@
             <option value="us_technician">US Technician</option>
           </optgroup>
           <optgroup label="Canada">
-            <option value="ca_honours">CA Basic with Honours</option>
+            <option value="ca_honours">CA Advanced / Basic with Honours</option>
             <option value="ca_basic">CA Basic</option>
           </optgroup>
         </select>
@@ -920,6 +920,28 @@
           <input type="number" id="set-rotor-port" value="12040" min="1" max="65535" style="width:80px;">
         </label>
         <span class="help-text" style="display:block;margin-top:4px;">Default port is 12040. Use 12042, 12044, 12046 for additional rotators.</span>
+      </div>
+      <label class="checkbox-label"><input type="checkbox" id="set-enable-ag"> 4O3A Antenna Genius</label>
+      <div id="ag-config" class="radio-sub hidden">
+        <span class="help-text" style="font-size:12px;">Automatically switches antennas when you tune to a spot.</span>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
+          <label>Host:
+            <input type="text" id="set-ag-host" placeholder="192.168.1.x" style="width:140px;">
+          </label>
+          <label>Radio Port:
+            <select id="set-ag-radio-port" style="width:70px;">
+              <option value="1">A</option>
+              <option value="2">B</option>
+            </select>
+          </label>
+          <span id="ag-status" class="help-text" style="font-weight:bold;"></span>
+        </div>
+        <div style="margin-top:8px;">
+          <strong style="font-size:12px;">Band &rarr; Antenna Mapping</strong>
+          <div id="ag-band-map" style="display:grid;grid-template-columns:60px 1fr;gap:2px 8px;margin-top:4px;font-size:12px;">
+          </div>
+          <span class="help-text" style="display:block;margin-top:4px;">Set antenna position (1-8) for each band. Leave blank to skip switching on that band.</span>
+        </div>
       </div>
     </fieldset>
     <!-- 7. Logging -->
@@ -1467,7 +1489,7 @@
             <option value="us_technician">US Technician</option>
           </optgroup>
           <optgroup label="Canada">
-            <option value="ca_honours">CA Basic with Honours</option>
+            <option value="ca_honours">CA Advanced / Basic with Honours</option>
             <option value="ca_basic">CA Basic</option>
           </optgroup>
         </select>
