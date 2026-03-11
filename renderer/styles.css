@@ -1847,6 +1847,9 @@ dialog input, dialog select {
 .net-item-detail {
   font-size: 11px;
   color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Hamlib rig list box */
