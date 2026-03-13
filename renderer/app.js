@@ -446,6 +446,15 @@ const remoteAudioSummary = document.getElementById('remote-audio-summary');
 const setRemotePttTimeout = document.getElementById('set-remote-ptt-timeout');
 const remoteUrlDisplay = document.getElementById('remote-url-display');
 const remoteTxIndicator = document.getElementById('remote-tx-indicator');
+// Club Station Mode
+const setClubMode = document.getElementById('set-club-mode');
+const clubConfig = document.getElementById('club-config');
+const setClubCsvPath = document.getElementById('set-club-csv-path');
+const clubCsvBrowse = document.getElementById('club-csv-browse');
+const clubHashPasswords = document.getElementById('club-hash-passwords');
+const clubCsvCreate = document.getElementById('club-csv-create');
+const clubHashStatus = document.getElementById('club-hash-status');
+const clubPreview = document.getElementById('club-preview');
 const logDialog = document.getElementById('log-dialog');
 const logCallsign = document.getElementById('log-callsign');
 const logOpName = document.getElementById('log-op-name');
@@ -1987,6 +1996,86 @@ remoteRegenToken.addEventListener('click', () => {
   setRemoteToken.value = Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
 });
 
+// Club Station Mode event handlers
+setClubMode.addEventListener('change', () => {
+  clubConfig.classList.toggle('hidden', !setClubMode.checked);
+  if (setClubMode.checked && setClubCsvPath.value) {
+    refreshClubPreview(setClubCsvPath.value);
+  }
+});
+
+clubCsvBrowse.addEventListener('click', async () => {
+  const filePath = await window.api.chooseClubCsvFile();
+  if (filePath) {
+    setClubCsvPath.value = filePath;
+    refreshClubPreview(filePath);
+  }
+});
+
+clubCsvCreate.addEventListener('click', async () => {
+  // Get rig names from current settings to use as CSV radio columns
+  const s = await window.api.getSettings();
+  const rigNames = (s.rigs || []).map(r => r.name).filter(Boolean);
+  const filePath = await window.api.createClubCsv(rigNames);
+  if (filePath) {
+    setClubCsvPath.value = filePath;
+    refreshClubPreview(filePath);
+  }
+});
+
+clubHashPasswords.addEventListener('click', async () => {
+  const csvPath = setClubCsvPath.value;
+  if (!csvPath) return;
+  if (!confirm('This will hash all plaintext passwords in the CSV file. A .bak backup will be created. Continue?')) return;
+  clubHashStatus.textContent = 'Hashing...';
+  const result = await window.api.hashClubPasswords(csvPath);
+  if (result.error) {
+    clubHashStatus.textContent = 'Error: ' + result.error;
+    clubHashStatus.style.color = '#e94560';
+  } else {
+    clubHashStatus.textContent = result.hashed + ' hashed, ' + result.alreadyHashed + ' already hashed';
+    clubHashStatus.style.color = '#4ecca3';
+    refreshClubPreview(csvPath);
+  }
+});
+
+async function refreshClubPreview(csvPath) {
+  if (!csvPath) { clubPreview.innerHTML = ''; return; }
+  const data = await window.api.previewClubCsv(csvPath);
+  if (data.errors && data.errors.length > 0) {
+    clubPreview.innerHTML = '<div style="color:#e94560">' + data.errors.join('<br>') + '</div>';
+    return;
+  }
+  if (!data.members || data.members.length === 0) {
+    clubPreview.innerHTML = '<div style="color:#aaa">No members found</div>';
+    return;
+  }
+  const radioCols = data.radioColumns || [];
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:11px;">';
+  html += '<tr style="border-bottom:1px solid #444;"><th style="text-align:left;padding:2px 4px;">Call</th>';
+  html += '<th style="text-align:left;padding:2px 4px;">Name</th>';
+  html += '<th style="text-align:left;padding:2px 4px;">License</th>';
+  html += '<th style="text-align:left;padding:2px 4px;">Role</th>';
+  for (const rc of radioCols) {
+    html += '<th style="text-align:center;padding:2px 4px;">' + rc + '</th>';
+  }
+  html += '</tr>';
+  for (const m of data.members) {
+    html += '<tr>';
+    html += '<td style="padding:2px 4px;color:#4fc3f7;">' + m.callsign + '</td>';
+    html += '<td style="padding:2px 4px;">' + m.firstname + ' ' + m.lastname + '</td>';
+    html += '<td style="padding:2px 4px;">' + m.license + '</td>';
+    html += '<td style="padding:2px 4px;">' + m.role + '</td>';
+    for (const rc of radioCols) {
+      const has = m.radios && m.radios[rc];
+      html += '<td style="text-align:center;padding:2px 4px;">' + (has ? '\u2713' : '') + '</td>';
+    }
+    html += '</tr>';
+  }
+  html += '</table>';
+  clubPreview.innerHTML = html;
+}
+
 async function populateRigAudioDevices(restoreIn, restoreOut) {
   try {
     await navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop()));
@@ -2304,6 +2393,10 @@ function getFiltered() {
     } else if (s.source === 'pskr') {
       // PSKReporter already limits to 15 min server-side; don't apply client max-age
       if (spotAgeSecs(s.spotTime) > 900) return false;
+    } else if (s.source === 'sota') {
+      // SOTA spots are posted once by a human (not re-spotted like POTA);
+      // activations last 1-2 hours so use a fixed 90-minute window
+      if (spotAgeSecs(s.spotTime) > 5400) return false;
     } else {
       if (spotAgeSecs(s.spotTime) > maxAgeSecs) return false;
     }
@@ -5609,6 +5702,16 @@ async function openSettingsDialog() {
     populateRemoteURLs();
   }
   updateRemoteAudioSummary(s.remoteAudioInput, s.remoteAudioOutput);
+  // Club Station Mode
+  setClubMode.checked = s.clubMode === true;
+  setClubCsvPath.value = s.clubCsvPath || '';
+  clubConfig.classList.toggle('hidden', !s.clubMode);
+  clubHashStatus.textContent = '';
+  if (s.clubMode && s.clubCsvPath) {
+    refreshClubPreview(s.clubCsvPath);
+  } else {
+    clubPreview.innerHTML = '';
+  }
   updateSettingsConnBar();
   setDisableAutoUpdate.checked = s.disableAutoUpdate === true;
   setEnableTelemetry.checked = s.enableTelemetry === true;
@@ -5726,6 +5829,8 @@ settingsSave.addEventListener('click', async () => {
   const remoteRequireTokenVal = setRemoteRequireToken.checked;
   const remoteTokenVal = setRemoteToken.value;
   const remotePttTimeoutVal = parseInt(setRemotePttTimeout.value, 10) || 180;
+  const clubModeEnabled = setClubMode.checked;
+  const clubCsvPathVal = setClubCsvPath.value || '';
   // Audio comes from the active rig (resolved after selectedRig below)
   // CW Keyer
   const cwKeyerEnabled = setEnableCwKeyer.checked;
@@ -5861,6 +5966,8 @@ settingsSave.addEventListener('click', async () => {
     remoteRequireToken: remoteRequireTokenVal,
     remoteToken: remoteTokenVal,
     remotePttTimeout: remotePttTimeoutVal,
+    clubMode: clubModeEnabled,
+    clubCsvPath: clubCsvPathVal,
     remoteAudioInput: selectedRig ? (selectedRig.remoteAudioInput || '') : '',
     remoteAudioOutput: selectedRig ? (selectedRig.remoteAudioOutput || '') : '',
     appMode: document.querySelector('input[name="set-app-mode"]:checked')?.value || 'hunter',
