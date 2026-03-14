@@ -25,6 +25,7 @@
   let gainNode = null;   // GainNode for volume amplification
   let volBoostLevel = 0; // 0=1x, 1=2x, 2=3x
   const VOL_STEPS = [1, 2, 3];
+  let sessionKeepAlive = null; // silent <audio> loop for Media Session anchor
 
   // Scan
   let scanning = false;
@@ -1106,24 +1107,63 @@
     }
   });
 
-  // --- Bluetooth earbud PTT (Media Session API) ---
-  // Pixel Buds, AirPods, etc. fire play/pause on single tap.
-  // Toggle PTT: tap to start transmitting, tap again to stop.
-  if ('mediaSession' in navigator) {
-    navigator.mediaSession.setActionHandler('pause', () => {
-      if (!audioEnabled) return;
-      if (pttDown) pttStop(); else pttStart();
-      // Keep media session in "playing" state so next tap fires again
-      navigator.mediaSession.playbackState = 'playing';
-      if (remoteAudio) remoteAudio.play().catch(() => {});
-    });
-    navigator.mediaSession.setActionHandler('play', () => {
-      if (!audioEnabled) return;
-      if (pttDown) pttStop(); else pttStart();
-      navigator.mediaSession.playbackState = 'playing';
-      if (remoteAudio) remoteAudio.play().catch(() => {});
-    });
+  // --- Earbud/headset PTT (Media Session API + MediaPlayPause key) ---
+  // Supports Bluetooth (Pixel Buds, AirPods) and wired earbuds with play/pause button.
+  // Toggle PTT: press to start transmitting, press again to stop.
+
+  // Create a silent audio loop to reliably anchor the Media Session.
+  // WebRTC <video> elements are unreliable as session anchors — iOS can pause them
+  // and Android wired earbuds may not recognize them as active media.
+  function startSessionKeepAlive() {
+    if (sessionKeepAlive) return;
+    // Build a minimal silent WAV in memory (0.25s, 8kHz, mono, 8-bit unsigned PCM)
+    const numSamples = 2000;
+    const buf = new ArrayBuffer(44 + numSamples);
+    const v = new DataView(buf);
+    // RIFF header
+    v.setUint32(0, 0x52494646, false); v.setUint32(4, 36 + numSamples, true);
+    v.setUint32(8, 0x57415645, false);
+    // fmt chunk
+    v.setUint32(12, 0x666d7420, false); v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, 8000, true); v.setUint32(28, 8000, true);
+    v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+    // data chunk — 128 = silence for unsigned 8-bit PCM
+    v.setUint32(36, 0x64617461, false); v.setUint32(40, numSamples, true);
+    for (let i = 44; i < 44 + numSamples; i++) v.setUint8(i, 128);
+    const blob = new Blob([buf], { type: 'audio/wav' });
+    sessionKeepAlive = new Audio(URL.createObjectURL(blob));
+    sessionKeepAlive.loop = true;
+    sessionKeepAlive.volume = 0.01;
+    sessionKeepAlive.play().catch(() => {});
   }
+
+  function stopSessionKeepAlive() {
+    if (!sessionKeepAlive) return;
+    sessionKeepAlive.pause();
+    if (sessionKeepAlive.src) URL.revokeObjectURL(sessionKeepAlive.src);
+    sessionKeepAlive = null;
+  }
+
+  function mediaTogglePtt() {
+    if (!audioEnabled) return;
+    if (pttDown) pttStop(); else pttStart();
+    // Re-assert playing state so the next button press fires again
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+    if (sessionKeepAlive) sessionKeepAlive.play().catch(() => {});
+  }
+
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.setActionHandler('pause', mediaTogglePtt);
+    navigator.mediaSession.setActionHandler('play', mediaTogglePtt);
+    // Some devices/OS versions fire 'stop' instead of 'pause'
+    try { navigator.mediaSession.setActionHandler('stop', mediaTogglePtt); } catch (_) {}
+  }
+
+  // Wired earbud play/pause button — fires as a keyboard event on Android
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'MediaPlayPause') { e.preventDefault(); mediaTogglePtt(); }
+  });
 
   // --- Settings Overlay ---
   rigCtrlToggle.addEventListener('click', () => {
@@ -1422,7 +1462,8 @@
       audioBtn.classList.add('active');
       audioDot.classList.remove('hidden');
       volBoostBtn.classList.remove('hidden');
-      // Activate Media Session so Bluetooth earbud buttons work for PTT
+      // Activate Media Session so earbud play/pause button works for PTT
+      startSessionKeepAlive();
       if ('mediaSession' in navigator) {
         navigator.mediaSession.metadata = new MediaMetadata({ title: 'ECHOCAT', artist: 'POTACAT' });
         navigator.mediaSession.playbackState = 'playing';
@@ -1438,6 +1479,7 @@
     if (localAudioStream) { localAudioStream.getTracks().forEach(t => t.stop()); localAudioStream = null; }
     if (remoteAudio) { remoteAudio.srcObject = null; }
     if (audioCtx) { audioCtx.close().catch(() => {}); audioCtx = null; gainNode = null; }
+    stopSessionKeepAlive();
     audioEnabled = false;
     micReady = false;
     volBoostLevel = 0;

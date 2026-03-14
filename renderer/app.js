@@ -5430,6 +5430,11 @@ settingsBtn.addEventListener('click', (e) => {
     quickLightMode.checked = document.documentElement.getAttribute('data-theme') === 'light';
     quickActivatorMode.checked = appMode === 'activator';
     quickHideWorkedParks.checked = hideWorkedParks;
+    // Show rotor toggle when rotor has been configured
+    if (setEnableRotor.checked) rotorConfigured = true;
+    quickRotor.checked = setEnableRotor.checked;
+    quickRotorLabel.classList.toggle('hidden', !rotorConfigured);
+    quickRotorDivider.classList.toggle('hidden', !rotorConfigured);
     refreshEchoCatInfo();
   }
 });
@@ -5461,6 +5466,18 @@ quickHideWorkedParks.addEventListener('change', async () => {
   renderTable();
   renderMap();
   await window.api.saveSettings({ hideWorkedParks });
+});
+
+// PSTRotator quick toggle — visible once rotor has been enabled in settings
+const quickRotor = document.getElementById('quick-rotor');
+const quickRotorLabel = document.getElementById('quick-rotor-label');
+const quickRotorDivider = document.getElementById('quick-rotor-divider');
+let rotorConfigured = false; // set true when enableRotor is loaded/toggled on
+
+quickRotor.addEventListener('change', async () => {
+  setEnableRotor.checked = quickRotor.checked;
+  if (quickRotor.checked) rotorConfigured = true;
+  await window.api.saveSettings({ enableRotor: quickRotor.checked });
 });
 
 openSettingsBtn.addEventListener('click', () => {
@@ -5617,6 +5634,7 @@ async function openSettingsDialog() {
   setHideWorked.checked = s.hideWorked === true;
   setTuneClick.checked = s.tuneClick === true;
   setEnableRotor.checked = s.enableRotor === true;
+  if (s.enableRotor) rotorConfigured = true;
   setRotorHost.value = s.rotorHost || '127.0.0.1';
   setRotorPort.value = s.rotorPort || 12040;
   rotorConfig.classList.toggle('hidden', !s.enableRotor);
